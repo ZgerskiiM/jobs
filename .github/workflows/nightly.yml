@@ -13,7 +13,7 @@ on:
 
 concurrency:
   group: nightly-vacancies
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -52,6 +52,7 @@ jobs:
           python job_tracker.py --db work/state/jobs.sqlite3 telegram-init --force
 
       - name: Refresh vacancies
+        continue-on-error: true
         run: python job_tracker.py --db work/state/jobs.sqlite3 sync --config config.direct.json
 
       - name: Build Telegram settings
