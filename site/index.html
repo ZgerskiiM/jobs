@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Актуальные вакансии крупнейших российских IT-компаний на одной странице.">
+  <title>ТехРабота — вакансии российских IT-компаний</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="ТехРабота — на главную">
+      <span class="brand-mark">Т</span>
+      <span>техработа</span>
+    </a>
+    <nav aria-label="Основная навигация">
+      <a href="#vacancies">Вакансии</a>
+      <a href="#companies">Компании</a>
+      <a href="#about">Как работает</a>
+    </nav>
+    <button class="update-button" id="update-vacancies" type="button">
+      <span class="update-dot" aria-hidden="true"></span>
+      <span id="update-label">Обновить вакансии</span>
+    </button>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span> Единая витрина карьерных сайтов</p>
+        <h1>Работа в крупнейших<br><em>IT-компаниях России</em></h1>
+        <p class="hero-lead">Собираем вакансии напрямую с сайтов работодателей, проверяем актуальность и показываем всё в одном месте.</p>
+        <div class="hero-actions">
+          <a class="primary-action" href="#vacancies">Смотреть вакансии <span aria-hidden="true">↘</span></a>
+          <a class="text-action" href="#about">Как мы собираем вакансии</a>
+        </div>
+        <p class="update-status" id="update-status" aria-live="polite">Загружаем время последнего обновления…</p>
+      </div>
+      <div class="hero-visual" aria-label="Состояние каталога">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="signal-card signal-main">
+          <span class="signal-label">В реестре</span>
+          <strong id="hero-company-count">63</strong>
+          <span>компании в пуле</span>
+        </div>
+        <div class="signal-card signal-small signal-connected">
+          <span class="pulse"></span>
+          <strong><span id="hero-source-count">2</span> источников</strong>
+          <span>подключены напрямую</span>
+        </div>
+        <div class="signal-card signal-small signal-vacancies">
+          <strong><span id="hero-job-count">38</span> вакансий</strong>
+          <span>с полным описанием</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="proof" aria-label="Преимущества">
+      <div><strong>Всё на одной странице</strong><span>Вакансия и полное описание открываются здесь</span></div>
+      <div><strong>Актуальный статус</strong><span>Исчезнувшие вакансии перепроверяются</span></div>
+      <div><strong>Без обхода ограничений</strong><span>Если сбор закрыт, оставляем только карьерную ссылку</span></div>
+    </section>
+
+    <section class="vacancies" id="vacancies">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow"><span></span> Прямо с сайтов работодателей</p>
+          <h2>Вакансии</h2>
+        </div>
+        <p>Ищите и читайте полное описание не уходя с сайта. Официальная страница понадобится только для отклика.</p>
+      </div>
+
+      <div class="job-controls">
+        <label class="search-field job-search-field">
+          <span class="visually-hidden">Поиск вакансии</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+          <input id="job-search" type="search" placeholder="Должность, навык или город" autocomplete="off">
+        </label>
+        <label class="select-field">
+          <span class="visually-hidden">Фильтр по компании</span>
+          <select id="job-company-filter"><option value="">Все компании</option></select>
+        </label>
+        <label class="select-field technology-field">
+          <span class="visually-hidden">Фильтр по технологии</span>
+          <select id="job-technology-filter"><option value="">Все технологии</option></select>
+        </label>
+      </div>
+
+      <div class="job-exclusions" id="job-exclusions" hidden>
+        <span>Не показываем компаний: <strong id="job-hidden-company-count">0</strong></span>
+        <select id="job-hidden-company-select" aria-label="Исключённые из вакансий компании"></select>
+        <button id="job-restore-company" type="button">Вернуть выбранную</button>
+        <button id="job-restore-all-companies" type="button">Вернуть все</button>
+      </div>
+
+      <div class="results-meta" aria-live="polite"><span id="job-results-count">Загружаем вакансии…</span><span>Актуальные позиции</span></div>
+      <div class="job-list" id="job-list"></div>
+      <p class="empty-state" id="job-empty-state" hidden>По этому запросу вакансий не найдено.</p>
+      <button class="show-more" id="job-show-more" type="button">Показать ещё <span aria-hidden="true">↓</span></button>
+    </section>
+
+    <section class="catalog" id="companies">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow"><span></span> Каталог работодателей</p>
+          <h2>Компании</h2>
+        </div>
+        <p>Основа каталога — рейтинг CNews500 за 2025 год. Дополнительные компании добавляем в общий пул по мере проверки.</p>
+      </div>
+
+      <div class="catalog-controls">
+        <label class="search-field">
+          <span class="visually-hidden">Поиск компании</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+          <input id="company-search" type="search" placeholder="Найти компанию" autocomplete="off">
+        </label>
+        <div class="filters" role="group" aria-label="Фильтр по статусу">
+          <button class="filter is-active" type="button" data-filter="all">Все <span id="count-all">50</span></button>
+          <button class="filter" type="button" data-filter="ready">Подключены <span id="count-ready">12</span></button>
+          <button class="filter" type="button" data-filter="candidate">Сайт найден <span id="count-candidate">37</span></button>
+          <button class="filter" type="button" data-filter="site_only">Только ссылка <span id="count-site-only">4</span></button>
+          <button class="filter" type="button" data-filter="research">Исследуем <span id="count-research">11</span></button>
+          <button class="filter" type="button" data-filter="hidden">Скрытые <span id="count-hidden">0</span></button>
+        </div>
+      </div>
+
+      <div class="results-meta" aria-live="polite"><span id="results-count">63 компании</span><button class="restore-companies" id="restore-companies" type="button" hidden>Вернуть все скрытые</button></div>
+      <div class="company-grid" id="company-grid"></div>
+      <p class="empty-state" id="empty-state" hidden>По этому запросу компаний не найдено.</p>
+      <button class="show-more" id="show-more" type="button">Показать ещё <span aria-hidden="true">↓</span></button>
+    </section>
+
+    <section class="method" id="about">
+      <div class="method-title">
+        <p class="eyebrow"><span></span> Под капотом</p>
+        <h2>Один список.<br>Разные источники.</h2>
+      </div>
+      <ol>
+        <li><span>01</span><div><strong>Ищем официальный источник</strong><p>Публичный API компании, внутренний JSON-запрос или страницы вакансий.</p></div></li>
+        <li><span>02</span><div><strong>Приводим данные к одному виду</strong><p>Компания, должность, локация, направление, формат работы и ссылка.</p></div></li>
+        <li><span>03</span><div><strong>Следим за изменениями</strong><p>Фиксируем новые и обновлённые позиции, закрытие подтверждаем повторной проверкой.</p></div></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <a class="brand footer-brand" href="#top"><span class="brand-mark">Т</span><span>техработа</span></a>
+    <p>Официальные карьерные страницы российских IT-компаний в одном месте.</p>
+    <span>Данные обновляются автоматически</span>
+  </footer>
+  <dialog class="job-dialog" id="job-dialog" aria-labelledby="dialog-job-title">
+    <button class="dialog-close" id="dialog-close" type="button" aria-label="Закрыть">×</button>
+    <p class="dialog-company" id="dialog-company"></p>
+    <h2 id="dialog-job-title"></h2>
+    <div class="dialog-meta" id="dialog-meta"></div>
+    <div class="dialog-description" id="dialog-description"></div>
+    <a class="dialog-apply" id="dialog-apply" href="#" target="_blank" rel="noopener noreferrer">Откликнуться на сайте компании <span aria-hidden="true">↗</span></a>
+  </dialog>
+  <script src="vacancies.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
