@@ -1,0 +1,50 @@
+{
+  "close_after_missing_runs": 2,
+  "hh_user_agent": "JobTracker/1.0 (ВАША_ПОЧТА@example.com)",
+  "http": {
+    "timeout_seconds": 20,
+    "retries": 2
+  },
+  "filters": {
+    "title_keywords": [],
+    "locations": []
+  },
+  "sources": [
+    {
+      "key": "company-direct-html",
+      "company": "Название компании",
+      "type": "html",
+      "url": "https://company.ru/career/vacancies/",
+      "job_url_pattern": "/vacancy/(?P<id>[0-9]+)/?",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": false
+    },
+    {
+      "key": "company-hh",
+      "company": "Название компании",
+      "type": "hh",
+      "employer_id": "ID_ИЗ_URL_HH_RU_EMPLOYER",
+      "area": "113",
+      "professional_role_category": "Информационные технологии",
+      "enabled": false
+    },
+    {
+      "key": "company-greenhouse",
+      "company": "Название компании",
+      "type": "greenhouse",
+      "token": "TOKEN_ИЗ_URL_КАРЬЕРНОЙ_СТРАНИЦЫ",
+      "enabled": false
+    },
+    {
+      "key": "company-lever",
+      "company": "Название компании",
+      "type": "lever",
+      "site": "SITE_ИЗ_URL_JOBS_LEVER_CO",
+      "region": "global",
+      "max_pages": 100,
+      "enabled": false
+    }
+  ]
+}
+
