@@ -1,6 +1,10 @@
 name: Nightly vacancies
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nightly.yml"
   schedule:
     # 03:15 Moscow time (UTC+3)
     - cron: "15 0 * * *"
