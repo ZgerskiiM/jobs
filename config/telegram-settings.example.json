@@ -1,0 +1,10 @@
+{
+  "chat_id": "123456789",
+  "filter": {
+    "technologies": ["Java"],
+    "keywords": [],
+    "companies": [],
+    "locations": []
+  }
+}
+
