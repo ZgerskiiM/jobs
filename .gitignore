@@ -1,0 +1,12 @@
+config/telegram-bot.credential.xml
+config/telegram-settings.json
+logs/
+work/
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+data/*.sqlite3
+data/*.csv
+site/vacancies.js
+__pycache__/
+tests/__pycache__/
+
