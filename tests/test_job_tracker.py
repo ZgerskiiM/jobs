@@ -114,6 +114,26 @@ class TelegramNotificationTests(unittest.TestCase):
         self.assertEqual(send.call_count, 1)
         self.assertIn("Java Developer", send.call_args.args[2])
 
+    @patch("job_tracker.telegram_api_send")
+    def test_digest_sends_only_matching_active_jobs(self, send):
+        db = job_tracker.connect_db(self.db_path)
+        job_tracker.persist_source(
+            db,
+            [make_job("1", "Python Developer"), make_job("2", "Java Developer")],
+            "acme-gh", 2, "t1",
+        )
+        db.commit()
+        db.close()
+
+        sent = job_tracker.send_telegram_digest(
+            self.db_path, "token", "chat",
+            {"filter": {"technologies": ["Java"]}}, limit=10,
+        )
+        self.assertEqual(sent, 1)
+        self.assertEqual(send.call_count, 1)
+        self.assertIn("Java Developer", send.call_args.args[2])
+        self.assertNotIn("Python Developer", send.call_args.args[2])
+
 
 class AdapterTests(unittest.TestCase):
     def test_technology_detection_distinguishes_java_from_javascript(self):

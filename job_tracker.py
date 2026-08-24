@@ -2518,6 +2518,12 @@ def telegram_api_send(token: str, chat_id: str, message: str, timeout: int = 30)
         raise RuntimeError(f"Telegram отклонил сообщение: {text_value(result.get('description'))}")
 
 
+def print_console_message(message: str) -> None:
+    """Print Telegram HTML safely even in a legacy Windows console."""
+    encoding = sys.stdout.encoding or "utf-8"
+    print(message.encode(encoding, "replace").decode(encoding))
+
+
 def matches_notification_filter(job: sqlite3.Row, settings: dict[str, Any]) -> bool:
     notification_filter = settings.get("filter") or {}
     technologies = detect_technologies(job["title"], job["team"], job["description"])
@@ -2596,7 +2602,7 @@ def send_telegram_notifications(
             if event["url"]:
                 message += f'\n\n<a href="{html.escape(event["url"], quote=True)}">Открыть вакансию</a>'
             if dry_run:
-                print(message)
+                print_console_message(message)
             else:
                 telegram_api_send(token, chat_id, message)
                 time.sleep(0.08)
@@ -2614,6 +2620,53 @@ def send_telegram_notifications(
         f"не подошло под фильтр: {filtered_out}."
     )
     return sent
+
+
+def send_telegram_digest(
+    db_path: Path, token: str, chat_id: str,
+    settings: dict[str, Any] | None = None, limit: int = 10,
+    dry_run: bool = False,
+) -> int:
+    """Send a fresh selection of active vacancies matching the notification filter."""
+    settings = settings or {}
+    db = connect_db(db_path)
+    rows = db.execute("""
+        SELECT company, title, location, team, workplace_type, description, url
+        FROM jobs WHERE active=1
+        ORDER BY first_seen_at DESC, company, title
+    """).fetchall()
+    selected = [row for row in rows if matches_notification_filter(row, settings)][:max(1, limit)]
+    db.close()
+    if not selected:
+        print("Telegram-подборка: подходящих активных вакансий не найдено.")
+        return 0
+
+    messages: list[str] = []
+    current = f"☕ <b>Подборка вакансий</b>\n\nНайдено позиций: {len(selected)}"
+    for index, job in enumerate(selected, 1):
+        title = html.escape(job["title"])
+        if job["url"]:
+            title = f'<a href="{html.escape(job["url"], quote=True)}">{title}</a>'
+        meta = " · ".join(value for value in (
+            text_value(job["location"]), text_value(job["workplace_type"]),
+        ) if value)
+        block = f"\n\n{index}. <b>{html.escape(job['company'])}</b>\n{title}"
+        if meta:
+            block += f"\n{html.escape(meta)}"
+        if len(current) + len(block) > 3800:
+            messages.append(current)
+            current = block.lstrip()
+        else:
+            current += block
+    messages.append(current)
+    for message in messages:
+        if dry_run:
+            print_console_message(message)
+        else:
+            telegram_api_send(token, chat_id, message)
+            time.sleep(0.08)
+    print(f"Telegram-подборка: отправлено вакансий: {len(selected)}.")
+    return len(selected)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2639,6 +2692,14 @@ def main(argv: list[str] | None = None) -> int:
     telegram_notify.add_argument(
         "--settings", type=Path, help="JSON с chat_id и фильтром уведомлений",
     )
+    telegram_digest = sub.add_parser(
+        "telegram-digest", help="отправить подборку активных вакансий по фильтру",
+    )
+    telegram_digest.add_argument("--limit", type=int, default=10)
+    telegram_digest.add_argument("--dry-run", action="store_true")
+    telegram_digest.add_argument(
+        "--settings", type=Path, help="JSON с chat_id и фильтром уведомлений",
+    )
     sub.add_parser("telegram-test", help="отправить тестовое сообщение в Telegram")
     args = parser.parse_args(argv)
     if args.command == "sync":
@@ -2652,7 +2713,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "telegram-init":
         initialize_telegram_cursor(args.db, args.force)
         return 0
-    if args.command in {"telegram-notify", "telegram-test"}:
+    if args.command in {"telegram-notify", "telegram-digest", "telegram-test"}:
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         dry_run = bool(getattr(args, "dry_run", False))
@@ -2674,7 +2735,13 @@ def main(argv: list[str] | None = None) -> int:
         if settings_path:
             with settings_path.open(encoding="utf-8-sig") as handle:
                 settings = json.load(handle)
-        send_telegram_notifications(args.db, token, chat_id, settings, dry_run)
+        if args.command == "telegram-digest":
+            send_telegram_digest(
+                args.db, token, chat_id, settings,
+                limit=max(1, int(args.limit)), dry_run=dry_run,
+            )
+        else:
+            send_telegram_notifications(args.db, token, chat_id, settings, dry_run)
         return 0
     show_stats(args.db)
     return 0

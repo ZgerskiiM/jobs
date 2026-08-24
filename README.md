@@ -122,6 +122,26 @@ python -m unittest discover -s tests -v
 
 ## Регулярный запуск в Windows
 
+### Локальная кнопка и Telegram без расписания
+
+Запустите `setup-telegram.ps1`. Скрипт безопасно запросит токен, найдёт чат после
+сообщения `/start`, сохранит токен через Windows DPAPI, отправит тест и первую подборку
+из 10 активных Java-вакансий. Токен не записывается в репозиторий или JavaScript сайта.
+
+После настройки запускайте сайт через `start-site.ps1`. Кнопка «Обновить вакансии»
+сначала обойдёт карьерные сайты, затем отправит в Telegram только новые вакансии,
+которые соответствуют `config/telegram-filter.json`.
+
+Повторно отправить свежую подборку из текущей базы можно командой:
+
+```powershell
+$credential = Import-Clixml config/telegram-bot.credential.xml
+$settings = Get-Content config/telegram-settings.json -Raw | ConvertFrom-Json
+$env:TELEGRAM_BOT_TOKEN = $credential.GetNetworkCredential().Password
+$env:TELEGRAM_CHAT_ID = [string]$settings.chat_id
+python job_tracker.py --db data/jobs.sqlite3 telegram-digest --settings config/telegram-settings.json --limit 10
+```
+
 ### Ночное обновление, онлайн-сайт и Telegram
 
 Для рабочего режима рекомендуется сценарий `setup-nightly-task.ps1`: он подключает
