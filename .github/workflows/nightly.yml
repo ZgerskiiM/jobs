@@ -1,4 +1,5 @@
 name: Nightly vacancies
+# Public Pages bootstrap: 2026-08-24
 
 on:
   push:
