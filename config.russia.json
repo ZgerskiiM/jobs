@@ -1,0 +1,26 @@
+{
+  "close_after_missing_runs": 2,
+  "hh_user_agent": "JobTracker/1.0 (ВАША_ПОЧТА@example.com)",
+  "http": {
+    "timeout_seconds": 30,
+    "retries": 2
+  },
+  "filters": {
+    "title_keywords": [],
+    "locations": []
+  },
+  "sources": [
+    {"key": "yandex-hh", "company": "Яндекс", "type": "hh", "employer_id": "1740", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "vk-hh", "company": "VK", "type": "hh", "employer_id": "15478", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "ozon-hh", "company": "Ozon", "type": "hh", "employer_id": "2180", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "avito-hh", "company": "Авито", "type": "hh", "employer_id": "84585", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "tbank-hh", "company": "Т-Банк", "type": "hh", "employer_id": "78638", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "kaspersky-hh", "company": "Лаборатория Касперского", "type": "hh", "employer_id": "1057", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "selectel-hh", "company": "Selectel", "type": "hh", "employer_id": "633069", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "mts-hh", "company": "МТС", "type": "hh", "employer_id": "3776", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "sber-hh", "company": "Сбер", "type": "hh", "employer_id": "3529", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "sbertech-hh", "company": "SberTech", "type": "hh", "employer_id": "906557", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true},
+    {"key": "2gis-hh", "company": "2ГИС", "type": "hh", "employer_id": "64174", "area": "113", "professional_role_category": "Информационные технологии", "enabled": true}
+  ]
+}
+
