@@ -281,12 +281,14 @@ export function VacancyDataProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${import.meta.env.BASE_URL}api/vacancies.json`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Не удалось загрузить вакансии")))
-      .then((payload: { vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }) => {
-        const vacancies = payload.vacancies || [];
+    Promise.all([
+      fetch(`${import.meta.env.BASE_URL}api/vacancies.json`, { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Не удалось загрузить каталог вакансий"))),
+      fetch(`/api/vacancies/hh/?text=разработчик&area=1&per_page=100`, { signal: controller.signal }).then((response) => response.ok ? response.json() : { vacancies: [] }).catch(() => ({ vacancies: [] })),
+    ])
+      .then(([catalog, hh]: [{ vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }, { vacancies?: SourceVacancy[]; meta?: { updated_at?: string } }]) => {
+        const vacancies = [...(catalog.vacancies || []), ...(hh.vacancies || [])];
         const jobs = toJobs(vacancies);
-        setState({ jobs, companies: toCompanies(jobs, vacancies, payload.companies || []), loading: false, error: null, updatedAt: payload.meta?.updated_at || null });
+        setState({ jobs, companies: toCompanies(jobs, vacancies, catalog.companies || []), loading: false, error: null, updatedAt: hh.meta?.updated_at || catalog.meta?.updated_at || null });
       })
       .catch((error: Error) => {
         if (error.name !== "AbortError") setState({ jobs: [], companies: [], loading: false, error: error.message, updatedAt: null });

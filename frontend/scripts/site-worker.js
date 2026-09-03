@@ -279,9 +279,50 @@ async function applications(request, env, user, jobId) {
   return json(updated)
 }
 
+function stripHtml(value) {
+  return String(value || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+function hhSkills(item) {
+  const text = `${item.name || ''} ${item.snippet?.requirement || ''} ${item.snippet?.responsibility || ''}`.toLowerCase()
+  const names = ['Java', 'Python', 'Go', 'Rust', 'Kotlin', 'C++', 'C#', 'JavaScript', 'TypeScript', 'React', 'Vue', 'Node.js', 'PostgreSQL', 'Redis', 'Kafka', 'Docker', 'Kubernetes', 'Terraform', 'SQL', 'Linux', 'Golang']
+  return names.filter((name) => text.includes(name.toLowerCase()))
+}
+
+function mapHhVacancy(item) {
+  const employer = item.employer?.name || 'Работодатель на HH.ru'
+  const area = item.area?.name || item.address?.city || 'Россия'
+  const workplace = [item.schedule?.name, item.employment?.name].filter(Boolean).join(' · ')
+  const description = [item.snippet?.requirement, item.snippet?.responsibility].filter(Boolean).map(stripHtml).join(' ') || 'Описание вакансии доступно на HH.ru.'
+  return { id: item.id, company: employer, title: item.name, location: area, workplace_type: workplace, description, url: item.alternate_url || `https://hh.ru/vacancy/${item.id}`, posted_at: item.published_at, source_key: 'hh', technologies: hhSkills(item) }
+}
+
+async function hhVacancies(request, env) {
+  const incoming = new URL(request.url)
+  const query = new URLSearchParams()
+  query.set('text', (incoming.searchParams.get('text') || 'разработчик').slice(0, 120))
+  query.set('area', (incoming.searchParams.get('area') || '1').slice(0, 8))
+  query.set('page', String(Math.min(4, Math.max(0, Number(incoming.searchParams.get('page') || 0)))))
+  query.set('per_page', String(Math.min(100, Math.max(1, Number(incoming.searchParams.get('per_page') || 100)))))
+  query.set('order_by', incoming.searchParams.get('order_by') || 'publication_time')
+  const cacheKey = new Request(`${incoming.origin}/api/vacancies/hh/?${query.toString()}`)
+  const cached = await caches.default.match(cacheKey)
+  if (cached) return cached
+  const userAgent = env.HH_USER_AGENT || 'jobs.dev/1.0 (support@jobs.dev)'
+  const headers = { Accept: 'application/json', 'HH-User-Agent': userAgent, 'User-Agent': userAgent }
+  if (env.HH_API_TOKEN) headers.Authorization = `Bearer ${env.HH_API_TOKEN}`
+  const response = await fetch(`https://api.hh.ru/vacancies?${query.toString()}`, { headers })
+  if (!response.ok) return json({ message: `HH.ru вернул ошибку ${response.status}` }, response.status === 429 ? 429 : 502)
+  const payload = await response.json()
+  const result = json({ source: 'hh', vacancies: (payload.items || []).map(mapHhVacancy), meta: { found: payload.found || 0, page: payload.page || 0, pages: payload.pages || 0, updated_at: now() } })
+  await caches.default.put(cacheKey, result.clone())
+  return result
+}
+
 async function routeApi(request, env) {
   const url = new URL(request.url)
   const path = url.pathname
+  if (path === '/api/vacancies/hh/' && request.method === 'GET') return hhVacancies(request, env)
   if (path === '/api/auth/config/' && request.method === 'GET') return json({ enabled: Boolean(env.TELEGRAM_AUTH_BOT_TOKEN && env.TELEGRAM_AUTH_BOT_USERNAME), username: env.TELEGRAM_AUTH_BOT_USERNAME || '' })
   if (path === '/api/auth/csrf/' && request.method === 'GET') return withCookie(json({ ok: true }), csrfCookie())
   if (path === '/api/auth/telegram/' && ['GET', 'POST'].includes(request.method)) return authTelegram(request, env)
