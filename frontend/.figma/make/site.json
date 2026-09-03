@@ -1,0 +1,10 @@
+{
+  "description": "Connect with employers directly through a visually appealing job portal featuring tech job listings, market trends, and advanced search filters.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

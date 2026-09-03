@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+@theme {
+  --color-bg: #07080e;
+  --color-surface: #0e1018;
+  --color-surface-2: #141620;
+  --color-border: rgba(51, 255, 119, 0.12);
+  --color-border-bright: rgba(51, 255, 119, 0.35);
+  --color-neon: #33ff77;
+  --color-neon-dim: rgba(51, 255, 119, 0.6);
+  --color-neon-glow: rgba(51, 255, 119, 0.15);
+  --color-pink: #ff3e78;
+  --color-pink-dim: rgba(255, 62, 120, 0.6);
+  --color-cyan: #00d4ff;
+  --color-text: #e8eaf0;
+  --color-muted: #5a6070;
+  --color-muted-2: #3a404f;
+  --font-mono: 'DM Mono', monospace;
+  --font-sans: 'Outfit', sans-serif;
+}
+
+body {
+  background-color: #07080e;
+  color: #e8eaf0;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+.neon-text {
+  color: var(--color-neon);
+}
+
+.neon-glow {
+  text-shadow: 0 0 20px rgba(51, 255, 119, 0.5), 0 0 40px rgba(51, 255, 119, 0.2);
+}
+
+.pink-glow {
+  text-shadow: 0 0 20px rgba(255, 62, 120, 0.5), 0 0 40px rgba(255, 62, 120, 0.2);
+}
+
+.card-surface {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.card-surface:hover {
+  border-color: var(--color-border-bright);
+  background: var(--color-surface-2);
+}
+
+.neon-badge {
+  background: var(--color-neon-glow);
+  border: 1px solid rgba(51, 255, 119, 0.3);
+  color: var(--color-neon);
+}
+
+.pink-badge {
+  background: rgba(255, 62, 120, 0.1);
+  border: 1px solid rgba(255, 62, 120, 0.3);
+  color: var(--color-pink);
+}
+
+.cyan-badge {
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: var(--color-cyan);
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(51, 255, 119, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(51, 255, 119, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.scanline {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+input::placeholder {
+  color: var(--color-muted);
+}
+
+input:focus {
+  outline: none;
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
