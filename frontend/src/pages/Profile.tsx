@@ -89,7 +89,7 @@ function SavedBadge() {
 
 export default function Profile() {
   const { jobs } = useVacancyData();
-  const { user, isLoading, onboarding, settings, completeOnboarding, updateSettings, updateName, logout, changePassword, deleteAccount, resume, resumeSkills, setResumeSkills, uploadResume, coverLetter, setCoverLetter, savedJobIds, toggleSavedJob, isPro } = useAuth();
+  const { user, isLoading, onboarding, settings, completeOnboarding, updateSettings, updateName, logout, changePassword, deleteAccount, resume, resumes, resumeSkills, setResumeSkills, uploadResume, selectResume, updateResumeDetails, deleteResume, startHhImport, coverLetter, setCoverLetter, savedJobIds, toggleSavedJob, isPro } = useAuth();
   const [tab, setTab] = useState<Tab>("preferences");
   const [applyJob, setApplyJob] = useState<Job | null>(null);
   const [clDraft, setClDraft] = useState(coverLetter);
@@ -100,12 +100,32 @@ export default function Profile() {
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeDragOver, setResumeDragOver] = useState(false);
   const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+  const [contactDraft, setContactDraft] = useState({ fullName: "", contactEmail: "", contactPhone: "", contactTelegram: "" });
+  const [contactSaved, setContactSaved] = useState(false);
+  const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
   const resumeFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setResumeData(resume);
+    setContactDraft({
+      fullName: resume?.fullName ?? "",
+      contactEmail: resume?.contactEmail ?? "",
+      contactPhone: resume?.contactPhone ?? "",
+      contactTelegram: resume?.contactTelegram ?? "",
+    });
+    setContactSaved(false);
   }, [resume]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const imported = params.get("hh_imported");
+    const error = params.get("hh_error");
+    if (imported) setResumeNotice(`Импортировано резюме с HH.ru: ${imported}`);
+    if (error) setResumeError(error);
+    if (imported || error) setTab("resume");
+  }, []);
 
   const openResumePicker = () => resumeFileRef.current?.click();
 
@@ -130,6 +150,49 @@ export default function Profile() {
       setResumeError(requestError instanceof Error ? requestError.message : "Не удалось проанализировать резюме");
     } finally {
       setResumeUploading(false);
+    }
+  };
+
+  const handleContactChange = (key: keyof typeof contactDraft, value: string) => {
+    setContactDraft((current) => ({ ...current, [key]: value }));
+    setContactSaved(false);
+  };
+
+  const handleSaveContacts = async () => {
+    if (!resumeData) return;
+    setResumeError(null);
+    try {
+      await updateResumeDetails(contactDraft);
+      setContactSaved(true);
+      setTimeout(() => setContactSaved(false), 2500);
+    } catch (requestError) {
+      setResumeError(requestError instanceof Error ? requestError.message : "Не удалось сохранить контакты");
+    }
+  };
+
+  const handleHhImport = async () => {
+    setResumeError(null);
+    setResumeNotice(null);
+    setHhImporting(true);
+    try {
+      const url = await startHhImport();
+      window.location.assign(url);
+    } catch (requestError) {
+      setResumeError(requestError instanceof Error ? requestError.message : "Не удалось запустить импорт с HH.ru");
+    } finally {
+      setHhImporting(false);
+    }
+  };
+
+  const handleDeleteResume = async () => {
+    if (!resumeData) return;
+    if (!window.confirm(`Удалить резюме «${resumeData.fileName}»?`)) return;
+    setResumeError(null);
+    try {
+      await deleteResume(resumeData.id);
+      setShowMatches(false);
+    } catch (requestError) {
+      setResumeError(requestError instanceof Error ? requestError.message : "Не удалось удалить резюме");
     }
   };
 
@@ -400,6 +463,12 @@ export default function Profile() {
       {tab === "resume" && (
         <div>
           <input ref={resumeFileRef} id="resume-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeInputChange} />
+          {resumeNotice && (
+            <div role="status" className="mb-5 border border-[rgba(51,255,119,0.25)] bg-[rgba(51,255,119,0.06)] rounded-sm px-4 py-3 flex items-center justify-between gap-4">
+              <div className="font-sans text-xs text-[#e8eaf0]">{resumeNotice}</div>
+              <button type="button" onClick={() => setResumeNotice(null)} className="font-mono text-xs text-[#5a6070] hover:text-[#33ff77] min-h-11 px-2">закрыть</button>
+            </div>
+          )}
           {resumeError && (
             <div role="alert" className="mb-5 border border-[rgba(255,62,120,0.35)] bg-[rgba(255,62,120,0.08)] rounded-sm px-4 py-3 flex items-start justify-between gap-4">
               <div>
@@ -409,6 +478,38 @@ export default function Profile() {
               <button type="button" onClick={openResumePicker} className="font-mono text-xs text-[#ff3e78] hover:text-white transition-colors shrink-0 min-h-11 px-2">
                 попробовать снова
               </button>
+            </div>
+          )}
+          {resumes.length > 0 && (
+            <div className="mb-6 border border-[rgba(51,255,119,0.1)] rounded-sm overflow-hidden">
+              <div className="px-4 py-3 bg-[#0a0b12] border-b border-[rgba(51,255,119,0.06)] flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest">// мои резюме</div>
+                  <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Выбери резюме для текущего отклика</div>
+                </div>
+                <span className="font-mono text-xs text-[#33ff77]">{resumes.length}</span>
+              </div>
+              <div className="divide-y divide-[rgba(51,255,119,0.05)]">
+                {resumes.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    aria-pressed={item.id === resumeData?.id}
+                    onClick={() => { setResumeError(null); void selectResume(item.id); }}
+                    className={`w-full text-left px-4 py-3 flex items-center justify-between gap-4 transition-colors ${item.id === resumeData?.id ? "bg-[rgba(51,255,119,0.07)]" : "bg-[#0e1018] hover:bg-[#141620]"}`}
+                  >
+                    <span className="min-w-0">
+                      <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.experience || "опыт не найден"}</span>
+                    </span>
+                    <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="px-4 py-3 bg-[#0a0b12] flex flex-wrap items-center gap-3">
+                <button type="button" onClick={openResumePicker} className="font-mono text-xs text-[#33ff77] hover:text-white min-h-11 px-2">+ загрузить ещё</button>
+                <button type="button" onClick={() => void handleHhImport()} disabled={hhImporting} className="font-mono text-xs text-[#00d4ff] hover:text-white disabled:opacity-40 min-h-11 px-2">{hhImporting ? "переходим на HH.ru..." : "импортировать с HH.ru"}</button>
+              </div>
             </div>
           )}
           {/* Empty state */}
@@ -438,6 +539,10 @@ export default function Profile() {
                   <div id="resume-upload-hint" className="font-mono text-xs text-[#5a6070]">PDF или DOCX · до 8 МБ</div>
                 </div>
               </button>
+              <div className="flex items-center justify-center gap-3 mt-3">
+                <span className="font-mono text-[10px] text-[#3a404f]">или</span>
+                <button type="button" onClick={() => void handleHhImport()} disabled={hhImporting} className="font-mono text-xs text-[#00d4ff] hover:text-white disabled:opacity-40 min-h-11 px-2">{hhImporting ? "переходим на HH.ru..." : "импортировать своё с HH.ru"}</button>
+              </div>
             </div>
           )}
 
@@ -467,16 +572,17 @@ export default function Profile() {
                   <div>
                     <div className="font-sans text-sm text-white font-medium">{resumeData.position || "Резюме загружено"}</div>
                     <div className="font-mono text-xs text-[#5a6070]">
-                      {[resumeData.fileName, resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`].filter(Boolean).join(" · ")}
+                      {[resumeData.fileName, resumeData.source === "hh" ? "импортировано с HH.ru" : resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`].filter(Boolean).join(" · ")}
                     </div>
+                    {resumeData.sourceUrl && <a href={resumeData.sourceUrl} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-[#00d4ff] hover:text-white">открыть на HH.ru ↗</a>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={openResumePicker}
+                    onClick={handleDeleteResume}
                     className="font-mono text-xs text-[#3a404f] hover:text-[#5a6070] transition-colors min-h-11 px-2"
                   >
-                    заменить
+                    удалить
                   </button>
                   <button
                     onClick={openResumePicker}
@@ -484,6 +590,36 @@ export default function Profile() {
                   >
                     загрузить другое
                   </button>
+                </div>
+              </div>
+
+              {/* Contact details used by applications */}
+              <div className="border border-[rgba(0,212,255,0.14)] rounded-sm overflow-hidden">
+                <div className="px-5 py-3 bg-[rgba(0,212,255,0.04)] border-b border-[rgba(0,212,255,0.1)]">
+                  <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// данные для отклика</div>
+                  <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Проверь и отредактируй контакты — они будут подставляться в отклики</div>
+                </div>
+                <div className="p-5 bg-[#0e1018] grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {([
+                    ["fullName", "ФИО", "Как к тебе обращаться"],
+                    ["contactEmail", "Email", "name@example.com"],
+                    ["contactPhone", "Телефон", "+7 ..."],
+                    ["contactTelegram", "Telegram", "@username"],
+                  ] as const).map(([key, label, placeholder]) => (
+                    <label key={key} className="block">
+                      <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-wider block mb-1">{label}</span>
+                      <input
+                        value={contactDraft[key]}
+                        onChange={(event) => handleContactChange(key, event.target.value)}
+                        placeholder={placeholder}
+                        className="w-full min-h-11 bg-[#07080e] border border-[rgba(58,64,79,0.4)] focus:border-[rgba(51,255,119,0.35)] px-3 py-2 font-mono text-sm text-[#e8eaf0] placeholder-[#3a404f] rounded-sm transition-colors focus:outline-none"
+                      />
+                    </label>
+                  ))}
+                  <div className="sm:col-span-2 flex items-center gap-4 pt-1">
+                    <button type="button" onClick={() => void handleSaveContacts()} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(51,255,119,0.12)] border border-[rgba(51,255,119,0.3)] text-[#33ff77] hover:bg-[rgba(51,255,119,0.2)] transition-all">сохранить контакты</button>
+                    {contactSaved && <SavedBadge />}
+                  </div>
                 </div>
               </div>
 

@@ -8,14 +8,18 @@ export interface AccountSettings { profileVisible: boolean; showSalaryExpectatio
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
 export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; }
 export interface ResumeSkill { name: string; category: string; confirmed: boolean; }
-export interface ResumeData { fileName: string; uploadedAt: string; experience: string; position: string; skills: ResumeSkill[]; }
+export interface ResumeData {
+  id: string; source?: "upload" | "hh"; sourceId?: string; sourceUrl?: string; fileName: string; uploadedAt: string; experience: string;
+  experienceYears?: number | null; experienceMonths?: number | null; position: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string;
+  skills: ResumeSkill[]; isActive?: boolean;
+}
 
 interface AuthState {
-  user: User | null; onboarding: OnboardingData | null; settings: UserSettings; resume: ResumeData | null;
+  user: User | null; onboarding: OnboardingData | null; settings: UserSettings; resume: ResumeData | null; resumes: ResumeData[];
   coverLetter: string; savedJobIds: number[]; savedJobNotes: Record<string, string>; applications: Application[]; isPro: boolean; isLoading: boolean;
   showAuthModal: boolean; showImportStep: boolean; showOnboarding: boolean; initialOnboarding: Partial<OnboardingData>;
   resumeSkills: ResumeSkill[]; setCoverLetter: (text: string) => Promise<void>; setResumeSkills: (skills: ResumeSkill[]) => Promise<void>;
-  uploadResume: (file: File) => Promise<ResumeData>; clearResume: () => Promise<void>; toggleSavedJob: (id: number) => Promise<void>;
+  uploadResume: (file: File) => Promise<ResumeData>; selectResume: (id: string) => Promise<void>; updateResumeDetails: (details: Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram">) => Promise<void>; deleteResume: (id?: string) => Promise<void>; startHhImport: () => Promise<string>; clearResume: () => Promise<void>; toggleSavedJob: (id: number) => Promise<void>;
   updateSavedJobNote: (id: number, note: string) => Promise<void>;
   isJobSaved: (id: number) => boolean; addApplication: (app: Application) => Promise<void>; updateApplication: (id: number, patch: Partial<Application>) => Promise<void>;
   activatePro: () => void; loginWithEmail: (email: string, password: string, mode: "login" | "register") => Promise<void>; logout: () => Promise<void>;
@@ -35,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [resume, setResume] = useState<ResumeData | null>(null);
+  const [resumes, setResumes] = useState<ResumeData[]>([]);
   const [resumeSkills, setResumeSkillsState] = useState<ResumeSkill[]>([]);
   const [coverLetter, setCoverLetterState] = useState("");
   const [savedJobIds, setSavedJobIds] = useState<number[]>([]);
@@ -49,7 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyAccount = (account: AccountPayload, openSetup = false) => {
     setUser(account.user); setOnboarding(account.onboarding); setSettings(account.settings ?? DEFAULT_SETTINGS);
-    setResume(account.resume); setResumeSkillsState(account.resume?.skills ?? []); setCoverLetterState(account.coverLetter ?? "");
+    const resumeList = account.resumes ?? (account.resume ? [account.resume] : []);
+    setResumes(resumeList); setResume(account.resume ?? resumeList.find((item) => item.isActive) ?? resumeList[0] ?? null); setResumeSkillsState((account.resume ?? resumeList[0])?.skills ?? []); setCoverLetterState(account.coverLetter ?? "");
     setSavedJobIds(account.savedJobIds ?? []); setSavedJobNotes(account.savedJobNotes ?? {}); setApplications(account.applications ?? []); setIsPro(account.isPro ?? false);
     if (openSetup) setShowImportStep(true);
   };
@@ -64,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await accountApi.logout().catch(() => undefined);
-    setUser(null); setOnboarding(null); setResume(null); setResumeSkillsState([]); setCoverLetterState("");
+    setUser(null); setOnboarding(null); setResume(null); setResumes([]); setResumeSkillsState([]); setCoverLetterState("");
     setSavedJobIds([]); setSavedJobNotes({}); setApplications([]); setIsPro(false); setShowImportStep(false); setShowOnboarding(false);
   };
   const changePassword = async (current: string, next: string) => { await accountApi.changePassword(current, next); };
@@ -95,16 +101,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const setCoverLetter = async (text: string) => { setCoverLetterState(text); await accountApi.patchProfile({ coverLetter: text }); };
-  const setResumeSkills = async (skills: ResumeSkill[]) => { setResumeSkillsState(skills); setResume((current) => current ? { ...current, skills } : current); await accountApi.patchResume(skills); };
-  const uploadResume = async (file: File) => { const result = await accountApi.uploadResume(file); setResume(result.resume); setResumeSkillsState(result.resume.skills); return result.resume; };
-  const clearResume = async () => { await accountApi.deleteResume(); setResume(null); setResumeSkillsState([]); };
+  const applyResumeResult = (result: { resume: ResumeData | null; resumes: ResumeData[] }) => { setResumes(result.resumes ?? []); setResume(result.resume); setResumeSkillsState(result.resume?.skills ?? []); return result.resume; };
+  const setResumeSkills = async (skills: ResumeSkill[]) => { setResumeSkillsState(skills); setResume((current) => current ? { ...current, skills } : current); const result = await accountApi.patchResume({ skills }); applyResumeResult(result); };
+  const uploadResume = async (file: File) => { const result = await accountApi.uploadResume(file); return applyResumeResult(result) as ResumeData; };
+  const selectResume = async (id: string) => { const result = await accountApi.patchResume({ activeResumeId: id }); applyResumeResult(result); };
+  const updateResumeDetails = async (details: Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram">) => { const result = await accountApi.patchResume(details); applyResumeResult(result); };
+  const deleteResume = async (id?: string) => { const result = await accountApi.deleteResume(id); applyResumeResult(result); };
+  const startHhImport = async () => (await accountApi.startHhImport()).url;
+  const clearResume = async () => { await deleteResume(); };
   const completeOnboarding = async (data: OnboardingData) => { setOnboarding(data); setShowOnboarding(false); await accountApi.patchProfile({ onboarding: data }); };
   const updateSettings = async (next: UserSettings) => { setSettings(next); await accountApi.patchProfile({ settings: next }); };
   const updateName = async (name: string) => { setUser((current) => current ? { ...current, name } : current); await accountApi.patchProfile({ name }); };
 
   return <AuthContext.Provider value={{
-    user, onboarding, settings, resume, coverLetter, savedJobIds, savedJobNotes, applications, isPro, isLoading, showAuthModal, showImportStep, showOnboarding, initialOnboarding, resumeSkills,
-    setCoverLetter, setResumeSkills, uploadResume, clearResume, toggleSavedJob, updateSavedJobNote, isJobSaved: (id) => savedJobIds.includes(id), addApplication, updateApplication,
+    user, onboarding, settings, resume, resumes, coverLetter, savedJobIds, savedJobNotes, applications, isPro, isLoading, showAuthModal, showImportStep, showOnboarding, initialOnboarding, resumeSkills,
+    setCoverLetter, setResumeSkills, uploadResume, selectResume, updateResumeDetails, deleteResume, startHhImport, clearResume, toggleSavedJob, updateSavedJobNote, isJobSaved: (id) => savedJobIds.includes(id), addApplication, updateApplication,
     activatePro: () => setIsPro(true), loginWithEmail, logout, changePassword, deleteAccount, openAuthModal: () => setShowAuthModal(true), closeAuthModal: () => setShowAuthModal(false),
     finishImport: (prefill) => { setShowImportStep(false); setInitialOnboarding(prefill ?? {}); setShowOnboarding(true); }, completeOnboarding, skipOnboarding: () => setShowOnboarding(false), updateSettings, updateName,
   }}>{children}</AuthContext.Provider>;

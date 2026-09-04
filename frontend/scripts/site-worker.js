@@ -10,6 +10,7 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(user_id, status, ends_at)`,
   `CREATE TABLE IF NOT EXISTS hh_cache (cache_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, expires_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS hh_oauth_states (state TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`,
 ]
 const DEFAULT_SETTINGS = {
   notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false },
@@ -139,29 +140,58 @@ async function ensureProfile(env, userId) {
 
 async function accountPayload(env, user, isNew = false) {
   const profile = await ensureProfile(env, user.id)
-  const resume = await refreshResumeAnalysis(env, profile)
+  const resumeState = await refreshResumeAnalysis(env, profile)
   const applications = await env.DB.prepare('SELECT payload_json FROM applications WHERE user_id = ? ORDER BY updated_at DESC').bind(user.id).all()
   const pro = await env.DB.prepare(`SELECT id FROM subscriptions WHERE user_id = ? AND status = 'active' AND ends_at > ? LIMIT 1`).bind(user.id, now()).first()
   return {
     user: { id: user.id, name: user.name || user.telegram_username || user.email.split('@')[0], email: user.email.endsWith('@telegram.local') ? null : user.email, telegram: user.telegram_username ? `@${user.telegram_username}` : null, telegramPhotoUrl: user.telegram_photo_url || null },
-    onboarding: safeJson(profile.onboarding_json, null), settings: safeJson(profile.settings_json, DEFAULT_SETTINGS), resume, coverLetter: profile.cover_letter || '',
+    onboarding: safeJson(profile.onboarding_json, null), settings: safeJson(profile.settings_json, DEFAULT_SETTINGS), resume: resumeState.active, resumes: resumeState.resumes, coverLetter: profile.cover_letter || '',
     savedJobIds: safeJson(profile.saved_job_ids_json, []), savedJobNotes: safeJson(profile.saved_job_notes_json, {}), applications: applications.results.map((item) => safeJson(item.payload_json, {})), isPro: Boolean(pro), isNew,
   }
 }
 
 async function refreshResumeAnalysis(env, profile) {
-  const resume = safeJson(profile.resume_json, null)
-  if (!resume || resume.analysisVersion === RESUME_ANALYSIS_VERSION || !profile.resume_key || !env.MEDIA) return resume
-  try {
-    const object = await env.MEDIA.get(profile.resume_key)
-    if (!object) return resume
-    const analysis = await analyzeResume(profile.resume_file_name || resume.fileName || 'resume', new Uint8Array(await object.arrayBuffer()))
-    const updated = { ...resume, ...analysis }
-    await env.DB.prepare('UPDATE profiles SET resume_json = ?, updated_at = ? WHERE user_id = ?').bind(JSON.stringify(updated), now(), profile.user_id).run()
-    return updated
-  } catch {
-    return resume
+  const stored = safeJson(profile.resume_json, null)
+  const legacy = stored && Array.isArray(stored.resumes) ? null : stored
+  let records = Array.isArray(stored?.resumes) ? stored.resumes : legacy ? [{ id: 'legacy', ...legacy, fileKey: profile.resume_key || null }] : []
+  let activeId = stored?.activeId || records.find((record) => record.isActive)?.id || records[0]?.id || null
+  let changed = !Array.isArray(stored?.resumes) && records.length > 0
+
+  if (env.MEDIA) {
+    for (const [index, record] of records.entries()) {
+      if (!record.fileKey || record.analysisVersion === RESUME_ANALYSIS_VERSION) continue
+      try {
+        const object = await env.MEDIA.get(record.fileKey)
+        if (!object) continue
+        const analysis = await analyzeResume(record.fileName || profile.resume_file_name || 'resume', new Uint8Array(await object.arrayBuffer()))
+        records[index] = { ...record, ...analysis }
+        changed = true
+      } catch {
+        // A missing object must not prevent the user from opening the account.
+      }
+    }
   }
+
+  if (changed) await saveResumeState(env, profile.user_id, records, activeId)
+  return resumeStatePayload(records, activeId)
+}
+
+function resumeStatePayload(records, activeId) {
+  const active = records.find((record) => record.id === activeId) || records[0] || null
+  const publicResume = (record) => {
+    if (!record) return null
+    const { fileKey, ...data } = record
+    return { ...data, isActive: record.id === active?.id }
+  }
+  return { active: publicResume(active), resumes: records.map(publicResume) }
+}
+
+async function saveResumeState(env, userId, records, activeId) {
+  const active = records.find((record) => record.id === activeId) || records[0] || null
+  const stored = JSON.stringify({ activeId: active?.id || null, resumes: records })
+  await env.DB.prepare('UPDATE profiles SET resume_json = ?, resume_key = ?, resume_file_name = ?, updated_at = ? WHERE user_id = ?')
+    .bind(stored, active?.fileKey || null, active?.fileName || null, now(), userId).run()
+  return resumeStatePayload(records, active?.id || null)
 }
 
 async function requireUser(request, env) {
@@ -248,7 +278,7 @@ async function savedJobs(request, env, user) {
   return json({ savedJobIds, savedJobNotes: notes })
 }
 
-const RESUME_ANALYSIS_VERSION = 3
+const RESUME_ANALYSIS_VERSION = 4
 const RESUME_SKILLS = [
   ['Python', 'Языки', ['python', 'питон']], ['JavaScript', 'Языки', ['javascript', 'js']], ['TypeScript', 'Языки', ['typescript', 'ts']],
   ['Go', 'Языки', ['go', 'golang', 'го']], ['Rust', 'Языки', ['rust']], ['Java', 'Языки', ['java']], ['Kotlin', 'Языки', ['kotlin']],
@@ -462,31 +492,60 @@ function resumePosition(text) {
 
 function resumeExperience(text) {
   const normalized = normalizedResumeText(text)
-  const match = normalized.match(/(?:опыт|experience)[^.!?]{0,100}?(\d{1,2}(?:[.,]\d+)?)\s*(лет|года|год|years?|yrs?)(?=$|[^\p{L}\p{N}_])/iu)
-  if (!match) return ''
-  return `${match[1].replace(',', '.')} ${/years?|yrs?/i.test(match[2]) ? 'лет' : match[2]}`
+  const match = normalized.match(/(?:опыт|experience)[^.!?]{0,100}?(\d{1,2}(?:[.,]\d+)?)\s*(лет|года|год|years?|yrs?)(?:\s+(\d{1,2})\s*(месяц(?:а|ев)?|months?|mos?))?(?=$|[^\p{L}\p{N}_])/iu)
+  if (!match) return { experience: '', experienceYears: null, experienceMonths: null }
+  const years = Number(match[1].replace(',', '.'))
+  const months = match[3] ? Number(match[3]) : 0
+  const yearLabel = /years?|yrs?/i.test(match[2]) ? 'лет' : match[2]
+  return { experience: `${match[1].replace(',', '.')} ${yearLabel}${months ? ` ${months} ${months === 1 ? 'месяц' : months < 5 ? 'месяца' : 'месяцев'}` : ''}`, experienceYears: years, experienceMonths: months }
+}
+
+function resumeContacts(text) {
+  const normalized = normalizedResumeText(text)
+  const email = normalized.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || ''
+  const phone = normalized.match(/(?:\+?7|8)[\s().-]*(?:\d[\s().-]*){9,}/)?.[0].replace(/\s+/g, ' ').trim() || ''
+  const telegram = normalized.match(/(?:telegram|телеграм|tg)\s*[:\-]?\s*(@[a-z0-9_]+)/i)?.[1] || ''
+  const cyrillicName = normalized.match(/[А-ЯЁ][а-яё]{2,}\s+[А-ЯЁ][а-яё]{2,}(?:\s+[А-ЯЁ][а-яё]{2,})?/)
+  const latinName = normalized.match(/[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?/)
+  const fullName = (cyrillicName?.[0] || latinName?.[0] || '').replace(/\s+(мужчина|женщина|male|female)$/iu, '').trim()
+  return { fullName, contactEmail: email, contactPhone: phone, contactTelegram: telegram }
 }
 
 async function analyzeResume(fileName, bytes) {
   const lowerName = fileName.toLowerCase(); const text = lowerName.endsWith('.pdf') ? await extractPdfText(bytes) : lowerName.endsWith('.docx') ? await extractDocxText(bytes) : ''
   if (!text.trim()) throw new Error('Не удалось извлечь текст. Если это скан, сохраните резюме с текстовым слоем')
-  return { analysisVersion: RESUME_ANALYSIS_VERSION, experience: resumeExperience(text), position: resumePosition(text), skills: resumeSkills(text) }
+  return { analysisVersion: RESUME_ANALYSIS_VERSION, ...resumeExperience(text), ...resumeContacts(text), position: resumePosition(text), skills: resumeSkills(text) }
 }
 
 async function resume(request, env, user) {
   const profile = await ensureProfile(env, user.id)
+  const currentState = await refreshResumeAnalysis(env, profile)
   if (request.method === 'DELETE') {
-    if (profile.resume_key && env.MEDIA) await env.MEDIA.delete(profile.resume_key)
-    await env.DB.prepare('UPDATE profiles SET resume_json = NULL, resume_key = NULL, resume_file_name = NULL, updated_at = ? WHERE user_id = ?').bind(now(), user.id).run()
-    return json({ resume: null })
+    const requestedId = new URL(request.url).searchParams.get('id')
+    const target = currentState.resumes.find((record) => record.id === (requestedId || currentState.active?.id))
+    if (!target) return json({ resume: null, resumes: [] })
+    if (target.fileKey && env.MEDIA) await env.MEDIA.delete(target.fileKey)
+    const remaining = currentState.resumes.filter((record) => record.id !== target.id)
+    const nextActiveId = target.id === currentState.active?.id ? remaining[0]?.id || null : currentState.active?.id
+    const saved = await saveResumeState(env, user.id, remaining, nextActiveId)
+    return json({ resume: saved.active, resumes: saved.resumes })
   }
   if (request.method === 'PATCH') {
     const data = await body(request)
-    const current = safeJson(profile.resume_json, null)
-    if (!current || !Array.isArray(data.skills)) return json({ message: 'Сначала загрузите резюме' }, 400)
-    const updated = { ...current, skills: data.skills }
-    await env.DB.prepare('UPDATE profiles SET resume_json = ?, updated_at = ? WHERE user_id = ?').bind(JSON.stringify(updated), now(), user.id).run()
-    return json({ resume: updated })
+    if (!currentState.active) return json({ message: 'Сначала загрузите резюме' }, 400)
+    const requestedId = data.activeResumeId ? String(data.activeResumeId) : currentState.active.id
+    const nextActive = currentState.resumes.find((record) => record.id === requestedId) || currentState.active
+    const editable = ['fullName', 'contactEmail', 'contactPhone', 'contactTelegram']
+    const updatedRecords = currentState.resumes.map((record) => {
+      if (record.id !== nextActive.id && !data.resumeId) return record
+      if (data.resumeId && record.id !== String(data.resumeId)) return record
+      const updated = { ...record }
+      if (Array.isArray(data.skills)) updated.skills = data.skills
+      for (const field of editable) if (data[field] !== undefined) updated[field] = String(data[field]).trim()
+      return updated
+    })
+    const saved = await saveResumeState(env, user.id, updatedRecords, nextActive.id)
+    return json({ resume: saved.active, resumes: saved.resumes })
   }
   const form = await body(request)
   const file = form.get('resume')
@@ -499,10 +558,81 @@ async function resume(request, env, user) {
   try { analysis = await analyzeResume(fileName, bytes) } catch (error) { return json({ message: error instanceof Error ? error.message : 'Не удалось проанализировать резюме' }, 400) }
   const key = `resumes/${user.id}/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
   if (env.MEDIA) await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: file.type || 'application/octet-stream' } })
-  const resumeData = { fileName, uploadedAt: now().slice(0, 10), ...analysis }
-  if (profile.resume_key && env.MEDIA) await env.MEDIA.delete(profile.resume_key)
-  await env.DB.prepare('UPDATE profiles SET resume_json = ?, resume_key = ?, resume_file_name = ?, updated_at = ? WHERE user_id = ?').bind(JSON.stringify(resumeData), key, fileName, now(), user.id).run()
-  return json({ resume: resumeData })
+  const resumeData = { id: crypto.randomUUID(), source: 'upload', fileName, uploadedAt: now().slice(0, 10), fileKey: key, ...analysis }
+  const records = [...currentState.resumes.map((record) => ({ ...record, isActive: false })), resumeData]
+  const saved = await saveResumeState(env, user.id, records, resumeData.id)
+  return json({ resume: saved.active, resumes: saved.resumes })
+}
+
+function hhContact(resume, type) {
+  const contact = (resume.contact || []).find((item) => item.type?.id === type || item.type === type)
+  return typeof contact?.value === 'string' ? contact.value.trim() : ''
+}
+
+function mapHhResume(resume) {
+  const totalMonths = Number(resume.total_experience?.months || 0)
+  const years = Math.floor(totalMonths / 12)
+  const months = totalMonths % 12
+  const fullName = [resume.last_name, resume.first_name, resume.middle_name].filter(Boolean).join(' ').trim()
+  const skills = (resume.skill_set || []).map((skill) => ({ name: String(skill.name || '').trim(), category: 'Навыки HH.ru', confirmed: true })).filter((skill) => skill.name)
+  return {
+    id: `hh-${resume.id}`,
+    source: 'hh',
+    sourceId: String(resume.id || ''),
+    sourceUrl: resume.alternate_url || `https://hh.ru/resume/${resume.id}`,
+    fileName: resume.title || `Резюме с HH.ru — ${resume.id}`,
+    uploadedAt: resume.updated_at ? String(resume.updated_at).slice(0, 10) : now().slice(0, 10),
+    analysisVersion: RESUME_ANALYSIS_VERSION,
+    experience: totalMonths ? `${years} ${years === 1 ? 'год' : years < 5 ? 'года' : 'лет'}${months ? ` ${months} ${months === 1 ? 'месяц' : months < 5 ? 'месяца' : 'месяцев'}` : ''}` : '',
+    experienceYears: years,
+    experienceMonths: months,
+    fullName,
+    contactEmail: hhContact(resume, 'email'),
+    contactPhone: hhContact(resume, 'cell') || hhContact(resume, 'phone'),
+    contactTelegram: hhContact(resume, 'telegram'),
+    position: resume.title || '',
+    skills,
+    fileKey: null,
+  }
+}
+
+async function hhStart(request, env, user) {
+  if (!env.HH_CLIENT_ID || !env.HH_CLIENT_SECRET) return json({ message: 'Импорт с HH.ru пока не настроен на стенде: нужны OAuth-ключи HH_CLIENT_ID и HH_CLIENT_SECRET' }, 503)
+  const state = crypto.randomUUID()
+  await env.DB.prepare('INSERT INTO hh_oauth_states (state, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)').bind(state, user.id, new Date(Date.now() + 10 * 60 * 1000).toISOString(), now()).run()
+  const redirectUri = env.HH_REDIRECT_URI || `${new URL(request.url).origin}/api/profile/hh/callback/`
+  const authUrl = new URL('https://hh.ru/oauth/authorize')
+  authUrl.searchParams.set('response_type', 'code'); authUrl.searchParams.set('client_id', env.HH_CLIENT_ID); authUrl.searchParams.set('state', state); authUrl.searchParams.set('redirect_uri', redirectUri)
+  return json({ url: authUrl.toString() })
+}
+
+async function hhCallback(request, env, user) {
+  const params = new URL(request.url).searchParams
+  const state = params.get('state')
+  const code = params.get('code')
+  const fail = (message) => redirect(`${new URL(request.url).origin}/profile?hh_error=${encodeURIComponent(message)}`)
+  if (!state || !code || !env.HH_CLIENT_ID || !env.HH_CLIENT_SECRET) return fail('Не удалось завершить подключение HH.ru')
+  const stateRow = await env.DB.prepare('SELECT user_id FROM hh_oauth_states WHERE state = ? AND expires_at > ?').bind(state, now()).first()
+  await env.DB.prepare('DELETE FROM hh_oauth_states WHERE state = ?').bind(state).run()
+  if (!stateRow || Number(stateRow.user_id) !== Number(user.id)) return fail('Сессия подключения HH.ru истекла')
+  const redirectUri = env.HH_REDIRECT_URI || `${new URL(request.url).origin}/api/profile/hh/callback/`
+  const tokenResponse = await fetch('https://api.hh.ru/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', client_id: env.HH_CLIENT_ID, client_secret: env.HH_CLIENT_SECRET, code, redirect_uri: redirectUri }) })
+  if (!tokenResponse.ok) return fail('HH.ru не подтвердил авторизацию')
+  const token = await tokenResponse.json()
+  const headers = { Accept: 'application/json', Authorization: `Bearer ${token.access_token}`, 'HH-User-Agent': env.HH_USER_AGENT || 'jobs.dev/1.0' }
+  const listResponse = await fetch('https://api.hh.ru/resumes/mine', { headers })
+  if (!listResponse.ok) return fail('Не удалось получить резюме из HH.ru')
+  const list = await listResponse.json()
+  const imported = []
+  for (const item of list.items || []) {
+    const detailResponse = await fetch(`https://api.hh.ru/resumes/${item.id}`, { headers })
+    if (detailResponse.ok) imported.push(mapHhResume(await detailResponse.json()))
+  }
+  const profile = await ensureProfile(env, user.id)
+  const stateData = await refreshResumeAnalysis(env, profile)
+  const records = [...stateData.resumes.map((record) => ({ ...record, isActive: false })), ...imported]
+  await saveResumeState(env, user.id, records, imported[0]?.id || stateData.active?.id || null)
+  return redirect(`${new URL(request.url).origin}/profile?hh_imported=${imported.length}`)
 }
 
 async function applications(request, env, user, jobId) {
@@ -582,6 +712,8 @@ async function routeApi(request, env) {
   if (!checkCsrf(request)) return json({ message: 'CSRF-проверка не пройдена' }, 403)
   if (path === '/api/auth/me/' && request.method === 'GET') return json(await accountPayload(env, user))
   if (path === '/api/auth/logout/' && request.method === 'POST') return withCookie(json({ ok: true }), clearSessionCookie())
+  if (path === '/api/profile/hh/start/' && request.method === 'POST') return hhStart(request, env, user)
+  if (path === '/api/profile/hh/callback/' && request.method === 'GET') return hhCallback(request, env, user)
   if (path === '/api/auth/password/' && request.method === 'POST') {
     const data = await body(request)
     if (String(data.new || '').length < 8 || !(await verifyPassword(String(data.current || ''), user.password_hash))) return json({ message: 'Неверный текущий пароль или новый пароль слишком короткий' }, 400)

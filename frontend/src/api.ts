@@ -2,11 +2,22 @@ import type { Application } from "./data";
 import type { OnboardingData, ResumeSkill, User, UserSettings } from "./context/AuthContext";
 
 export interface ResumeData {
+  id: string;
+  source?: "upload" | "hh";
+  sourceId?: string;
+  sourceUrl?: string;
   fileName: string;
   uploadedAt: string;
   experience: string;
+  experienceYears?: number | null;
+  experienceMonths?: number | null;
   position: string;
+  fullName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactTelegram?: string;
   skills: ResumeSkill[];
+  isActive?: boolean;
 }
 
 export interface AccountPayload {
@@ -14,6 +25,7 @@ export interface AccountPayload {
   onboarding: OnboardingData | null;
   settings: UserSettings;
   resume: ResumeData | null;
+  resumes: ResumeData[];
   coverLetter: string;
   savedJobIds: number[];
   savedJobNotes: Record<string, string>;
@@ -67,11 +79,12 @@ export const accountApi = {
   uploadResume: (file: File) => {
     const body = new FormData();
     body.append("resume", file);
-    return request<{ resume: ResumeData }>("/api/profile/resume/", { method: "POST", body });
+    return request<{ resume: ResumeData; resumes: ResumeData[] }>("/api/profile/resume/", { method: "POST", body });
   },
-  patchResume: (skills: ResumeSkill[]) =>
-    request<{ resume: ResumeData }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify({ skills }) }),
-  deleteResume: () => request<{ resume: null }>("/api/profile/resume/", { method: "DELETE" }),
+  patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string }) =>
+    request<{ resume: ResumeData | null; resumes: ResumeData[] }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify(body) }),
+  deleteResume: (id?: string) => request<{ resume: ResumeData | null; resumes: ResumeData[] }>(`/api/profile/resume/${id ? `?id=${encodeURIComponent(id)}` : ""}`, { method: "DELETE" }),
+  startHhImport: () => request<{ url: string }>("/api/profile/hh/start/", { method: "POST", body: "{}" }),
   createApplication: (application: Application) =>
     request<Application>("/api/applications/", { method: "POST", body: JSON.stringify(application) }),
   patchApplication: (id: number, patch: Partial<Application>) =>

@@ -171,7 +171,7 @@ function ReviewCard({ data, onConfirm, onBack }: { data: ParsedData; onConfirm: 
 }
 
 export default function ImportStep() {
-  const { user, finishImport, uploadResume } = useAuth();
+  const { user, finishImport, uploadResume, startHhImport } = useAuth();
   const [method, setMethod] = useState<Method>("choose");
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
   const [selectedHHResume, setSelectedHHResume] = useState<string | null>(null);
@@ -180,9 +180,16 @@ export default function ImportStep() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const connectHH = () => {
+  const connectHH = async () => {
+    setUploadError(null);
     setMethod("hh-connecting");
-    setTimeout(() => setMethod("hh-select"), 2000);
+    try {
+      const url = await startHhImport();
+      window.location.assign(url);
+    } catch (requestError) {
+      setUploadError(requestError instanceof Error ? requestError.message : "Не удалось подключить HH.ru");
+      setMethod("choose");
+    }
   };
 
   const selectHHResume = (id: string) => {
