@@ -35,6 +35,16 @@ export interface AccountPayload {
   isNew?: boolean;
 }
 
+export interface VacancyScore {
+  vacancyId: string; score: number; level: string; label: string; summary: string; hardMatchScore: number;
+  matched: Array<{ required: string; found: string; coefficient: number }>;
+  partialMatches: Array<{ required: string; found: string; coefficient: number }>;
+  missingImportant: string[]; negativeSignals: Array<{ id: string; penalty: number; primaryRoleConflict: boolean; matchedText: string }>;
+  gatesApplied: Array<{ id: string; maxScore: number; reason: string }>;
+  experienceMatch: { candidateYears: number | null; vacancyMinYears: number | null; coefficient: number };
+  seniorityMatch: { candidate: string; vacancy: string; coefficient: number };
+}
+
 const API_ORIGIN = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 let csrfReady = false;
 
@@ -98,4 +108,6 @@ export const accountApi = {
     request<Application>("/api/applications/", { method: "POST", body: JSON.stringify(application) }),
   patchApplication: (id: number, patch: Partial<Application>) =>
     request<Application>(`/api/applications/${id}/`, { method: "PATCH", body: JSON.stringify(patch) }),
+  scoreVacancies: (items: Array<{ id: number | string; source_key?: string; title: string; description: string; posted_at?: string }>) =>
+    request<{ taxonomyVersion: string; profile: unknown; scores: VacancyScore[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items }) }),
 };

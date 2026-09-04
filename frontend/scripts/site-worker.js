@@ -11,6 +11,8 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(user_id, status, ends_at)`,
   `CREATE TABLE IF NOT EXISTS hh_cache (cache_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, expires_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS hh_oauth_states (state TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`,
+  `CREATE TABLE IF NOT EXISTS vacancy_feature_index (vacancy_id TEXT PRIMARY KEY, taxonomy_version TEXT NOT NULL, indexed_at TEXT NOT NULL, content_hash TEXT NOT NULL, features_json TEXT NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_vacancy_feature_taxonomy ON vacancy_feature_index(taxonomy_version, indexed_at)`,
 ]
 const DEFAULT_SETTINGS = {
   notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false },
@@ -235,6 +237,45 @@ async function extensionDownload(request, env) {
   headers.set('Content-Disposition', 'attachment; filename="jobs-dev-zen-extension.zip"')
   headers.set('Cache-Control', 'private, no-store')
   return new Response(asset.body, { status: 200, headers })
+}
+
+function scoringVacancyId(vacancy) {
+  return `${String(vacancy.source_key || 'catalog')}:${String(vacancy.id || vacancy.external_id || '')}`
+}
+
+async function scoringIndexedFeatures(env, vacancy) {
+  const vacancyId = scoringVacancyId(vacancy)
+  const contentHash = await scoringHash(vacancy.title, vacancy.description)
+  const existing = await env.DB.prepare('SELECT taxonomy_version, content_hash, features_json FROM vacancy_feature_index WHERE vacancy_id = ?').bind(vacancyId).first()
+  if (existing?.taxonomy_version === String(SCORING_CONFIG.meta?.version || '') && existing.content_hash === contentHash) {
+    const cached = safeJson(existing.features_json, null)
+    if (cached) return cached
+  }
+  const features = await scoringAnalyzeVacancy(vacancy, vacancyId)
+  await env.DB.prepare('INSERT INTO vacancy_feature_index (vacancy_id, taxonomy_version, indexed_at, content_hash, features_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(vacancy_id) DO UPDATE SET taxonomy_version = excluded.taxonomy_version, indexed_at = excluded.indexed_at, content_hash = excluded.content_hash, features_json = excluded.features_json')
+    .bind(vacancyId, features.taxonomyVersion, features.indexedAt, features.contentHash, JSON.stringify(features)).run()
+  return features
+}
+
+async function scoreVacancies(request, env, user) {
+  const data = await body(request)
+  const items = Array.isArray(data.items) ? data.items.slice(0, 40) : []
+  if (!items.length) return json({ message: 'Не переданы вакансии для оценки' }, 400)
+  const profile = await ensureProfile(env, user.id)
+  const account = { resume: (await refreshResumeAnalysis(env, profile)).active, onboarding: safeJson(profile.onboarding_json, null) }
+  const candidate = scoringCandidateProfile(account)
+  const scores = []
+  for (const item of items) {
+    if (!item || !String(item.title || '').trim()) continue
+    const vacancy = {
+      id: String(item.id || ''), source_key: String(item.source_key || 'catalog'), title: String(item.title || '').slice(0, 300),
+      description: String(item.description || '').slice(0, 20000), posted_at: String(item.posted_at || ''), first_seen_at: String(item.first_seen_at || '')
+    }
+    const features = await scoringIndexedFeatures(env, vacancy)
+    scores.push(scoringScore(candidate, features))
+  }
+  scores.sort((left, right) => right.score - left.score || right.hardMatchScore - left.hardMatchScore || left.vacancyId.localeCompare(right.vacancyId))
+  return json({ taxonomyVersion: String(SCORING_CONFIG.meta?.version || ''), profile: candidate, scores })
 }
 
 async function requireUser(request, env) {
@@ -774,6 +815,7 @@ async function routeApi(request, env) {
   if (path === '/api/profile/' && request.method === 'PATCH') return profilePatch(request, env, user)
   if (path === '/api/profile/saved/' && request.method === 'POST') return savedJobs(request, env, user)
   if (path === '/api/profile/resume/' && ['POST', 'PATCH', 'DELETE'].includes(request.method)) return resume(request, env, user)
+  if (path === '/api/scoring/rank/' && request.method === 'POST') return scoreVacancies(request, env, user)
   if (path === '/api/applications/' && request.method === 'POST') return applications(request, env, user)
   const applicationMatch = path.match(/^\/api\/applications\/(\d+)\/$/)
   if (applicationMatch && request.method === 'PATCH') return applications(request, env, user, Number(applicationMatch[1]))

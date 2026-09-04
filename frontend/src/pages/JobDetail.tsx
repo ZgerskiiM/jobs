@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useVacancyData } from "../context/VacancyDataContext";
 import LogoBadge from "../components/LogoBadge";
 import { useAuth } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
+import { accountApi, type VacancyScore } from "../api";
 
 type DescriptionBlock =
   | { type: "paragraph"; text: string }
@@ -62,10 +63,22 @@ export default function JobDetail() {
   const { jobs, companies, loading } = useVacancyData();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, openAuthModal, resumeSkills, isJobSaved, toggleSavedJob } = useAuth();
+  const { user, resume, openAuthModal, resumeSkills, isJobSaved, toggleSavedJob } = useAuth();
   const [applyOpen, setApplyOpen] = useState(false);
+  const [vacancyScore, setVacancyScore] = useState<VacancyScore | null>(null);
 
   const job = jobs.find((j) => j.id === Number(id));
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || !resume || !job) {
+      setVacancyScore(null);
+      return () => { cancelled = true; };
+    }
+    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted }])
+      .then(({ scores }) => { if (!cancelled) setVacancyScore(scores[0] ?? null); })
+      .catch(() => { if (!cancelled) setVacancyScore(null); });
+    return () => { cancelled = true; };
+  }, [user?.id, resume?.id, job?.id]);
   if (loading) return <div className="max-w-7xl mx-auto px-6 py-32 font-mono text-xs text-[#5a6070]">Загружаем вакансию…</div>;
   if (!job) {
     return (
@@ -236,6 +249,28 @@ export default function JobDetail() {
 
         {/* RIGHT — sticky sidebar */}
         <div className="space-y-4 lg:sticky lg:top-20">
+          {vacancyScore && (
+            <div className="card-surface rounded-sm p-5 border border-[rgba(51,255,119,0.2)]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-mono text-xs text-[#3a404f] uppercase tracking-widest">// релевантность резюме</span>
+                <span className="font-mono text-lg font-medium text-[#33ff77]">{Math.round(vacancyScore.score)}%</span>
+              </div>
+              <div className="h-1 bg-[rgba(58,64,79,0.4)] rounded-full mb-4 overflow-hidden">
+                <div className="h-full rounded-full bg-[#33ff77]" style={{ width: `${vacancyScore.score}%` }} />
+              </div>
+              <div className="font-sans text-xs text-[#a0a7b5] leading-relaxed mb-3">{vacancyScore.summary}</div>
+              {vacancyScore.missingImportant.length > 0 && (
+                <div className="font-mono text-[10px] text-[#fbbf24] leading-relaxed">
+                  не хватает: {vacancyScore.missingImportant.slice(0, 5).join(", ")}
+                </div>
+              )}
+              {vacancyScore.matched.length > 0 && (
+                <div className="font-mono text-[10px] text-[#33ff77] leading-relaxed mt-1">
+                  совпало: {vacancyScore.matched.slice(0, 5).map((item) => item.found).join(", ")}
+                </div>
+              )}
+            </div>
+          )}
           {/* skill match */}
           {matchPct !== null && (
             <div className="card-surface rounded-sm p-5">

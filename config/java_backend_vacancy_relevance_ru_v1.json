@@ -1,0 +1,1918 @@
+{
+  "meta": {
+    "name": "java-backend-vacancy-relevance-ru",
+    "version": "1.0.0",
+    "market": "RU",
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "description": "Deterministic taxonomy and scoring configuration for evaluating Java Backend vacancies on the Russian job market."
+  },
+  "scoring": {
+    "scoreRange": [
+      0,
+      100
+    ],
+    "categoryWeights": {
+      "LANGUAGE_CORE": 0.24,
+      "FRAMEWORK": 0.18,
+      "ARCHITECTURE": 0.14,
+      "API": 0.06,
+      "DATABASE": 0.09,
+      "MESSAGING": 0.08,
+      "DEVOPS_CLOUD": 0.07,
+      "TESTING": 0.05,
+      "BUILD_CICD": 0.03,
+      "OBSERVABILITY": 0.02,
+      "SENIORITY_RESPONSIBILITY": 0.04
+    },
+    "importanceWeights": {
+      "MUST_HAVE": 10,
+      "STRONG_PREFERENCE": 6,
+      "NICE_TO_HAVE": 3,
+      "BONUS": 1
+    },
+    "defaultSemanticMatch": {
+      "EXACT": 1.0,
+      "ALIAS": 1.0,
+      "RELATED_STRONG": 0.75,
+      "RELATED_MEDIUM": 0.55,
+      "RELATED_WEAK": 0.3,
+      "MISSING": 0.0
+    },
+    "frequencyBoost": {
+      "enabled": true,
+      "maxBoost": 0.05,
+      "minMentionsForBoost": 2,
+      "maxMentionsCounted": 4
+    },
+    "finalFormula": "clamp(applyGates(rawCategoryScore * 100 - penalties), 0, 100)"
+  },
+  "contextModifiers": [
+    {
+      "id": "REQUIRED",
+      "multiplier": 1.0,
+      "patterns": [
+        "обязательно",
+        "необходимо",
+        "требуется",
+        "требования",
+        "must have",
+        "required",
+        "обязателен опыт",
+        "обязательное требование",
+        "ключевое требование",
+        "уверенное знание",
+        "глубокое знание",
+        "хорошее знание",
+        "практический опыт",
+        "опыт работы с",
+        "опыт разработки с использованием"
+      ]
+    },
+    {
+      "id": "RESPONSIBILITY_OR_STACK",
+      "multiplier": 0.95,
+      "patterns": [
+        "предстоит работать с",
+        "будете работать с",
+        "используем",
+        "наш стек",
+        "технологический стек",
+        "стек проекта",
+        "в проекте используются",
+        "разработка на",
+        "разрабатывать на",
+        "production stack",
+        "tech stack"
+      ]
+    },
+    {
+      "id": "PREFERRED",
+      "multiplier": 0.7,
+      "patterns": [
+        "желательно",
+        "предпочтительно",
+        "будет преимуществом",
+        "приветствуется",
+        "preferred",
+        "advantage"
+      ]
+    },
+    {
+      "id": "NICE_TO_HAVE",
+      "multiplier": 0.5,
+      "patterns": [
+        "будет плюсом",
+        "как плюс",
+        "плюсом будет",
+        "nice to have",
+        "additional advantage",
+        "bonus"
+      ]
+    },
+    {
+      "id": "FAMILIARITY",
+      "multiplier": 0.4,
+      "patterns": [
+        "знакомство с",
+        "базовое понимание",
+        "понимание основ",
+        "будет достаточно понимания",
+        "familiar with",
+        "basic knowledge"
+      ]
+    },
+    {
+      "id": "NOT_REQUIRED",
+      "multiplier": 0.15,
+      "patterns": [
+        "не обязательно",
+        "не требуется",
+        "опыт не обязателен",
+        "можно без опыта",
+        "not required",
+        "no experience required"
+      ]
+    },
+    {
+      "id": "NEGATED_OR_DEPRECATED",
+      "multiplier": 0.05,
+      "patterns": [
+        "не используем",
+        "отказываемся от",
+        "мигрируем с",
+        "уходим с",
+        "legacy technology",
+        "deprecated",
+        "migrating from",
+        "moving away from"
+      ]
+    }
+  ],
+  "experienceParsing": {
+    "patterns": [
+      "(?:от|не менее|минимум)\\s+(\\d+)\\s+(?:лет|года|год)",
+      "(\\d+)\\s*\\+\\s*(?:лет|года|год)",
+      "(\\d+)\\+?\\s*years?",
+      "at least\\s+(\\d+)\\s+years?"
+    ],
+    "wordNumbers": {
+      "одного": 1,
+      "один": 1,
+      "двух": 2,
+      "два": 2,
+      "трех": 3,
+      "трёх": 3,
+      "три": 3,
+      "четырех": 4,
+      "четырёх": 4,
+      "четыре": 4,
+      "пяти": 5,
+      "пять": 5,
+      "шести": 6,
+      "шесть": 6,
+      "семи": 7,
+      "семь": 7,
+      "восьми": 8,
+      "восемь": 8,
+      "девяти": 9,
+      "девять": 9,
+      "десяти": 10,
+      "десять": 10
+    },
+    "matchRules": [
+      {
+        "candidateDeltaMin": 0,
+        "coefficient": 1.0
+      },
+      {
+        "candidateDeltaMin": -1,
+        "coefficient": 0.8
+      },
+      {
+        "candidateDeltaMin": -2,
+        "coefficient": 0.5
+      },
+      {
+        "candidateDeltaMin": -999,
+        "coefficient": 0.2
+      }
+    ]
+  },
+  "seniority": {
+    "levels": {
+      "INTERN": 0,
+      "JUNIOR": 1,
+      "MIDDLE": 2,
+      "SENIOR": 3,
+      "LEAD": 4,
+      "STAFF": 4,
+      "PRINCIPAL": 5
+    },
+    "aliases": {
+      "INTERN": [
+        "intern",
+        "internship",
+        "стажер",
+        "стажёр"
+      ],
+      "JUNIOR": [
+        "junior",
+        "jun",
+        "младший разработчик",
+        "джуниор"
+      ],
+      "MIDDLE": [
+        "middle",
+        "mid",
+        "middle java developer",
+        "мидл",
+        "разработчик среднего уровня"
+      ],
+      "SENIOR": [
+        "senior",
+        "sr",
+        "senior java developer",
+        "старший разработчик",
+        "сеньор"
+      ],
+      "LEAD": [
+        "lead",
+        "team lead",
+        "tech lead",
+        "teamlead",
+        "техлид",
+        "тимлид",
+        "ведущий разработчик"
+      ],
+      "STAFF": [
+        "staff engineer",
+        "staff software engineer"
+      ],
+      "PRINCIPAL": [
+        "principal engineer",
+        "principal software engineer"
+      ]
+    },
+    "distanceMatch": {
+      "0": 1.0,
+      "1": 0.8,
+      "2": 0.45,
+      "3": 0.15,
+      "4": 0.05
+    }
+  },
+  "gates": [
+    {
+      "id": "JAVA_PRIMARY_MISSING",
+      "condition": "concept.JAVA.match < 0.5",
+      "maxScore": 25,
+      "reason": "Нет подтвержденного Java как основного языка."
+    },
+    {
+      "id": "BACKEND_ROLE_MISSING",
+      "condition": "role.BACKEND.match < 0.5",
+      "maxScore": 35,
+      "reason": "Роль не выглядит как backend."
+    },
+    {
+      "id": "JAVA_BACKEND_FRAMEWORK_MISSING",
+      "condition": "concept.JAVA.match >= 0.5 && max(concept.SPRING_BOOT.match, concept.SPRING.match, concept.QUARKUS.match, concept.MICRONAUT.match) < 0.5",
+      "maxScore": 65,
+      "reason": "Java есть, но backend framework не подтвержден."
+    },
+    {
+      "id": "WRONG_PRIMARY_ROLE",
+      "condition": "negative.primaryRoleConflict == true",
+      "maxScore": 20,
+      "reason": "Вакансия относится к другой основной специализации."
+    }
+  ],
+  "negativeSignals": [
+    {
+      "id": "ANDROID_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "android developer",
+        "android-разработчик",
+        "android разработчик",
+        "разработка android приложений"
+      ]
+    },
+    {
+      "id": "FRONTEND_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "frontend developer",
+        "front-end developer",
+        "frontend-разработчик",
+        "фронтенд разработчик"
+      ]
+    },
+    {
+      "id": "QA_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "qa engineer",
+        "qa automation",
+        "автотестировщик",
+        "тестировщик",
+        "инженер по тестированию"
+      ]
+    },
+    {
+      "id": "DATA_PRIMARY",
+      "penalty": 30,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "data engineer",
+        "data scientist",
+        "ml engineer",
+        "инженер данных",
+        "дата инженер"
+      ]
+    },
+    {
+      "id": "PHP_PRIMARY",
+      "penalty": 35,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "php developer",
+        "php-разработчик",
+        "php разработчик"
+      ]
+    },
+    {
+      "id": "DOTNET_PRIMARY",
+      "penalty": 35,
+      "primaryRoleConflict": true,
+      "patterns": [
+        ".net developer",
+        "c# developer",
+        ".net-разработчик",
+        "c# разработчик"
+      ]
+    },
+    {
+      "id": "LEGACY_ONLY",
+      "penalty": 8,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "только поддержка legacy",
+        "поддержка legacy системы",
+        "legacy support only",
+        "maintenance-only"
+      ]
+    },
+    {
+      "id": "NO_DEVELOPMENT",
+      "penalty": 15,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "без разработки",
+        "разработка не предполагается",
+        "no development"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "concept": "BACKEND",
+      "aliases": [
+        "backend",
+        "back-end",
+        "backend developer",
+        "backend engineer",
+        "java backend",
+        "java backend developer",
+        "backend-разработчик",
+        "бэкенд разработчик",
+        "бэкенд-разработчик",
+        "серверная разработка",
+        "разработка серверной части"
+      ]
+    },
+    {
+      "concept": "FULLSTACK",
+      "aliases": [
+        "fullstack",
+        "full-stack",
+        "full stack",
+        "фулстек",
+        "fullstack developer"
+      ]
+    }
+  ],
+  "taxonomy": [
+    {
+      "concept": "JAVA",
+      "category": "LANGUAGE_CORE",
+      "weight": 10,
+      "aliases": [
+        "java",
+        "java se",
+        "java developer",
+        "java-разработчик",
+        "java разработчик",
+        "разработка на java"
+      ]
+    },
+    {
+      "concept": "JAVA_8",
+      "category": "LANGUAGE_CORE",
+      "weight": 2,
+      "aliases": [
+        "java 8",
+        "jdk 8"
+      ]
+    },
+    {
+      "concept": "JAVA_11",
+      "category": "LANGUAGE_CORE",
+      "weight": 3,
+      "aliases": [
+        "java 11",
+        "jdk 11"
+      ]
+    },
+    {
+      "concept": "JAVA_17",
+      "category": "LANGUAGE_CORE",
+      "weight": 5,
+      "aliases": [
+        "java 17",
+        "jdk 17"
+      ]
+    },
+    {
+      "concept": "JAVA_21",
+      "category": "LANGUAGE_CORE",
+      "weight": 5,
+      "aliases": [
+        "java 21",
+        "jdk 21"
+      ]
+    },
+    {
+      "concept": "JVM",
+      "category": "LANGUAGE_CORE",
+      "weight": 5,
+      "aliases": [
+        "jvm",
+        "java virtual machine",
+        "виртуальная машина java"
+      ]
+    },
+    {
+      "concept": "JDK",
+      "category": "LANGUAGE_CORE",
+      "weight": 4,
+      "aliases": [
+        "jdk",
+        "java development kit"
+      ]
+    },
+    {
+      "concept": "OOP",
+      "category": "LANGUAGE_CORE",
+      "weight": 5,
+      "aliases": [
+        "oop",
+        "object-oriented programming",
+        "объектно-ориентированное программирование",
+        "ооп"
+      ]
+    },
+    {
+      "concept": "COLLECTIONS",
+      "category": "LANGUAGE_CORE",
+      "weight": 4,
+      "aliases": [
+        "java collections",
+        "collections framework",
+        "коллекции java",
+        "коллекции"
+      ]
+    },
+    {
+      "concept": "STREAM_API",
+      "category": "LANGUAGE_CORE",
+      "weight": 4,
+      "aliases": [
+        "stream api",
+        "java streams",
+        "streams api",
+        "стримы java",
+        "stream'ы"
+      ]
+    },
+    {
+      "concept": "MULTITHREADING",
+      "category": "LANGUAGE_CORE",
+      "weight": 6,
+      "aliases": [
+        "multithreading",
+        "multi-threading",
+        "многопоточность",
+        "многопоточное программирование",
+        "concurrency",
+        "конкурентное программирование"
+      ]
+    },
+    {
+      "concept": "JAVA_MEMORY_MODEL",
+      "category": "LANGUAGE_CORE",
+      "weight": 5,
+      "aliases": [
+        "java memory model",
+        "jmm",
+        "модель памяти java"
+      ]
+    },
+    {
+      "concept": "GARBAGE_COLLECTION",
+      "category": "LANGUAGE_CORE",
+      "weight": 4,
+      "aliases": [
+        "garbage collection",
+        "gc",
+        "сборщик мусора",
+        "сборка мусора"
+      ]
+    },
+    {
+      "concept": "GENERICS",
+      "category": "LANGUAGE_CORE",
+      "weight": 3,
+      "aliases": [
+        "java generics",
+        "generics",
+        "дженерики",
+        "обобщения java"
+      ]
+    },
+    {
+      "concept": "EXCEPTIONS",
+      "category": "LANGUAGE_CORE",
+      "weight": 2,
+      "aliases": [
+        "exception handling",
+        "exceptions",
+        "исключения java",
+        "обработка исключений"
+      ]
+    },
+    {
+      "concept": "REFLECTION",
+      "category": "LANGUAGE_CORE",
+      "weight": 2,
+      "aliases": [
+        "java reflection",
+        "reflection api",
+        "рефлексия java"
+      ]
+    },
+    {
+      "concept": "NIO",
+      "category": "LANGUAGE_CORE",
+      "weight": 2,
+      "aliases": [
+        "java nio",
+        "nio",
+        "nio.2"
+      ]
+    },
+    {
+      "concept": "SPRING",
+      "category": "FRAMEWORK",
+      "weight": 8,
+      "aliases": [
+        "spring",
+        "spring framework",
+        "спринг"
+      ],
+      "related": [
+        {
+          "concept": "SPRING_BOOT",
+          "match": 0.85
+        }
+      ]
+    },
+    {
+      "concept": "SPRING_BOOT",
+      "category": "FRAMEWORK",
+      "weight": 10,
+      "aliases": [
+        "spring boot",
+        "springboot",
+        "спринг бут"
+      ],
+      "related": [
+        {
+          "concept": "SPRING",
+          "match": 0.9
+        }
+      ]
+    },
+    {
+      "concept": "SPRING_MVC",
+      "category": "FRAMEWORK",
+      "weight": 5,
+      "aliases": [
+        "spring mvc",
+        "spring web mvc"
+      ]
+    },
+    {
+      "concept": "SPRING_DATA",
+      "category": "FRAMEWORK",
+      "weight": 5,
+      "aliases": [
+        "spring data",
+        "spring data jpa"
+      ]
+    },
+    {
+      "concept": "SPRING_SECURITY",
+      "category": "FRAMEWORK",
+      "weight": 5,
+      "aliases": [
+        "spring security"
+      ]
+    },
+    {
+      "concept": "SPRING_CLOUD",
+      "category": "FRAMEWORK",
+      "weight": 5,
+      "aliases": [
+        "spring cloud"
+      ]
+    },
+    {
+      "concept": "WEBFLUX",
+      "category": "FRAMEWORK",
+      "weight": 4,
+      "aliases": [
+        "spring webflux",
+        "webflux",
+        "reactive spring",
+        "реактивный spring"
+      ]
+    },
+    {
+      "concept": "HIBERNATE",
+      "category": "FRAMEWORK",
+      "weight": 6,
+      "aliases": [
+        "hibernate",
+        "хибернейт"
+      ],
+      "related": [
+        {
+          "concept": "JPA",
+          "match": 0.8
+        }
+      ]
+    },
+    {
+      "concept": "JPA",
+      "category": "FRAMEWORK",
+      "weight": 6,
+      "aliases": [
+        "jpa",
+        "jakarta persistence",
+        "java persistence api"
+      ],
+      "related": [
+        {
+          "concept": "HIBERNATE",
+          "match": 0.75
+        }
+      ]
+    },
+    {
+      "concept": "QUARKUS",
+      "category": "FRAMEWORK",
+      "weight": 5,
+      "aliases": [
+        "quarkus"
+      ],
+      "related": [
+        {
+          "concept": "SPRING_BOOT",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "MICRONAUT",
+      "category": "FRAMEWORK",
+      "weight": 4,
+      "aliases": [
+        "micronaut"
+      ],
+      "related": [
+        {
+          "concept": "SPRING_BOOT",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "MYBATIS",
+      "category": "FRAMEWORK",
+      "weight": 3,
+      "aliases": [
+        "mybatis",
+        "my batis"
+      ]
+    },
+    {
+      "concept": "LOMBOK",
+      "category": "FRAMEWORK",
+      "weight": 2,
+      "aliases": [
+        "lombok",
+        "project lombok"
+      ]
+    },
+    {
+      "concept": "MICROSERVICES",
+      "category": "ARCHITECTURE",
+      "weight": 9,
+      "aliases": [
+        "microservices",
+        "microservice architecture",
+        "micro-service architecture",
+        "микросервисы",
+        "микросервисная архитектура",
+        "микросервисный подход"
+      ]
+    },
+    {
+      "concept": "DISTRIBUTED_SYSTEMS",
+      "category": "ARCHITECTURE",
+      "weight": 8,
+      "aliases": [
+        "distributed systems",
+        "распределенные системы",
+        "распределённые системы"
+      ]
+    },
+    {
+      "concept": "HIGH_LOAD",
+      "category": "ARCHITECTURE",
+      "weight": 8,
+      "aliases": [
+        "highload",
+        "high-load",
+        "high load",
+        "высоконагруженные системы",
+        "высокая нагрузка",
+        "нагруженные системы",
+        "системы с высокой нагрузкой"
+      ]
+    },
+    {
+      "concept": "SCALABILITY",
+      "category": "ARCHITECTURE",
+      "weight": 6,
+      "aliases": [
+        "scalability",
+        "scalable systems",
+        "масштабируемость",
+        "масштабирование систем"
+      ]
+    },
+    {
+      "concept": "FAULT_TOLERANCE",
+      "category": "ARCHITECTURE",
+      "weight": 6,
+      "aliases": [
+        "fault tolerance",
+        "fault-tolerant",
+        "отказоустойчивость",
+        "отказоустойчивые системы"
+      ]
+    },
+    {
+      "concept": "HIGH_AVAILABILITY",
+      "category": "ARCHITECTURE",
+      "weight": 5,
+      "aliases": [
+        "high availability",
+        "highly available",
+        "ha systems",
+        "высокая доступность"
+      ]
+    },
+    {
+      "concept": "DDD",
+      "category": "ARCHITECTURE",
+      "weight": 6,
+      "aliases": [
+        "ddd",
+        "domain driven design",
+        "domain-driven design",
+        "предметно-ориентированное проектирование"
+      ]
+    },
+    {
+      "concept": "CQRS",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "cqrs"
+      ]
+    },
+    {
+      "concept": "EVENT_DRIVEN",
+      "category": "ARCHITECTURE",
+      "weight": 6,
+      "aliases": [
+        "event-driven",
+        "event driven architecture",
+        "event driven",
+        "событийная архитектура",
+        "событийно-ориентированная архитектура"
+      ]
+    },
+    {
+      "concept": "EVENT_SOURCING",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "event sourcing",
+        "event-sourcing"
+      ]
+    },
+    {
+      "concept": "CLEAN_ARCHITECTURE",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "clean architecture",
+        "чистая архитектура"
+      ]
+    },
+    {
+      "concept": "HEXAGONAL_ARCHITECTURE",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "hexagonal architecture",
+        "ports and adapters",
+        "гексагональная архитектура"
+      ]
+    },
+    {
+      "concept": "SOLID",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "solid principles",
+        "solid",
+        "принципы solid"
+      ]
+    },
+    {
+      "concept": "DESIGN_PATTERNS",
+      "category": "ARCHITECTURE",
+      "weight": 4,
+      "aliases": [
+        "design patterns",
+        "паттерны проектирования",
+        "шаблоны проектирования"
+      ]
+    },
+    {
+      "concept": "SOA",
+      "category": "ARCHITECTURE",
+      "weight": 3,
+      "aliases": [
+        "soa",
+        "service-oriented architecture",
+        "сервис-ориентированная архитектура"
+      ]
+    },
+    {
+      "concept": "MONOLITH",
+      "category": "ARCHITECTURE",
+      "weight": 2,
+      "aliases": [
+        "monolith",
+        "монолит",
+        "монолитная архитектура"
+      ]
+    },
+    {
+      "concept": "REST",
+      "category": "API",
+      "weight": 8,
+      "aliases": [
+        "rest",
+        "rest api",
+        "restful",
+        "restful api",
+        "rest-сервисы",
+        "rest сервисы"
+      ]
+    },
+    {
+      "concept": "GRPC",
+      "category": "API",
+      "weight": 5,
+      "aliases": [
+        "grpc",
+        "g-rpc"
+      ]
+    },
+    {
+      "concept": "GRAPHQL",
+      "category": "API",
+      "weight": 3,
+      "aliases": [
+        "graphql",
+        "graph ql"
+      ]
+    },
+    {
+      "concept": "SOAP",
+      "category": "API",
+      "weight": 2,
+      "aliases": [
+        "soap",
+        "soap web services",
+        "soap-сервисы"
+      ]
+    },
+    {
+      "concept": "OPENAPI",
+      "category": "API",
+      "weight": 3,
+      "aliases": [
+        "openapi",
+        "open api",
+        "swagger"
+      ]
+    },
+    {
+      "concept": "HTTP",
+      "category": "API",
+      "weight": 3,
+      "aliases": [
+        "http",
+        "http/1.1",
+        "http/2",
+        "http protocol",
+        "протокол http"
+      ]
+    },
+    {
+      "concept": "WEBSOCKET",
+      "category": "API",
+      "weight": 3,
+      "aliases": [
+        "websocket",
+        "web socket",
+        "websockets"
+      ]
+    },
+    {
+      "concept": "SQL",
+      "category": "DATABASE",
+      "weight": 6,
+      "aliases": [
+        "sql",
+        "structured query language",
+        "язык sql"
+      ]
+    },
+    {
+      "concept": "POSTGRESQL",
+      "category": "DATABASE",
+      "weight": 8,
+      "aliases": [
+        "postgresql",
+        "postgres",
+        "postgre",
+        "постгрес"
+      ],
+      "related": [
+        {
+          "concept": "MYSQL",
+          "match": 0.65
+        },
+        {
+          "concept": "ORACLE_DB",
+          "match": 0.6
+        },
+        {
+          "concept": "MSSQL",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "MYSQL",
+      "category": "DATABASE",
+      "weight": 5,
+      "aliases": [
+        "mysql",
+        "my sql"
+      ],
+      "related": [
+        {
+          "concept": "POSTGRESQL",
+          "match": 0.65
+        },
+        {
+          "concept": "MARIADB",
+          "match": 0.8
+        }
+      ]
+    },
+    {
+      "concept": "MARIADB",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "mariadb",
+        "maria db"
+      ],
+      "related": [
+        {
+          "concept": "MYSQL",
+          "match": 0.8
+        }
+      ]
+    },
+    {
+      "concept": "ORACLE_DB",
+      "category": "DATABASE",
+      "weight": 5,
+      "aliases": [
+        "oracle",
+        "oracle db",
+        "oracle database"
+      ],
+      "related": [
+        {
+          "concept": "POSTGRESQL",
+          "match": 0.6
+        },
+        {
+          "concept": "MSSQL",
+          "match": 0.65
+        }
+      ]
+    },
+    {
+      "concept": "MSSQL",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "mssql",
+        "ms sql",
+        "sql server",
+        "microsoft sql server"
+      ],
+      "related": [
+        {
+          "concept": "POSTGRESQL",
+          "match": 0.6
+        },
+        {
+          "concept": "ORACLE_DB",
+          "match": 0.65
+        }
+      ]
+    },
+    {
+      "concept": "MONGODB",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "mongodb",
+        "mongo db",
+        "mongo"
+      ]
+    },
+    {
+      "concept": "REDIS",
+      "category": "DATABASE",
+      "weight": 5,
+      "aliases": [
+        "redis",
+        "redis cache"
+      ]
+    },
+    {
+      "concept": "CASSANDRA",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "cassandra",
+        "apache cassandra"
+      ]
+    },
+    {
+      "concept": "ELASTICSEARCH",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "elasticsearch",
+        "elastic search",
+        "elastic"
+      ]
+    },
+    {
+      "concept": "CLICKHOUSE",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "clickhouse",
+        "click house",
+        "кликхаус"
+      ]
+    },
+    {
+      "concept": "H2",
+      "category": "DATABASE",
+      "weight": 2,
+      "aliases": [
+        "h2 database",
+        "h2 db"
+      ]
+    },
+    {
+      "concept": "LIQUIBASE",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "liquibase"
+      ]
+    },
+    {
+      "concept": "FLYWAY",
+      "category": "DATABASE",
+      "weight": 4,
+      "aliases": [
+        "flyway"
+      ]
+    },
+    {
+      "concept": "KAFKA",
+      "category": "MESSAGING",
+      "weight": 9,
+      "aliases": [
+        "kafka",
+        "apache kafka",
+        "кафка"
+      ],
+      "related": [
+        {
+          "concept": "RABBITMQ",
+          "match": 0.4
+        },
+        {
+          "concept": "ACTIVEMQ",
+          "match": 0.3
+        },
+        {
+          "concept": "JMS",
+          "match": 0.25
+        }
+      ]
+    },
+    {
+      "concept": "RABBITMQ",
+      "category": "MESSAGING",
+      "weight": 6,
+      "aliases": [
+        "rabbitmq",
+        "rabbit mq",
+        "rabbit"
+      ],
+      "related": [
+        {
+          "concept": "KAFKA",
+          "match": 0.4
+        },
+        {
+          "concept": "ACTIVEMQ",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "ACTIVEMQ",
+      "category": "MESSAGING",
+      "weight": 3,
+      "aliases": [
+        "activemq",
+        "active mq"
+      ],
+      "related": [
+        {
+          "concept": "RABBITMQ",
+          "match": 0.45
+        },
+        {
+          "concept": "JMS",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "JMS",
+      "category": "MESSAGING",
+      "weight": 3,
+      "aliases": [
+        "jms",
+        "java message service"
+      ],
+      "related": [
+        {
+          "concept": "ACTIVEMQ",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "ROCKETMQ",
+      "category": "MESSAGING",
+      "weight": 3,
+      "aliases": [
+        "rocketmq",
+        "rocket mq"
+      ]
+    },
+    {
+      "concept": "PULSAR",
+      "category": "MESSAGING",
+      "weight": 3,
+      "aliases": [
+        "apache pulsar",
+        "pulsar"
+      ]
+    },
+    {
+      "concept": "DOCKER",
+      "category": "DEVOPS_CLOUD",
+      "weight": 6,
+      "aliases": [
+        "docker",
+        "докер",
+        "контейнеризация",
+        "docker containers"
+      ]
+    },
+    {
+      "concept": "KUBERNETES",
+      "category": "DEVOPS_CLOUD",
+      "weight": 7,
+      "aliases": [
+        "kubernetes",
+        "k8s",
+        "кубернетес",
+        "кубер"
+      ],
+      "related": [
+        {
+          "concept": "OPENSHIFT",
+          "match": 0.8
+        },
+        {
+          "concept": "DOCKER",
+          "match": 0.3
+        }
+      ]
+    },
+    {
+      "concept": "OPENSHIFT",
+      "category": "DEVOPS_CLOUD",
+      "weight": 4,
+      "aliases": [
+        "openshift",
+        "open shift"
+      ],
+      "related": [
+        {
+          "concept": "KUBERNETES",
+          "match": 0.8
+        }
+      ]
+    },
+    {
+      "concept": "AWS",
+      "category": "DEVOPS_CLOUD",
+      "weight": 5,
+      "aliases": [
+        "aws",
+        "amazon web services"
+      ],
+      "related": [
+        {
+          "concept": "AZURE",
+          "match": 0.6
+        },
+        {
+          "concept": "GCP",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "GCP",
+      "category": "DEVOPS_CLOUD",
+      "weight": 4,
+      "aliases": [
+        "gcp",
+        "google cloud",
+        "google cloud platform"
+      ],
+      "related": [
+        {
+          "concept": "AWS",
+          "match": 0.6
+        },
+        {
+          "concept": "AZURE",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "AZURE",
+      "category": "DEVOPS_CLOUD",
+      "weight": 4,
+      "aliases": [
+        "azure",
+        "microsoft azure"
+      ],
+      "related": [
+        {
+          "concept": "AWS",
+          "match": 0.6
+        },
+        {
+          "concept": "GCP",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "YCLOUD",
+      "category": "DEVOPS_CLOUD",
+      "weight": 4,
+      "aliases": [
+        "yandex cloud",
+        "yandex.cloud",
+        "яндекс облако",
+        "яндекс cloud"
+      ]
+    },
+    {
+      "concept": "SBERCLOUD",
+      "category": "DEVOPS_CLOUD",
+      "weight": 3,
+      "aliases": [
+        "sbercloud",
+        "sber cloud",
+        "сберклауд",
+        "cloud.ru"
+      ]
+    },
+    {
+      "concept": "HELM",
+      "category": "DEVOPS_CLOUD",
+      "weight": 3,
+      "aliases": [
+        "helm",
+        "helm charts"
+      ]
+    },
+    {
+      "concept": "TERRAFORM",
+      "category": "DEVOPS_CLOUD",
+      "weight": 3,
+      "aliases": [
+        "terraform"
+      ]
+    },
+    {
+      "concept": "ANSIBLE",
+      "category": "DEVOPS_CLOUD",
+      "weight": 2,
+      "aliases": [
+        "ansible"
+      ]
+    },
+    {
+      "concept": "LINUX",
+      "category": "DEVOPS_CLOUD",
+      "weight": 4,
+      "aliases": [
+        "linux",
+        "unix",
+        "линукс"
+      ]
+    },
+    {
+      "concept": "NGINX",
+      "category": "DEVOPS_CLOUD",
+      "weight": 2,
+      "aliases": [
+        "nginx"
+      ]
+    },
+    {
+      "concept": "JUNIT",
+      "category": "TESTING",
+      "weight": 5,
+      "aliases": [
+        "junit",
+        "junit 5",
+        "junit5"
+      ]
+    },
+    {
+      "concept": "MOCKITO",
+      "category": "TESTING",
+      "weight": 4,
+      "aliases": [
+        "mockito"
+      ]
+    },
+    {
+      "concept": "TESTCONTAINERS",
+      "category": "TESTING",
+      "weight": 5,
+      "aliases": [
+        "testcontainers",
+        "test containers"
+      ]
+    },
+    {
+      "concept": "UNIT_TESTING",
+      "category": "TESTING",
+      "weight": 5,
+      "aliases": [
+        "unit testing",
+        "unit tests",
+        "юнит тесты",
+        "юнит-тесты",
+        "модульное тестирование"
+      ]
+    },
+    {
+      "concept": "INTEGRATION_TESTING",
+      "category": "TESTING",
+      "weight": 5,
+      "aliases": [
+        "integration testing",
+        "integration tests",
+        "интеграционные тесты",
+        "интеграционное тестирование"
+      ]
+    },
+    {
+      "concept": "TDD",
+      "category": "TESTING",
+      "weight": 4,
+      "aliases": [
+        "tdd",
+        "test driven development",
+        "test-driven development"
+      ]
+    },
+    {
+      "concept": "BDD",
+      "category": "TESTING",
+      "weight": 2,
+      "aliases": [
+        "bdd",
+        "behavior driven development",
+        "behaviour driven development"
+      ]
+    },
+    {
+      "concept": "WIREMOCK",
+      "category": "TESTING",
+      "weight": 3,
+      "aliases": [
+        "wiremock",
+        "wire mock"
+      ]
+    },
+    {
+      "concept": "MAVEN",
+      "category": "BUILD_CICD",
+      "weight": 4,
+      "aliases": [
+        "maven",
+        "apache maven"
+      ]
+    },
+    {
+      "concept": "GRADLE",
+      "category": "BUILD_CICD",
+      "weight": 4,
+      "aliases": [
+        "gradle"
+      ]
+    },
+    {
+      "concept": "JENKINS",
+      "category": "BUILD_CICD",
+      "weight": 3,
+      "aliases": [
+        "jenkins"
+      ]
+    },
+    {
+      "concept": "GITLAB_CI",
+      "category": "BUILD_CICD",
+      "weight": 3,
+      "aliases": [
+        "gitlab ci",
+        "gitlab ci/cd"
+      ]
+    },
+    {
+      "concept": "GITHUB_ACTIONS",
+      "category": "BUILD_CICD",
+      "weight": 2,
+      "aliases": [
+        "github actions"
+      ]
+    },
+    {
+      "concept": "TEAMCITY",
+      "category": "BUILD_CICD",
+      "weight": 2,
+      "aliases": [
+        "teamcity",
+        "team city"
+      ]
+    },
+    {
+      "concept": "CI_CD",
+      "category": "BUILD_CICD",
+      "weight": 3,
+      "aliases": [
+        "ci/cd",
+        "ci cd",
+        "continuous integration",
+        "continuous delivery",
+        "continuous deployment"
+      ]
+    },
+    {
+      "concept": "GIT",
+      "category": "BUILD_CICD",
+      "weight": 3,
+      "aliases": [
+        "git",
+        "gitlab",
+        "github",
+        "bitbucket"
+      ]
+    },
+    {
+      "concept": "PROMETHEUS",
+      "category": "OBSERVABILITY",
+      "weight": 3,
+      "aliases": [
+        "prometheus"
+      ]
+    },
+    {
+      "concept": "GRAFANA",
+      "category": "OBSERVABILITY",
+      "weight": 3,
+      "aliases": [
+        "grafana"
+      ]
+    },
+    {
+      "concept": "ELK",
+      "category": "OBSERVABILITY",
+      "weight": 3,
+      "aliases": [
+        "elk",
+        "elk stack",
+        "elastic stack"
+      ]
+    },
+    {
+      "concept": "KIBANA",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "kibana"
+      ]
+    },
+    {
+      "concept": "LOGSTASH",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "logstash"
+      ]
+    },
+    {
+      "concept": "OPENTELEMETRY",
+      "category": "OBSERVABILITY",
+      "weight": 3,
+      "aliases": [
+        "opentelemetry",
+        "open telemetry",
+        "otel"
+      ]
+    },
+    {
+      "concept": "JAEGER",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "jaeger"
+      ]
+    },
+    {
+      "concept": "ZIPKIN",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "zipkin"
+      ]
+    },
+    {
+      "concept": "SENTRY",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "sentry"
+      ]
+    },
+    {
+      "concept": "ZABBIX",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "zabbix",
+        "заббикс"
+      ]
+    },
+    {
+      "concept": "CODE_REVIEW",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 5,
+      "aliases": [
+        "code review",
+        "ревью кода",
+        "код-ревью",
+        "проведение code review",
+        "review кода"
+      ]
+    },
+    {
+      "concept": "MENTORING",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "mentoring",
+        "менторинг",
+        "наставничество",
+        "обучение разработчиков",
+        "помощь младшим разработчикам"
+      ]
+    },
+    {
+      "concept": "SYSTEM_DESIGN",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 7,
+      "aliases": [
+        "system design",
+        "проектирование систем",
+        "проектирование архитектуры",
+        "архитектурное проектирование",
+        "проектирование сервисов"
+      ]
+    },
+    {
+      "concept": "OWNERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "ownership",
+        "ответственность за результат",
+        "ведение задачи от идеи до production",
+        "end-to-end ownership"
+      ]
+    },
+    {
+      "concept": "TECH_LEADERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 6,
+      "aliases": [
+        "technical leadership",
+        "техническое лидерство",
+        "технический лидер",
+        "техлид"
+      ]
+    },
+    {
+      "concept": "ARCHITECTURE_DECISIONS",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 6,
+      "aliases": [
+        "architectural decisions",
+        "архитектурные решения",
+        "принятие архитектурных решений"
+      ]
+    },
+    {
+      "concept": "PERFORMANCE_TUNING",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 5,
+      "aliases": [
+        "performance tuning",
+        "оптимизация производительности",
+        "профилирование",
+        "performance optimization"
+      ]
+    },
+    {
+      "concept": "PRODUCTION_SUPPORT",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 3,
+      "aliases": [
+        "production support",
+        "поддержка production",
+        "поддержка продакшена",
+        "дежурства",
+        "on-call"
+      ]
+    },
+    {
+      "concept": "CAMUNDA",
+      "category": "FRAMEWORK",
+      "weight": 3,
+      "aliases": [
+        "camunda",
+        "camunda bpm"
+      ]
+    },
+    {
+      "concept": "MAPSTRUCT",
+      "category": "FRAMEWORK",
+      "weight": 2,
+      "aliases": [
+        "mapstruct",
+        "map struct"
+      ]
+    },
+    {
+      "concept": "TARANTOOL",
+      "category": "DATABASE",
+      "weight": 2,
+      "aliases": [
+        "tarantool"
+      ]
+    },
+    {
+      "concept": "IBM_MQ",
+      "category": "MESSAGING",
+      "weight": 3,
+      "aliases": [
+        "ibm mq",
+        "websphere mq"
+      ]
+    },
+    {
+      "concept": "BPM",
+      "category": "ARCHITECTURE",
+      "weight": 2,
+      "aliases": [
+        "bpm",
+        "business process management",
+        "управление бизнес-процессами"
+      ]
+    },
+    {
+      "concept": "VAULT",
+      "category": "DEVOPS_CLOUD",
+      "weight": 2,
+      "aliases": [
+        "hashicorp vault",
+        "vault"
+      ]
+    },
+    {
+      "concept": "LOKI",
+      "category": "OBSERVABILITY",
+      "weight": 2,
+      "aliases": [
+        "grafana loki",
+        "loki"
+      ]
+    }
+  ],
+  "outputBands": [
+    {
+      "min": 90,
+      "max": 100,
+      "code": "EXCELLENT_MATCH",
+      "labelRu": "Отличное совпадение"
+    },
+    {
+      "min": 80,
+      "max": 89.99,
+      "code": "STRONG_MATCH",
+      "labelRu": "Сильное совпадение"
+    },
+    {
+      "min": 70,
+      "max": 79.99,
+      "code": "GOOD_MATCH",
+      "labelRu": "Хорошее совпадение"
+    },
+    {
+      "min": 55,
+      "max": 69.99,
+      "code": "PARTIAL_MATCH",
+      "labelRu": "Частичное совпадение"
+    },
+    {
+      "min": 40,
+      "max": 54.99,
+      "code": "WEAK_MATCH",
+      "labelRu": "Слабое совпадение"
+    },
+    {
+      "min": 0,
+      "max": 39.99,
+      "code": "NOT_RELEVANT",
+      "labelRu": "Нерелевантно"
+    }
+  ],
+  "recommendedOutput": {
+    "fields": [
+      "score",
+      "level",
+      "hardMatchScore",
+      "categoryScores",
+      "matched",
+      "partialMatches",
+      "missingImportant",
+      "negativeSignals",
+      "gatesApplied",
+      "experienceMatch",
+      "seniorityMatch",
+      "summary"
+    ],
+    "example": {
+      "score": 87,
+      "level": "STRONG_MATCH",
+      "hardMatchScore": 94,
+      "categoryScores": {
+        "LANGUAGE_CORE": 100,
+        "FRAMEWORK": 100,
+        "ARCHITECTURE": 86,
+        "API": 100,
+        "DATABASE": 90,
+        "MESSAGING": 100,
+        "DEVOPS_CLOUD": 62,
+        "TESTING": 75
+      },
+      "matched": [
+        "JAVA_17",
+        "SPRING_BOOT",
+        "MICROSERVICES",
+        "KAFKA",
+        "POSTGRESQL",
+        "DOCKER"
+      ],
+      "partialMatches": [
+        {
+          "required": "AWS",
+          "found": "AZURE",
+          "coefficient": 0.6
+        }
+      ],
+      "missingImportant": [
+        "KUBERNETES"
+      ],
+      "negativeSignals": [],
+      "gatesApplied": [],
+      "summary": "Сильное совпадение по основному Java Backend стеку."
+    }
+  }
+}

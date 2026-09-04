@@ -6,6 +6,7 @@ import { useVacancyData } from "../context/VacancyDataContext";
 import CompanyJobsPanel from "../components/CompanyJobsPanel";
 import { useAuth } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
+import { accountApi, type VacancyScore } from "../api";
 
 const TRENDS = [
   { label: "AI / ML Engineer", delta: "+34%", count: "2,841", hot: true },
@@ -48,7 +49,8 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [applyJob, setApplyJob] = useState<Job | null>(null);
-  const { user, onboarding, openAuthModal, isJobSaved, toggleSavedJob } = useAuth();
+  const { user, resume, onboarding, openAuthModal, isJobSaved, toggleSavedJob } = useAuth();
+  const [vacancyScores, setVacancyScores] = useState<Record<string, VacancyScore>>({});
 
   const toggleTech = (tech: string) => {
     setActiveTechs((prev) =>
@@ -83,6 +85,20 @@ export default function Home() {
   useEffect(() => {
     setPage(1);
   }, [search, activeCategory, activeCompany, activeTechs, remoteOnly]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || !resume || pageJobs.length === 0) {
+      setVacancyScores({});
+      return () => { cancelled = true; };
+    }
+    accountApi.scoreVacancies(pageJobs.map((job) => ({ id: job.id, title: job.title, description: job.description, posted_at: job.posted })))
+      .then(({ scores }) => {
+        if (!cancelled) setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
+      })
+      .catch(() => { if (!cancelled) setVacancyScores({}); });
+    return () => { cancelled = true; };
+  }, [user?.id, resume?.id, jobs.length, currentPage, search, activeCategory, activeCompany, remoteOnly, activeTechs.join(",")]);
 
   const roleLabels: Record<string, string> = {
     backend: "Backend", frontend: "Frontend", aiml: "AI/ML",
@@ -349,6 +365,9 @@ export default function Home() {
         <div className="grid gap-2">
           {pageJobs.map((job) => (
             <div key={job.id} className="card-surface rounded-sm px-5 py-4 group">
+              {(() => {
+                const score = vacancyScores[`catalog:${job.id}`];
+                return (
               <div className="flex items-start gap-4">
                 <Link to={`/jobs/${job.id}`} className="shrink-0">
                   <LogoBadge logo={job.logo} logoUrl={job.logoUrl} color={job.logoColor} size="md" />
@@ -369,7 +388,10 @@ export default function Home() {
                     </Link>
                     <div className="text-right shrink-0">
                       <div className="font-mono text-sm text-[#33ff77] font-medium mb-1">{job.salary}</div>
-                      <div className="font-mono text-xs text-[#3a404f]">{job.posted}</div>
+                      <div className="flex items-center justify-end gap-2">
+                        {score && <span className="font-mono text-[10px] text-[#33ff77]" title={score.summary}>{Math.round(score.score)}% match</span>}
+                        <span className="font-mono text-xs text-[#3a404f]">{job.posted}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -403,6 +425,8 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+                );
+              })()}
             </div>
           ))}
 
