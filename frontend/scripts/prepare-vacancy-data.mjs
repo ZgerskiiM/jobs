@@ -7,19 +7,22 @@ const progressPath = path.resolve(process.cwd(), '../COMPANIES_PROGRESS.md');
 const configPath = path.resolve(process.cwd(), '../config.direct.json');
 const topCompaniesPath = path.resolve(process.cwd(), '../companies.top50.json');
 const ozonSnapshotPath = path.resolve(process.cwd(), 'data/ozon-tech-vacancies.json');
-const taxonomyPath = path.resolve(process.cwd(), '../config/java_backend_vacancy_relevance_ru_v1.json');
+const taxonomyPaths = {
+  JAVA_BACKEND: path.resolve(process.cwd(), '../config/java_backend_vacancy_relevance_ru_v1.json'),
+  DEVOPS: path.resolve(process.cwd(), '../config/devops_vacancy_relevance_ru_v1.json'),
+};
 const scoringEnginePath = path.resolve(process.cwd(), 'scripts/vacancy-scoring.js');
 const source = await readFile(sourcePath, 'utf8');
 const progress = await readFile(progressPath, 'utf8');
 const directConfig = JSON.parse(await readFile(configPath, 'utf8'));
 const topCompanies = JSON.parse(await readFile(topCompaniesPath, 'utf8'));
 const ozonSnapshot = JSON.parse(await readFile(ozonSnapshotPath, 'utf8'));
-const taxonomy = JSON.parse(await readFile(taxonomyPath, 'utf8'));
 const scoringEngineSource = await readFile(scoringEnginePath, 'utf8');
-const scoringEngine = new Function(
+const taxonomies = Object.fromEntries(await Promise.all(Object.entries(taxonomyPaths).map(async ([profile, taxonomyPath]) => [profile, JSON.parse(await readFile(taxonomyPath, 'utf8'))])));
+const scoringEngines = Object.fromEntries(Object.entries(taxonomies).map(([profile, taxonomy]) => [profile, new Function(
   'SCORING_CONFIG',
   `${scoringEngineSource}\nreturn { analyze: scoringAnalyzeVacancy, compact: scoringCompactFeatures }`,
-)(taxonomy);
+)(taxonomy)]));
 const additionalCareerUrls = new Map([
   ['Московская биржа (MOEX)', 'https://career.moex.com/'],
   ['ЮMoney', 'https://jobs.yoomoney.ru/'],
@@ -108,15 +111,19 @@ const vacancyRecords = [
 
 let preparedScoringFeatures = 0;
 for (const vacancy of vacancyRecords) {
-  if (vacancy.scoring_features?.v === taxonomy.meta.version) continue;
   const vacancyId = `${vacancy.source_key || 'catalog'}:${vacancy.id}`;
-  vacancy.scoring_features = scoringEngine.compact(await scoringEngine.analyze(vacancy, vacancyId));
-  preparedScoringFeatures += 1;
+  const currentFeatures = vacancy.scoring_features && !vacancy.scoring_features.v ? vacancy.scoring_features : {};
+  vacancy.scoring_features = currentFeatures;
+  for (const [profile, engine] of Object.entries(scoringEngines)) {
+    if (currentFeatures[profile]?.v === taxonomies[profile].meta.version && currentFeatures[profile]?.p === profile) continue;
+    currentFeatures[profile] = engine.compact(await engine.analyze(vacancy, vacancyId));
+    preparedScoringFeatures += 1;
+  }
 }
 
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, JSON.stringify({
-  meta: { ...JSON.parse(meta), count: vacancyRecords.length, taxonomy_version: taxonomy.meta.version, scoring_features_built: preparedScoringFeatures },
+  meta: { ...JSON.parse(meta), count: vacancyRecords.length, taxonomy_versions: Object.fromEntries(Object.entries(taxonomies).map(([profile, taxonomy]) => [profile, taxonomy.meta.version])), scoring_features_built: preparedScoringFeatures },
   vacancies: vacancyRecords,
   companies: registry,
 }), 'utf8');

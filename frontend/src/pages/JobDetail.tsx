@@ -74,11 +74,12 @@ export default function JobDetail() {
       setVacancyScore(null);
       return () => { cancelled = true; };
     }
-    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures }])
+    const targetRole = resume.targetRole ?? "JAVA_BACKEND";
+    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures?.[targetRole] }])
       .then(({ scores }) => { if (!cancelled) setVacancyScore(scores[0] ?? null); })
       .catch(() => { if (!cancelled) setVacancyScore(null); });
     return () => { cancelled = true; };
-  }, [user?.id, resume?.id, job?.id]);
+  }, [user?.id, resume?.id, resume?.targetRole, job?.id]);
   if (loading) return <div className="max-w-7xl mx-auto px-6 py-32 font-mono text-xs text-[#5a6070]">Загружаем вакансию…</div>;
   if (!job) {
     return (

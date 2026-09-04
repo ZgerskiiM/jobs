@@ -168,6 +168,11 @@ async function refreshResumeAnalysis(env, profile) {
   let records = Array.isArray(stored?.resumes) ? stored.resumes : legacy ? [{ id: 'legacy', ...legacy, fileKey: profile.resume_key || null }] : []
   let activeId = stored?.activeId || records.find((record) => record.isActive)?.id || records[0]?.id || null
   let changed = !Array.isArray(stored?.resumes) && records.length > 0
+  records = records.map((record) => {
+    if (record.targetRole === 'DEVOPS' || record.targetRole === 'JAVA_BACKEND') return record
+    changed = true
+    return { ...record, targetRole: 'JAVA_BACKEND' }
+  })
 
   if (env.MEDIA) {
     for (const [index, record] of records.entries()) {
@@ -243,17 +248,27 @@ function scoringVacancyId(vacancy) {
   return `${String(vacancy.source_key || 'catalog')}:${String(vacancy.id || vacancy.external_id || '')}`
 }
 
-async function scoringIndexedFeatures(env, vacancy) {
+function scoringProfileKey(resume) {
+  return resume?.targetRole === 'DEVOPS' ? 'DEVOPS' : 'JAVA_BACKEND'
+}
+
+function scoringEngineFor(resume) {
+  return SCORING_ENGINES[scoringProfileKey(resume)] || SCORING_ENGINES.JAVA_BACKEND
+}
+
+async function scoringIndexedFeatures(env, vacancy, engine) {
   const vacancyId = scoringVacancyId(vacancy)
-  const contentHash = await scoringHash(vacancy.title, vacancy.description)
-  const existing = await env.DB.prepare('SELECT taxonomy_version, content_hash, features_json FROM vacancy_feature_index WHERE vacancy_id = ?').bind(vacancyId).first()
-  if (existing?.taxonomy_version === String(SCORING_CONFIG.meta?.version || '') && existing.content_hash === contentHash) {
+  const profile = String(engine.config.meta?.profile || 'JAVA_BACKEND').toUpperCase()
+  const indexId = `${profile}:${vacancyId}`
+  const contentHash = await engine.hash(vacancy.title, vacancy.description)
+  const existing = await env.DB.prepare('SELECT taxonomy_version, content_hash, features_json FROM vacancy_feature_index WHERE vacancy_id = ?').bind(indexId).first()
+  if (existing?.taxonomy_version === String(engine.config.meta?.version || '') && existing.content_hash === contentHash) {
     const cached = safeJson(existing.features_json, null)
     if (cached) return cached
   }
-  const features = await scoringAnalyzeVacancy(vacancy, vacancyId)
+  const features = await engine.analyze(vacancy, vacancyId)
   await env.DB.prepare('INSERT INTO vacancy_feature_index (vacancy_id, taxonomy_version, indexed_at, content_hash, features_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(vacancy_id) DO UPDATE SET taxonomy_version = excluded.taxonomy_version, indexed_at = excluded.indexed_at, content_hash = excluded.content_hash, features_json = excluded.features_json')
-    .bind(vacancyId, features.taxonomyVersion, features.indexedAt, features.contentHash, JSON.stringify(features)).run()
+    .bind(indexId, features.taxonomyVersion, features.indexedAt, features.contentHash, JSON.stringify(features)).run()
   return features
 }
 
@@ -263,7 +278,8 @@ async function scoreVacancies(request, env, user) {
   if (!items.length) return json({ message: 'Не переданы вакансии для оценки' }, 400)
   const profile = await ensureProfile(env, user.id)
   const account = { resume: (await refreshResumeAnalysis(env, profile)).active, onboarding: safeJson(profile.onboarding_json, null) }
-  const candidate = scoringCandidateProfile(account)
+  const engine = scoringEngineFor(account.resume)
+  const candidate = engine.candidateProfile(account)
   const scores = []
   for (const item of items) {
     if (!item) continue
@@ -272,14 +288,14 @@ async function scoreVacancies(request, env, user) {
       description: String(item.description || '').slice(0, 20000), posted_at: String(item.posted_at || ''), first_seen_at: String(item.first_seen_at || '')
     }
     const vacancyId = scoringVacancyId(vacancy)
-    const preparedFeatures = scoringInflateFeatures(item.features, vacancyId)
+    const preparedFeatures = engine.inflate(item.features, vacancyId)
     if (!preparedFeatures && !vacancy.title.trim()) continue
-    const features = preparedFeatures || await scoringIndexedFeatures(env, vacancy)
-    const score = scoringScore(candidate, features)
+    const features = preparedFeatures || await scoringIndexedFeatures(env, vacancy, engine)
+    const score = engine.score(candidate, features)
     scores.push(data.compact ? { vacancyId: score.vacancyId, score: score.score, level: score.level, label: score.label } : score)
   }
   scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId))
-  return json({ taxonomyVersion: String(SCORING_CONFIG.meta?.version || ''), profile: candidate, scores })
+  return json({ taxonomyVersion: String(engine.config.meta?.version || ''), profile: candidate, scores })
 }
 
 async function requireUser(request, env) {
@@ -623,13 +639,14 @@ async function resume(request, env, user) {
     if (!currentState.active) return json({ message: 'Сначала загрузите резюме' }, 400)
     const requestedId = data.activeResumeId ? String(data.activeResumeId) : currentState.active.id
     const nextActive = currentState.resumes.find((record) => record.id === requestedId) || currentState.active
-    const editable = ['fullName', 'contactEmail', 'contactPhone', 'contactTelegram']
+    const editable = ['fullName', 'contactEmail', 'contactPhone', 'contactTelegram', 'targetRole']
     const updatedRecords = currentState.resumes.map((record) => {
       if (record.id !== nextActive.id && !data.resumeId) return record
       if (data.resumeId && record.id !== String(data.resumeId)) return record
       const updated = { ...record }
       if (Array.isArray(data.skills)) updated.skills = data.skills
       for (const field of editable) if (data[field] !== undefined) updated[field] = String(data[field]).trim()
+      if (!['JAVA_BACKEND', 'DEVOPS'].includes(updated.targetRole)) updated.targetRole = 'JAVA_BACKEND'
       return updated
     })
     const saved = await saveResumeState(env, user.id, updatedRecords, nextActive.id)
@@ -646,7 +663,7 @@ async function resume(request, env, user) {
   try { analysis = await analyzeResume(fileName, bytes) } catch (error) { return json({ message: error instanceof Error ? error.message : 'Не удалось проанализировать резюме' }, 400) }
   const key = `resumes/${user.id}/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
   if (env.MEDIA) await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: file.type || 'application/octet-stream' } })
-  const resumeData = { id: crypto.randomUUID(), source: 'upload', fileName, uploadedAt: now().slice(0, 10), fileKey: key, ...analysis }
+  const resumeData = { id: crypto.randomUUID(), source: 'upload', fileName, uploadedAt: now().slice(0, 10), fileKey: key, targetRole: 'JAVA_BACKEND', ...analysis }
   const records = [...currentState.resumes.map((record) => ({ ...record, isActive: false })), resumeData]
   const saved = await saveResumeState(env, user.id, records, resumeData.id)
   return json({ resume: saved.active, resumes: saved.resumes })
@@ -681,6 +698,7 @@ function mapHhResume(resume) {
     position: resume.title || '',
     skills,
     fileKey: null,
+    targetRole: 'JAVA_BACKEND',
   }
 }
 

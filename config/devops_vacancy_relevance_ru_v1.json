@@ -1,0 +1,1982 @@
+{
+  "meta": {
+    "name": "devops-vacancy-relevance-ru",
+    "version": "1.0.0",
+    "market": "RU",
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "profile": "DEVOPS",
+    "description": "Deterministic taxonomy for DevOps/SRE/Platform vacancies on the Russian market."
+  },
+  "scoring": {
+    "scoreRange": [
+      0,
+      100
+    ],
+    "categoryWeights": {
+      "OS_LINUX": 0.1,
+      "CONTAINERS": 0.06,
+      "ORCHESTRATION": 0.17,
+      "CLOUD": 0.14,
+      "IAC_CONFIG": 0.13,
+      "CI_CD": 0.12,
+      "OBSERVABILITY": 0.1,
+      "NETWORKING": 0.07,
+      "SECURITY": 0.03,
+      "DATABASE_PLATFORM": 0.02,
+      "SCRIPTING": 0.02,
+      "SRE_RELIABILITY": 0.03,
+      "SENIORITY_RESPONSIBILITY": 0.01
+    },
+    "importanceWeights": {
+      "MUST_HAVE": 10,
+      "STRONG_PREFERENCE": 6,
+      "NICE_TO_HAVE": 3,
+      "BONUS": 1
+    },
+    "defaultSemanticMatch": {
+      "EXACT": 1.0,
+      "ALIAS": 1.0,
+      "RELATED_STRONG": 0.75,
+      "RELATED_MEDIUM": 0.55,
+      "RELATED_WEAK": 0.3,
+      "MISSING": 0.0
+    },
+    "frequencyBoost": {
+      "enabled": true,
+      "maxBoost": 0.05,
+      "minMentionsForBoost": 2,
+      "maxMentionsCounted": 4
+    },
+    "finalFormula": "clamp(applyGates(rawCategoryScore * 100 - penalties), 0, 100)"
+  },
+  "contextModifiers": [
+    {
+      "id": "REQUIRED",
+      "multiplier": 1.0,
+      "patterns": [
+        "обязательно",
+        "необходимо",
+        "требуется",
+        "must have",
+        "required",
+        "уверенное знание",
+        "глубокое знание",
+        "опыт работы с",
+        "опыт администрирования",
+        "опыт эксплуатации",
+        "опыт настройки"
+      ]
+    },
+    {
+      "id": "RESPONSIBILITY_OR_STACK",
+      "multiplier": 0.95,
+      "patterns": [
+        "предстоит работать с",
+        "используем",
+        "наш стек",
+        "стек проекта",
+        "поддержка и развитие",
+        "эксплуатация",
+        "автоматизация",
+        "tech stack"
+      ]
+    },
+    {
+      "id": "PREFERRED",
+      "multiplier": 0.7,
+      "patterns": [
+        "желательно",
+        "предпочтительно",
+        "будет преимуществом",
+        "приветствуется",
+        "preferred"
+      ]
+    },
+    {
+      "id": "NICE_TO_HAVE",
+      "multiplier": 0.5,
+      "patterns": [
+        "будет плюсом",
+        "плюсом будет",
+        "nice to have",
+        "bonus"
+      ]
+    },
+    {
+      "id": "FAMILIARITY",
+      "multiplier": 0.4,
+      "patterns": [
+        "знакомство с",
+        "базовое понимание",
+        "понимание основ",
+        "familiar with",
+        "basic knowledge"
+      ]
+    },
+    {
+      "id": "NOT_REQUIRED",
+      "multiplier": 0.15,
+      "patterns": [
+        "не обязательно",
+        "не требуется",
+        "опыт не обязателен",
+        "not required",
+        "no experience required"
+      ]
+    },
+    {
+      "id": "NEGATED_OR_DEPRECATED",
+      "multiplier": 0.05,
+      "patterns": [
+        "не используем",
+        "отказываемся от",
+        "мигрируем с",
+        "уходим с",
+        "deprecated",
+        "migrating from",
+        "moving away from"
+      ]
+    }
+  ],
+  "experienceParsing": {
+    "patterns": [
+      "(?:от|не менее|минимум)\\s+(\\d+)\\s+(?:лет|года|год)",
+      "(\\d+)\\s*\\+\\s*(?:лет|года|год)",
+      "(\\d+)\\+?\\s*years?",
+      "at least\\s+(\\d+)\\s+years?"
+    ],
+    "wordNumbers": {
+      "одного": 1,
+      "один": 1,
+      "двух": 2,
+      "два": 2,
+      "трех": 3,
+      "трёх": 3,
+      "три": 3,
+      "четырех": 4,
+      "четырёх": 4,
+      "четыре": 4,
+      "пяти": 5,
+      "пять": 5,
+      "шести": 6,
+      "шесть": 6,
+      "семи": 7,
+      "семь": 7,
+      "восьми": 8,
+      "восемь": 8,
+      "девяти": 9,
+      "девять": 9,
+      "десяти": 10,
+      "десять": 10
+    },
+    "matchRules": [
+      {
+        "candidateDeltaMin": 0,
+        "coefficient": 1.0
+      },
+      {
+        "candidateDeltaMin": -1,
+        "coefficient": 0.8
+      },
+      {
+        "candidateDeltaMin": -2,
+        "coefficient": 0.5
+      },
+      {
+        "candidateDeltaMin": -999,
+        "coefficient": 0.2
+      }
+    ]
+  },
+  "seniority": {
+    "levels": {
+      "INTERN": 0,
+      "JUNIOR": 1,
+      "MIDDLE": 2,
+      "SENIOR": 3,
+      "LEAD": 4,
+      "STAFF": 4,
+      "PRINCIPAL": 5
+    },
+    "aliases": {
+      "INTERN": [
+        "intern",
+        "internship",
+        "стажер",
+        "стажёр"
+      ],
+      "JUNIOR": [
+        "junior",
+        "jun",
+        "младший devops",
+        "джуниор"
+      ],
+      "MIDDLE": [
+        "middle",
+        "mid",
+        "middle devops",
+        "мидл"
+      ],
+      "SENIOR": [
+        "senior",
+        "sr",
+        "senior devops",
+        "старший инженер",
+        "сеньор"
+      ],
+      "LEAD": [
+        "lead",
+        "team lead",
+        "tech lead",
+        "teamlead",
+        "техлид",
+        "тимлид",
+        "ведущий инженер"
+      ],
+      "STAFF": [
+        "staff engineer",
+        "staff platform engineer",
+        "staff sre"
+      ],
+      "PRINCIPAL": [
+        "principal engineer",
+        "principal sre",
+        "principal platform engineer"
+      ]
+    },
+    "distanceMatch": {
+      "0": 1.0,
+      "1": 0.8,
+      "2": 0.45,
+      "3": 0.15,
+      "4": 0.05
+    }
+  },
+  "gates": [
+    {
+      "id": "DEVOPS_ROLE_MISSING",
+      "condition": "role.DEVOPS_FAMILY.match < 0.5",
+      "maxScore": 35,
+      "reason": "Роль не выглядит как DevOps/SRE/Platform/Infrastructure."
+    },
+    {
+      "id": "LINUX_MISSING",
+      "condition": "concept.LINUX.match < 0.5 && concept.UNIX.match < 0.5",
+      "maxScore": 45,
+      "reason": "Нет подтвержденного Linux/Unix."
+    },
+    {
+      "id": "KUBERNETES_CRITICAL_MISSING",
+      "condition": "profile.requirement.KUBERNETES.importance == MUST_HAVE && concept.KUBERNETES.match < 0.5 && concept.OPENSHIFT.match < 0.7",
+      "maxScore": 60,
+      "reason": "Kubernetes обязателен, но не подтвержден."
+    },
+    {
+      "id": "WRONG_PRIMARY_ROLE",
+      "condition": "negative.primaryRoleConflict == true",
+      "maxScore": 20,
+      "reason": "Вакансия относится к другой основной специализации."
+    }
+  ],
+  "negativeSignals": [
+    {
+      "id": "HELPDESK_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "helpdesk",
+        "help desk",
+        "service desk",
+        "техническая поддержка пользователей",
+        "поддержка пользователей",
+        "первая линия поддержки"
+      ]
+    },
+    {
+      "id": "DESKTOP_SUPPORT_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "desktop support",
+        "поддержка рабочих мест",
+        "настройка рабочих станций",
+        "установка windows",
+        "настройка принтеров"
+      ]
+    },
+    {
+      "id": "QA_PRIMARY",
+      "penalty": 35,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "qa engineer",
+        "qa automation",
+        "тестировщик",
+        "инженер по тестированию"
+      ]
+    },
+    {
+      "id": "BACKEND_DEV_PRIMARY",
+      "penalty": 25,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "java developer",
+        "backend developer",
+        "backend-разработчик",
+        "java-разработчик"
+      ]
+    },
+    {
+      "id": "FRONTEND_PRIMARY",
+      "penalty": 35,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "frontend developer",
+        "front-end developer",
+        "фронтенд разработчик"
+      ]
+    },
+    {
+      "id": "WINDOWS_ADMIN_ONLY",
+      "penalty": 20,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "только windows",
+        "windows-only",
+        "windows администратор",
+        "администрирование только windows"
+      ]
+    },
+    {
+      "id": "MANUAL_DEPLOYMENT_ONLY",
+      "penalty": 12,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "ручное развертывание",
+        "ручной деплой",
+        "manual deployment only"
+      ]
+    },
+    {
+      "id": "NO_AUTOMATION",
+      "penalty": 15,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "без автоматизации",
+        "automation is not used",
+        "no automation"
+      ]
+    },
+    {
+      "id": "LEGACY_INFRA_ONLY",
+      "penalty": 10,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "только поддержка legacy инфраструктуры",
+        "legacy infrastructure support only"
+      ]
+    },
+    {
+      "id": "NOC_ONLY",
+      "penalty": 20,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "noc operator",
+        "оператор noc",
+        "только мониторинг инцидентов"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "concept": "DEVOPS",
+      "aliases": [
+        "devops",
+        "devops engineer",
+        "devops-инженер",
+        "инженер devops"
+      ]
+    },
+    {
+      "concept": "SRE",
+      "aliases": [
+        "sre",
+        "site reliability engineer",
+        "site reliability engineering",
+        "инженер надежности",
+        "инженер по надежности"
+      ]
+    },
+    {
+      "concept": "PLATFORM",
+      "aliases": [
+        "platform engineer",
+        "platform engineering",
+        "платформенный инженер",
+        "инженер платформы"
+      ]
+    },
+    {
+      "concept": "INFRASTRUCTURE",
+      "aliases": [
+        "infrastructure engineer",
+        "инженер инфраструктуры",
+        "инфраструктурный инженер"
+      ]
+    },
+    {
+      "concept": "CLOUD_ENGINEER",
+      "aliases": [
+        "cloud engineer",
+        "облачный инженер",
+        "инженер облачной инфраструктуры"
+      ]
+    }
+  ],
+  "taxonomy": [
+    {
+      "concept": "LINUX",
+      "category": "OS_LINUX",
+      "weight": 10,
+      "aliases": [
+        "linux",
+        "gnu/linux",
+        "линукс",
+        "администрирование linux",
+        "linux administration"
+      ]
+    },
+    {
+      "concept": "UNIX",
+      "category": "OS_LINUX",
+      "weight": 5,
+      "aliases": [
+        "unix",
+        "unix-like",
+        "unix systems",
+        "unix-системы"
+      ]
+    },
+    {
+      "concept": "BASH",
+      "category": "OS_LINUX",
+      "weight": 6,
+      "aliases": [
+        "bash",
+        "bash scripting",
+        "shell scripting",
+        "скрипты bash",
+        "shell-скрипты"
+      ]
+    },
+    {
+      "concept": "SYSTEMD",
+      "category": "OS_LINUX",
+      "weight": 4,
+      "aliases": [
+        "systemd",
+        "systemctl"
+      ]
+    },
+    {
+      "concept": "SYSTEM_ADMINISTRATION",
+      "category": "OS_LINUX",
+      "weight": 6,
+      "aliases": [
+        "system administration",
+        "системное администрирование",
+        "администрирование серверов"
+      ]
+    },
+    {
+      "concept": "FILESYSTEMS",
+      "category": "OS_LINUX",
+      "weight": 3,
+      "aliases": [
+        "filesystem",
+        "file systems",
+        "файловые системы",
+        "ext4",
+        "xfs"
+      ]
+    },
+    {
+      "concept": "LVM",
+      "category": "OS_LINUX",
+      "weight": 2,
+      "aliases": [
+        "lvm",
+        "logical volume manager"
+      ]
+    },
+    {
+      "concept": "DOCKER",
+      "category": "CONTAINERS",
+      "weight": 9,
+      "aliases": [
+        "docker",
+        "docker containers",
+        "докер",
+        "контейнеры docker"
+      ],
+      "related": [
+        {
+          "concept": "PODMAN",
+          "match": 0.75
+        },
+        {
+          "concept": "CONTAINERD",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "CONTAINERD",
+      "category": "CONTAINERS",
+      "weight": 5,
+      "aliases": [
+        "containerd"
+      ],
+      "related": [
+        {
+          "concept": "DOCKER",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "PODMAN",
+      "category": "CONTAINERS",
+      "weight": 4,
+      "aliases": [
+        "podman"
+      ],
+      "related": [
+        {
+          "concept": "DOCKER",
+          "match": 0.75
+        }
+      ]
+    },
+    {
+      "concept": "OCI",
+      "category": "CONTAINERS",
+      "weight": 3,
+      "aliases": [
+        "oci",
+        "open container initiative",
+        "oci images"
+      ]
+    },
+    {
+      "concept": "CONTAINERIZATION",
+      "category": "CONTAINERS",
+      "weight": 5,
+      "aliases": [
+        "containerization",
+        "контейнеризация",
+        "контейнерная инфраструктура"
+      ]
+    },
+    {
+      "concept": "KUBERNETES",
+      "category": "ORCHESTRATION",
+      "weight": 10,
+      "aliases": [
+        "kubernetes",
+        "k8s",
+        "кубернетес",
+        "кубер",
+        "kubernetes cluster",
+        "k8s cluster"
+      ],
+      "related": [
+        {
+          "concept": "OPENSHIFT",
+          "match": 0.85
+        }
+      ]
+    },
+    {
+      "concept": "OPENSHIFT",
+      "category": "ORCHESTRATION",
+      "weight": 7,
+      "aliases": [
+        "openshift",
+        "open shift",
+        "ocp"
+      ],
+      "related": [
+        {
+          "concept": "KUBERNETES",
+          "match": 0.85
+        }
+      ]
+    },
+    {
+      "concept": "HELM",
+      "category": "ORCHESTRATION",
+      "weight": 7,
+      "aliases": [
+        "helm",
+        "helm charts",
+        "helm chart"
+      ]
+    },
+    {
+      "concept": "ARGO_CD",
+      "category": "ORCHESTRATION",
+      "weight": 7,
+      "aliases": [
+        "argo cd",
+        "argocd",
+        "argo-cd"
+      ],
+      "related": [
+        {
+          "concept": "FLUXCD",
+          "match": 0.7
+        }
+      ]
+    },
+    {
+      "concept": "FLUXCD",
+      "category": "ORCHESTRATION",
+      "weight": 5,
+      "aliases": [
+        "fluxcd",
+        "flux cd"
+      ],
+      "related": [
+        {
+          "concept": "ARGO_CD",
+          "match": 0.7
+        }
+      ]
+    },
+    {
+      "concept": "KUSTOMIZE",
+      "category": "ORCHESTRATION",
+      "weight": 4,
+      "aliases": [
+        "kustomize"
+      ]
+    },
+    {
+      "concept": "K8S_OPERATORS",
+      "category": "ORCHESTRATION",
+      "weight": 4,
+      "aliases": [
+        "kubernetes operator",
+        "k8s operator",
+        "operator sdk"
+      ]
+    },
+    {
+      "concept": "SERVICE_MESH",
+      "category": "ORCHESTRATION",
+      "weight": 5,
+      "aliases": [
+        "service mesh",
+        "сервисная сетка"
+      ]
+    },
+    {
+      "concept": "ISTIO",
+      "category": "ORCHESTRATION",
+      "weight": 5,
+      "aliases": [
+        "istio"
+      ],
+      "related": [
+        {
+          "concept": "LINKERD",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "LINKERD",
+      "category": "ORCHESTRATION",
+      "weight": 3,
+      "aliases": [
+        "linkerd"
+      ],
+      "related": [
+        {
+          "concept": "ISTIO",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "AWS",
+      "category": "CLOUD",
+      "weight": 9,
+      "aliases": [
+        "aws",
+        "amazon web services"
+      ],
+      "related": [
+        {
+          "concept": "AZURE",
+          "match": 0.6
+        },
+        {
+          "concept": "GCP",
+          "match": 0.6
+        },
+        {
+          "concept": "YCLOUD",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "AZURE",
+      "category": "CLOUD",
+      "weight": 8,
+      "aliases": [
+        "azure",
+        "microsoft azure"
+      ],
+      "related": [
+        {
+          "concept": "AWS",
+          "match": 0.6
+        },
+        {
+          "concept": "GCP",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "GCP",
+      "category": "CLOUD",
+      "weight": 8,
+      "aliases": [
+        "gcp",
+        "google cloud",
+        "google cloud platform"
+      ],
+      "related": [
+        {
+          "concept": "AWS",
+          "match": 0.6
+        },
+        {
+          "concept": "AZURE",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "YCLOUD",
+      "category": "CLOUD",
+      "weight": 8,
+      "aliases": [
+        "yandex cloud",
+        "yandex.cloud",
+        "яндекс облако",
+        "яндекс cloud"
+      ],
+      "related": [
+        {
+          "concept": "AWS",
+          "match": 0.45
+        },
+        {
+          "concept": "GCP",
+          "match": 0.45
+        },
+        {
+          "concept": "AZURE",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "CLOUD_RU",
+      "category": "CLOUD",
+      "weight": 6,
+      "aliases": [
+        "cloud.ru",
+        "cloud ru",
+        "сберклауд",
+        "sbercloud"
+      ]
+    },
+    {
+      "concept": "VK_CLOUD",
+      "category": "CLOUD",
+      "weight": 6,
+      "aliases": [
+        "vk cloud",
+        "vk cloud solutions",
+        "mcs",
+        "mail.ru cloud solutions"
+      ]
+    },
+    {
+      "concept": "EC2",
+      "category": "CLOUD",
+      "weight": 4,
+      "aliases": [
+        "ec2",
+        "amazon ec2"
+      ]
+    },
+    {
+      "concept": "S3",
+      "category": "CLOUD",
+      "weight": 4,
+      "aliases": [
+        "s3",
+        "amazon s3",
+        "object storage",
+        "объектное хранилище"
+      ]
+    },
+    {
+      "concept": "EKS",
+      "category": "CLOUD",
+      "weight": 5,
+      "aliases": [
+        "eks",
+        "amazon eks"
+      ]
+    },
+    {
+      "concept": "AKS",
+      "category": "CLOUD",
+      "weight": 5,
+      "aliases": [
+        "aks",
+        "azure kubernetes service"
+      ]
+    },
+    {
+      "concept": "GKE",
+      "category": "CLOUD",
+      "weight": 5,
+      "aliases": [
+        "gke",
+        "google kubernetes engine"
+      ]
+    },
+    {
+      "concept": "IAM",
+      "category": "CLOUD",
+      "weight": 5,
+      "aliases": [
+        "iam",
+        "identity and access management",
+        "управление доступом"
+      ]
+    },
+    {
+      "concept": "TERRAFORM",
+      "category": "IAC_CONFIG",
+      "weight": 10,
+      "aliases": [
+        "terraform",
+        "hashicorp terraform"
+      ],
+      "related": [
+        {
+          "concept": "PULUMI",
+          "match": 0.6
+        },
+        {
+          "concept": "CLOUDFORMATION",
+          "match": 0.5
+        }
+      ]
+    },
+    {
+      "concept": "ANSIBLE",
+      "category": "IAC_CONFIG",
+      "weight": 9,
+      "aliases": [
+        "ansible",
+        "ansible playbook",
+        "ansible playbooks"
+      ],
+      "related": [
+        {
+          "concept": "SALTSTACK",
+          "match": 0.5
+        },
+        {
+          "concept": "CHEF",
+          "match": 0.45
+        },
+        {
+          "concept": "PUPPET",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "PULUMI",
+      "category": "IAC_CONFIG",
+      "weight": 5,
+      "aliases": [
+        "pulumi"
+      ],
+      "related": [
+        {
+          "concept": "TERRAFORM",
+          "match": 0.6
+        }
+      ]
+    },
+    {
+      "concept": "CLOUDFORMATION",
+      "category": "IAC_CONFIG",
+      "weight": 5,
+      "aliases": [
+        "cloudformation",
+        "aws cloudformation"
+      ],
+      "related": [
+        {
+          "concept": "TERRAFORM",
+          "match": 0.5
+        }
+      ]
+    },
+    {
+      "concept": "SALTSTACK",
+      "category": "IAC_CONFIG",
+      "weight": 4,
+      "aliases": [
+        "saltstack",
+        "salt stack"
+      ],
+      "related": [
+        {
+          "concept": "ANSIBLE",
+          "match": 0.5
+        }
+      ]
+    },
+    {
+      "concept": "CHEF",
+      "category": "IAC_CONFIG",
+      "weight": 3,
+      "aliases": [
+        "chef"
+      ],
+      "related": [
+        {
+          "concept": "ANSIBLE",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "PUPPET",
+      "category": "IAC_CONFIG",
+      "weight": 3,
+      "aliases": [
+        "puppet"
+      ],
+      "related": [
+        {
+          "concept": "ANSIBLE",
+          "match": 0.45
+        }
+      ]
+    },
+    {
+      "concept": "IAC",
+      "category": "IAC_CONFIG",
+      "weight": 7,
+      "aliases": [
+        "infrastructure as code",
+        "iac",
+        "инфраструктура как код"
+      ]
+    },
+    {
+      "concept": "PACKER",
+      "category": "IAC_CONFIG",
+      "weight": 4,
+      "aliases": [
+        "packer",
+        "hashicorp packer"
+      ]
+    },
+    {
+      "concept": "VAGRANT",
+      "category": "IAC_CONFIG",
+      "weight": 2,
+      "aliases": [
+        "vagrant"
+      ]
+    },
+    {
+      "concept": "GITLAB_CI",
+      "category": "CI_CD",
+      "weight": 9,
+      "aliases": [
+        "gitlab ci",
+        "gitlab ci/cd",
+        "gitlab pipelines",
+        "пайплайны gitlab"
+      ],
+      "related": [
+        {
+          "concept": "GITHUB_ACTIONS",
+          "match": 0.65
+        },
+        {
+          "concept": "JENKINS",
+          "match": 0.55
+        },
+        {
+          "concept": "TEAMCITY",
+          "match": 0.5
+        }
+      ]
+    },
+    {
+      "concept": "JENKINS",
+      "category": "CI_CD",
+      "weight": 8,
+      "aliases": [
+        "jenkins",
+        "jenkins pipeline",
+        "jenkins pipelines"
+      ],
+      "related": [
+        {
+          "concept": "GITLAB_CI",
+          "match": 0.55
+        },
+        {
+          "concept": "TEAMCITY",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "GITHUB_ACTIONS",
+      "category": "CI_CD",
+      "weight": 6,
+      "aliases": [
+        "github actions",
+        "github workflows"
+      ],
+      "related": [
+        {
+          "concept": "GITLAB_CI",
+          "match": 0.65
+        }
+      ]
+    },
+    {
+      "concept": "TEAMCITY",
+      "category": "CI_CD",
+      "weight": 5,
+      "aliases": [
+        "teamcity",
+        "team city"
+      ],
+      "related": [
+        {
+          "concept": "JENKINS",
+          "match": 0.55
+        },
+        {
+          "concept": "GITLAB_CI",
+          "match": 0.5
+        }
+      ]
+    },
+    {
+      "concept": "BAMBOO",
+      "category": "CI_CD",
+      "weight": 3,
+      "aliases": [
+        "atlassian bamboo",
+        "bamboo ci"
+      ]
+    },
+    {
+      "concept": "CI_CD",
+      "category": "CI_CD",
+      "weight": 8,
+      "aliases": [
+        "ci/cd",
+        "ci cd",
+        "continuous integration",
+        "continuous delivery",
+        "continuous deployment",
+        "непрерывная интеграция",
+        "непрерывная доставка"
+      ]
+    },
+    {
+      "concept": "PIPELINES",
+      "category": "CI_CD",
+      "weight": 6,
+      "aliases": [
+        "pipelines",
+        "pipeline",
+        "пайплайны",
+        "пайплайн"
+      ]
+    },
+    {
+      "concept": "GIT",
+      "category": "CI_CD",
+      "weight": 5,
+      "aliases": [
+        "git",
+        "gitlab",
+        "github",
+        "bitbucket"
+      ]
+    },
+    {
+      "concept": "GITOPS",
+      "category": "CI_CD",
+      "weight": 8,
+      "aliases": [
+        "gitops",
+        "git ops",
+        "git-ops"
+      ]
+    },
+    {
+      "concept": "PROMETHEUS",
+      "category": "OBSERVABILITY",
+      "weight": 9,
+      "aliases": [
+        "prometheus",
+        "прометеус"
+      ],
+      "related": [
+        {
+          "concept": "ZABBIX",
+          "match": 0.4
+        }
+      ]
+    },
+    {
+      "concept": "GRAFANA",
+      "category": "OBSERVABILITY",
+      "weight": 8,
+      "aliases": [
+        "grafana"
+      ],
+      "related": [
+        {
+          "concept": "KIBANA",
+          "match": 0.3
+        }
+      ]
+    },
+    {
+      "concept": "ELK",
+      "category": "OBSERVABILITY",
+      "weight": 7,
+      "aliases": [
+        "elk",
+        "elk stack",
+        "elastic stack"
+      ]
+    },
+    {
+      "concept": "ELASTICSEARCH",
+      "category": "OBSERVABILITY",
+      "weight": 5,
+      "aliases": [
+        "elasticsearch",
+        "elastic search"
+      ]
+    },
+    {
+      "concept": "LOGSTASH",
+      "category": "OBSERVABILITY",
+      "weight": 4,
+      "aliases": [
+        "logstash"
+      ]
+    },
+    {
+      "concept": "KIBANA",
+      "category": "OBSERVABILITY",
+      "weight": 4,
+      "aliases": [
+        "kibana"
+      ],
+      "related": [
+        {
+          "concept": "GRAFANA",
+          "match": 0.3
+        }
+      ]
+    },
+    {
+      "concept": "LOKI",
+      "category": "OBSERVABILITY",
+      "weight": 6,
+      "aliases": [
+        "loki",
+        "grafana loki"
+      ]
+    },
+    {
+      "concept": "OPENTELEMETRY",
+      "category": "OBSERVABILITY",
+      "weight": 6,
+      "aliases": [
+        "opentelemetry",
+        "open telemetry",
+        "otel"
+      ]
+    },
+    {
+      "concept": "JAEGER",
+      "category": "OBSERVABILITY",
+      "weight": 5,
+      "aliases": [
+        "jaeger"
+      ]
+    },
+    {
+      "concept": "ZIPKIN",
+      "category": "OBSERVABILITY",
+      "weight": 3,
+      "aliases": [
+        "zipkin"
+      ]
+    },
+    {
+      "concept": "ZABBIX",
+      "category": "OBSERVABILITY",
+      "weight": 6,
+      "aliases": [
+        "zabbix",
+        "заббикс"
+      ],
+      "related": [
+        {
+          "concept": "PROMETHEUS",
+          "match": 0.4
+        }
+      ]
+    },
+    {
+      "concept": "DATADOG",
+      "category": "OBSERVABILITY",
+      "weight": 5,
+      "aliases": [
+        "datadog",
+        "data dog"
+      ]
+    },
+    {
+      "concept": "NEW_RELIC",
+      "category": "OBSERVABILITY",
+      "weight": 4,
+      "aliases": [
+        "new relic",
+        "newrelic"
+      ]
+    },
+    {
+      "concept": "VICTORIAMETRICS",
+      "category": "OBSERVABILITY",
+      "weight": 5,
+      "aliases": [
+        "victoriametrics",
+        "victoria metrics"
+      ]
+    },
+    {
+      "concept": "ALERTMANAGER",
+      "category": "OBSERVABILITY",
+      "weight": 5,
+      "aliases": [
+        "alertmanager",
+        "alert manager"
+      ]
+    },
+    {
+      "concept": "MONITORING",
+      "category": "OBSERVABILITY",
+      "weight": 8,
+      "aliases": [
+        "monitoring",
+        "мониторинг",
+        "системы мониторинга"
+      ]
+    },
+    {
+      "concept": "ALERTING",
+      "category": "OBSERVABILITY",
+      "weight": 7,
+      "aliases": [
+        "alerting",
+        "алертинг",
+        "оповещения",
+        "настройка алертов"
+      ]
+    },
+    {
+      "concept": "LOGGING",
+      "category": "OBSERVABILITY",
+      "weight": 6,
+      "aliases": [
+        "logging",
+        "централизованное логирование",
+        "сбор логов"
+      ]
+    },
+    {
+      "concept": "TCP_IP",
+      "category": "NETWORKING",
+      "weight": 8,
+      "aliases": [
+        "tcp/ip",
+        "tcp ip",
+        "сетевой стек tcp/ip"
+      ]
+    },
+    {
+      "concept": "DNS",
+      "category": "NETWORKING",
+      "weight": 7,
+      "aliases": [
+        "dns",
+        "domain name system",
+        "днс"
+      ]
+    },
+    {
+      "concept": "HTTP",
+      "category": "NETWORKING",
+      "weight": 6,
+      "aliases": [
+        "http",
+        "https",
+        "http/1.1",
+        "http/2"
+      ]
+    },
+    {
+      "concept": "TLS",
+      "category": "NETWORKING",
+      "weight": 6,
+      "aliases": [
+        "tls",
+        "ssl",
+        "ssl/tls",
+        "сертификаты tls"
+      ]
+    },
+    {
+      "concept": "NGINX",
+      "category": "NETWORKING",
+      "weight": 7,
+      "aliases": [
+        "nginx",
+        "энджинкс"
+      ]
+    },
+    {
+      "concept": "HAPROXY",
+      "category": "NETWORKING",
+      "weight": 5,
+      "aliases": [
+        "haproxy",
+        "ha proxy"
+      ]
+    },
+    {
+      "concept": "LOAD_BALANCING",
+      "category": "NETWORKING",
+      "weight": 7,
+      "aliases": [
+        "load balancing",
+        "load balancer",
+        "балансировка нагрузки",
+        "балансировщик нагрузки"
+      ]
+    },
+    {
+      "concept": "VPN",
+      "category": "NETWORKING",
+      "weight": 4,
+      "aliases": [
+        "vpn",
+        "openvpn",
+        "wireguard"
+      ]
+    },
+    {
+      "concept": "BGP",
+      "category": "NETWORKING",
+      "weight": 3,
+      "aliases": [
+        "bgp",
+        "border gateway protocol"
+      ]
+    },
+    {
+      "concept": "IPTABLES",
+      "category": "NETWORKING",
+      "weight": 4,
+      "aliases": [
+        "iptables",
+        "nftables"
+      ]
+    },
+    {
+      "concept": "PROXY",
+      "category": "NETWORKING",
+      "weight": 4,
+      "aliases": [
+        "reverse proxy",
+        "proxy server",
+        "реверс-прокси",
+        "прокси сервер"
+      ]
+    },
+    {
+      "concept": "INGRESS",
+      "category": "NETWORKING",
+      "weight": 5,
+      "aliases": [
+        "ingress",
+        "ingress controller",
+        "nginx ingress"
+      ]
+    },
+    {
+      "concept": "VAULT",
+      "category": "SECURITY",
+      "weight": 7,
+      "aliases": [
+        "vault",
+        "hashicorp vault"
+      ],
+      "related": [
+        {
+          "concept": "K8S_SECRETS",
+          "match": 0.4
+        }
+      ]
+    },
+    {
+      "concept": "SECRETS_MANAGEMENT",
+      "category": "SECURITY",
+      "weight": 7,
+      "aliases": [
+        "secrets management",
+        "управление секретами",
+        "хранение секретов"
+      ]
+    },
+    {
+      "concept": "K8S_SECRETS",
+      "category": "SECURITY",
+      "weight": 4,
+      "aliases": [
+        "kubernetes secrets",
+        "k8s secrets"
+      ]
+    },
+    {
+      "concept": "RBAC",
+      "category": "SECURITY",
+      "weight": 5,
+      "aliases": [
+        "rbac",
+        "role-based access control"
+      ]
+    },
+    {
+      "concept": "SECURITY_HARDENING",
+      "category": "SECURITY",
+      "weight": 5,
+      "aliases": [
+        "security hardening",
+        "hardening",
+        "защита серверов"
+      ]
+    },
+    {
+      "concept": "PKI",
+      "category": "SECURITY",
+      "weight": 4,
+      "aliases": [
+        "pki",
+        "public key infrastructure",
+        "инфраструктура открытых ключей"
+      ]
+    },
+    {
+      "concept": "SONARQUBE",
+      "category": "SECURITY",
+      "weight": 3,
+      "aliases": [
+        "sonarqube",
+        "sonar qube"
+      ]
+    },
+    {
+      "concept": "TRIVY",
+      "category": "SECURITY",
+      "weight": 3,
+      "aliases": [
+        "trivy"
+      ]
+    },
+    {
+      "concept": "SAST_DAST",
+      "category": "SECURITY",
+      "weight": 3,
+      "aliases": [
+        "sast",
+        "dast",
+        "devsecops"
+      ]
+    },
+    {
+      "concept": "POSTGRESQL",
+      "category": "DATABASE_PLATFORM",
+      "weight": 5,
+      "aliases": [
+        "postgresql",
+        "postgres",
+        "постгрес"
+      ]
+    },
+    {
+      "concept": "MYSQL",
+      "category": "DATABASE_PLATFORM",
+      "weight": 4,
+      "aliases": [
+        "mysql"
+      ]
+    },
+    {
+      "concept": "REDIS",
+      "category": "DATABASE_PLATFORM",
+      "weight": 5,
+      "aliases": [
+        "redis"
+      ]
+    },
+    {
+      "concept": "KAFKA",
+      "category": "DATABASE_PLATFORM",
+      "weight": 6,
+      "aliases": [
+        "kafka",
+        "apache kafka",
+        "кафка"
+      ]
+    },
+    {
+      "concept": "RABBITMQ",
+      "category": "DATABASE_PLATFORM",
+      "weight": 4,
+      "aliases": [
+        "rabbitmq",
+        "rabbit mq"
+      ]
+    },
+    {
+      "concept": "CLICKHOUSE",
+      "category": "DATABASE_PLATFORM",
+      "weight": 4,
+      "aliases": [
+        "clickhouse",
+        "кликхаус"
+      ]
+    },
+    {
+      "concept": "MONGODB",
+      "category": "DATABASE_PLATFORM",
+      "weight": 3,
+      "aliases": [
+        "mongodb",
+        "mongo db"
+      ]
+    },
+    {
+      "concept": "DATABASE_ADMINISTRATION",
+      "category": "DATABASE_PLATFORM",
+      "weight": 4,
+      "aliases": [
+        "database administration",
+        "администрирование баз данных",
+        "эксплуатация баз данных"
+      ]
+    },
+    {
+      "concept": "PYTHON",
+      "category": "SCRIPTING",
+      "weight": 7,
+      "aliases": [
+        "python",
+        "python scripting",
+        "скрипты python"
+      ]
+    },
+    {
+      "concept": "GO",
+      "category": "SCRIPTING",
+      "weight": 5,
+      "aliases": [
+        "golang",
+        "go language",
+        "go programming"
+      ]
+    },
+    {
+      "concept": "POWERSHELL",
+      "category": "SCRIPTING",
+      "weight": 3,
+      "aliases": [
+        "powershell",
+        "power shell"
+      ]
+    },
+    {
+      "concept": "GROOVY",
+      "category": "SCRIPTING",
+      "weight": 3,
+      "aliases": [
+        "groovy",
+        "jenkins groovy"
+      ]
+    },
+    {
+      "concept": "SCRIPTING",
+      "category": "SCRIPTING",
+      "weight": 6,
+      "aliases": [
+        "scripting",
+        "автоматизация скриптами",
+        "написание скриптов",
+        "скриптинг"
+      ]
+    },
+    {
+      "concept": "SRE",
+      "category": "SRE_RELIABILITY",
+      "weight": 9,
+      "aliases": [
+        "sre",
+        "site reliability engineering",
+        "site reliability engineer",
+        "инженер надежности",
+        "инженер по надежности"
+      ]
+    },
+    {
+      "concept": "SLI",
+      "category": "SRE_RELIABILITY",
+      "weight": 5,
+      "aliases": [
+        "sli",
+        "service level indicator"
+      ]
+    },
+    {
+      "concept": "SLO",
+      "category": "SRE_RELIABILITY",
+      "weight": 6,
+      "aliases": [
+        "slo",
+        "service level objective"
+      ]
+    },
+    {
+      "concept": "SLA",
+      "category": "SRE_RELIABILITY",
+      "weight": 5,
+      "aliases": [
+        "sla",
+        "service level agreement"
+      ]
+    },
+    {
+      "concept": "INCIDENT_MANAGEMENT",
+      "category": "SRE_RELIABILITY",
+      "weight": 8,
+      "aliases": [
+        "incident management",
+        "управление инцидентами",
+        "реагирование на инциденты",
+        "incident response"
+      ]
+    },
+    {
+      "concept": "ON_CALL",
+      "category": "SRE_RELIABILITY",
+      "weight": 7,
+      "aliases": [
+        "on-call",
+        "on call",
+        "дежурства",
+        "дежурство",
+        "24/7 support"
+      ]
+    },
+    {
+      "concept": "HIGH_AVAILABILITY",
+      "category": "SRE_RELIABILITY",
+      "weight": 7,
+      "aliases": [
+        "high availability",
+        "highly available",
+        "высокая доступность",
+        "ha"
+      ]
+    },
+    {
+      "concept": "FAULT_TOLERANCE",
+      "category": "SRE_RELIABILITY",
+      "weight": 7,
+      "aliases": [
+        "fault tolerance",
+        "fault-tolerant",
+        "отказоустойчивость",
+        "отказоустойчивые системы"
+      ]
+    },
+    {
+      "concept": "CAPACITY_PLANNING",
+      "category": "SRE_RELIABILITY",
+      "weight": 5,
+      "aliases": [
+        "capacity planning",
+        "планирование мощностей"
+      ]
+    },
+    {
+      "concept": "DISASTER_RECOVERY",
+      "category": "SRE_RELIABILITY",
+      "weight": 6,
+      "aliases": [
+        "disaster recovery",
+        "dr plan",
+        "аварийное восстановление"
+      ]
+    },
+    {
+      "concept": "BACKUP_RECOVERY",
+      "category": "SRE_RELIABILITY",
+      "weight": 5,
+      "aliases": [
+        "backup and recovery",
+        "резервное копирование",
+        "восстановление из резервных копий"
+      ]
+    },
+    {
+      "concept": "RCA",
+      "category": "SRE_RELIABILITY",
+      "weight": 6,
+      "aliases": [
+        "root cause analysis",
+        "rca",
+        "анализ первопричин"
+      ]
+    },
+    {
+      "concept": "POSTMORTEM",
+      "category": "SRE_RELIABILITY",
+      "weight": 4,
+      "aliases": [
+        "postmortem",
+        "post-mortem",
+        "разбор инцидентов"
+      ]
+    },
+    {
+      "concept": "CHAOS_ENGINEERING",
+      "category": "SRE_RELIABILITY",
+      "weight": 3,
+      "aliases": [
+        "chaos engineering",
+        "хаос-инжиниринг"
+      ]
+    },
+    {
+      "concept": "PERFORMANCE",
+      "category": "SRE_RELIABILITY",
+      "weight": 5,
+      "aliases": [
+        "performance tuning",
+        "performance optimization",
+        "оптимизация производительности"
+      ]
+    },
+    {
+      "concept": "ARCHITECTURE",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 7,
+      "aliases": [
+        "infrastructure architecture",
+        "архитектура инфраструктуры",
+        "проектирование инфраструктуры"
+      ]
+    },
+    {
+      "concept": "MENTORING",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "mentoring",
+        "менторинг",
+        "наставничество",
+        "обучение инженеров"
+      ]
+    },
+    {
+      "concept": "TECH_LEADERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 6,
+      "aliases": [
+        "technical leadership",
+        "техническое лидерство",
+        "технический лидер",
+        "техлид"
+      ]
+    },
+    {
+      "concept": "OWNERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 5,
+      "aliases": [
+        "ownership",
+        "ответственность за сервис",
+        "ответственность за инфраструктуру",
+        "end-to-end ownership"
+      ]
+    },
+    {
+      "concept": "PLATFORM_DESIGN",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 6,
+      "aliases": [
+        "platform design",
+        "проектирование платформы",
+        "platform architecture"
+      ]
+    },
+    {
+      "concept": "COST_OPTIMIZATION",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "cost optimization",
+        "finops",
+        "оптимизация затрат на инфраструктуру"
+      ]
+    },
+    {
+      "concept": "DOCUMENTATION",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 2,
+      "aliases": [
+        "documentation",
+        "ведение документации",
+        "техническая документация"
+      ]
+    }
+  ],
+  "outputBands": [
+    {
+      "min": 90,
+      "max": 100,
+      "code": "EXCELLENT_MATCH",
+      "labelRu": "Отличное совпадение"
+    },
+    {
+      "min": 80,
+      "max": 89.99,
+      "code": "STRONG_MATCH",
+      "labelRu": "Сильное совпадение"
+    },
+    {
+      "min": 70,
+      "max": 79.99,
+      "code": "GOOD_MATCH",
+      "labelRu": "Хорошее совпадение"
+    },
+    {
+      "min": 55,
+      "max": 69.99,
+      "code": "PARTIAL_MATCH",
+      "labelRu": "Частичное совпадение"
+    },
+    {
+      "min": 40,
+      "max": 54.99,
+      "code": "WEAK_MATCH",
+      "labelRu": "Слабое совпадение"
+    },
+    {
+      "min": 0,
+      "max": 39.99,
+      "code": "NOT_RELEVANT",
+      "labelRu": "Нерелевантно"
+    }
+  ],
+  "recommendedOutput": {
+    "fields": [
+      "score",
+      "level",
+      "hardMatchScore",
+      "categoryScores",
+      "matched",
+      "partialMatches",
+      "missingImportant",
+      "negativeSignals",
+      "gatesApplied",
+      "experienceMatch",
+      "seniorityMatch",
+      "summary"
+    ],
+    "example": {
+      "score": 88,
+      "level": "STRONG_MATCH",
+      "hardMatchScore": 95,
+      "matched": [
+        "LINUX",
+        "KUBERNETES",
+        "HELM",
+        "TERRAFORM",
+        "ANSIBLE",
+        "GITLAB_CI",
+        "PROMETHEUS",
+        "GRAFANA"
+      ],
+      "partialMatches": [
+        {
+          "required": "AWS",
+          "found": "YCLOUD",
+          "coefficient": 0.45
+        }
+      ],
+      "missingImportant": [],
+      "negativeSignals": [],
+      "gatesApplied": [],
+      "summary": "Сильное совпадение по основному DevOps стеку."
+    }
+  }
+}

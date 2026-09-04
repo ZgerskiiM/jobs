@@ -106,8 +106,9 @@ export default function Home() {
       return () => { cancelled = true; };
     }
     setScoringLoading(true);
-    accountApi.scoreVacancyIndex(jobs.map((job) => job.scoringFeatures
-      ? { id: job.id, features: job.scoringFeatures }
+    const targetRole = resume.targetRole ?? "JAVA_BACKEND";
+    accountApi.scoreVacancyIndex(jobs.map((job) => job.scoringFeatures?.[targetRole]
+      ? { id: job.id, features: job.scoringFeatures[targetRole] }
       : { id: job.id, title: job.title, description: job.description, posted_at: job.posted }))
       .then(({ scores }) => {
         if (!cancelled) setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
@@ -120,7 +121,7 @@ export default function Home() {
       })
       .finally(() => { if (!cancelled) setScoringLoading(false); });
     return () => { cancelled = true; };
-  }, [user?.id, resume?.id, jobs]);
+  }, [user?.id, resume?.id, resume?.targetRole, jobs]);
 
   const roleLabels: Record<string, string> = {
     backend: "Backend", frontend: "Frontend", aiml: "AI/ML",

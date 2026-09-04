@@ -1,5 +1,6 @@
 export interface CompactVacancyFeatures {
   v: string;
+  p: "JAVA_BACKEND" | "DEVOPS";
   r: [string, number, number];
   s: [string, number];
   e: number | null;
@@ -27,7 +28,7 @@ export interface Job {
   matchedSkills?: string[];
   description: string;
   parsedSkills: string[];
-  scoringFeatures?: CompactVacancyFeatures;
+  scoringFeatures?: Partial<Record<"JAVA_BACKEND" | "DEVOPS", CompactVacancyFeatures>>;
 }
 
 export interface Company {

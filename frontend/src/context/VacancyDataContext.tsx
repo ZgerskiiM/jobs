@@ -13,7 +13,7 @@ type SourceVacancy = {
   first_seen_at?: string;
   source_key?: string;
   technologies?: string[];
-  scoring_features?: CompactVacancyFeatures;
+  scoring_features?: Partial<Record<"JAVA_BACKEND" | "DEVOPS", CompactVacancyFeatures>>;
 };
 
 type RegistryCompany = {

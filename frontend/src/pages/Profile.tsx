@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, Link } from "react-router";
-import { useAuth, OnboardingData, UserSettings, ResumeSkill, type ResumeData } from "../context/AuthContext";
+import { useAuth, OnboardingData, UserSettings, ResumeSkill, type ResumeData, type ResumeTargetRole } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
 import { type Job } from "../data";
 import { useVacancyData } from "../context/VacancyDataContext";
@@ -104,6 +104,7 @@ export default function Profile() {
   const [resumeNotice, setResumeNotice] = useState<string | null>(null);
   const [contactDraft, setContactDraft] = useState({ fullName: "", contactEmail: "", contactPhone: "", contactTelegram: "" });
   const [contactSaved, setContactSaved] = useState(false);
+  const [targetRoleSaving, setTargetRoleSaving] = useState(false);
   const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
   const [extensionDownloading, setExtensionDownloading] = useState(false);
@@ -188,6 +189,21 @@ export default function Profile() {
       setTimeout(() => setContactSaved(false), 2500);
     } catch (requestError) {
       setResumeError(requestError instanceof Error ? requestError.message : "Не удалось сохранить контакты");
+    }
+  };
+
+  const handleTargetRoleChange = async (targetRole: ResumeTargetRole) => {
+    if (!resumeData || resumeData.targetRole === targetRole) return;
+    setResumeError(null);
+    setTargetRoleSaving(true);
+    try {
+      await updateResumeDetails({ targetRole });
+      setResumeNotice(`Профиль «${targetRole === "DEVOPS" ? "DevOps / SRE" : "Java Backend"}» выбран для этого резюме`);
+      setShowMatches(false);
+    } catch (requestError) {
+      setResumeError(requestError instanceof Error ? requestError.message : "Не удалось сохранить специализацию");
+    } finally {
+      setTargetRoleSaving(false);
     }
   };
 
@@ -534,7 +550,7 @@ export default function Profile() {
                   >
                     <span className="min-w-0">
                       <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
-                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : "Java Backend"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
                     </span>
                     <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
                   </button>
@@ -624,6 +640,34 @@ export default function Profile() {
                   >
                     загрузить другое
                   </button>
+                </div>
+              </div>
+
+              <div className="border border-[rgba(51,255,119,0.14)] rounded-sm overflow-hidden">
+                <div className="px-5 py-3 bg-[rgba(51,255,119,0.03)] border-b border-[rgba(51,255,119,0.08)]">
+                  <div className="font-mono text-xs text-[#33ff77] uppercase tracking-widest">// специализация для поиска</div>
+                  <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Она определяет, по какому стеку оценивать вакансии для этого резюме</div>
+                </div>
+                <div role="group" aria-label="Специализация резюме" className="p-4 bg-[#0e1018] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    { value: "JAVA_BACKEND", title: "Java Backend", text: "Java, Spring, базы данных и backend-архитектура" },
+                    { value: "DEVOPS", title: "DevOps / SRE", text: "Linux, Kubernetes, облака, CI/CD и инфраструктура" },
+                  ] as const).map((option) => {
+                    const selected = (resumeData.targetRole ?? "JAVA_BACKEND") === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={targetRoleSaving}
+                        onClick={() => void handleTargetRoleChange(option.value)}
+                        className={`min-h-16 px-4 py-3 text-left rounded-sm border transition-all disabled:opacity-50 disabled:cursor-wait focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#33ff77] ${selected ? "border-[rgba(51,255,119,0.48)] bg-[rgba(51,255,119,0.10)]" : "border-[rgba(58,64,79,0.48)] bg-[#07080e] hover:border-[rgba(51,255,119,0.3)]"}`}
+                      >
+                        <span className={`block font-mono text-xs ${selected ? "text-[#33ff77]" : "text-[#e8eaf0]"}`}>{option.title}{selected ? " · выбрано" : ""}</span>
+                        <span className="block font-sans text-[11px] text-[#5a6070] mt-1">{option.text}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

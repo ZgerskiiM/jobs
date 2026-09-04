@@ -85,10 +85,15 @@ function scoringExtractExperience(text) {
 }
 
 function scoringDetectRole(title, description, concepts) {
-  const role = (SCORING_CONFIG.roles || []).find((item) => item.concept === 'BACKEND')
-  const fullstack = (SCORING_CONFIG.roles || []).find((item) => item.concept === 'FULLSTACK')
-  if (role?.aliases?.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(title))) return { primary: 'BACKEND', match: 1, confidence: 1 }
-  if (fullstack?.aliases?.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(title))) return { primary: 'FULLSTACK', match: 0.7, confidence: 0.95 }
+  const profile = String(SCORING_CONFIG.meta?.profile || 'JAVA_BACKEND').toUpperCase()
+  const matchedRole = (SCORING_CONFIG.roles || []).find((item) => item.aliases?.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(title)))
+  if (matchedRole) return { primary: String(matchedRole.concept || 'UNKNOWN').toUpperCase(), match: matchedRole.concept === 'FULLSTACK' ? 0.7 : 1, confidence: 1 }
+  if (profile === 'DEVOPS') {
+    if (/devops|sre|platform|инфраструктур|облачн(?:ый|ая) инженер/iu.test(title)) return { primary: 'DEVOPS', match: 0.9, confidence: 0.9 }
+    const activeSignals = ['LINUX', 'KUBERNETES', 'DOCKER', 'TERRAFORM', 'ANSIBLE', 'HELM', 'PROMETHEUS', 'GRAFANA'].filter((concept) => concepts[concept]).length
+    if (activeSignals >= 2 && /инфраструктур|эксплуатац|депло|мониторинг|контейнер|облачн|reliability/iu.test(description)) return { primary: 'DEVOPS', match: 0.75, confidence: 0.75 }
+    return { primary: 'UNKNOWN', match: 0, confidence: 0.4 }
+  }
   if (/java\s+(?:developer|engineer|разработчик)|java-разработчик/iu.test(title)) return { primary: 'BACKEND', match: 0.8, confidence: 0.8 }
   const activeSignals = ['SPRING_BOOT', 'MICROSERVICES', 'REST', 'GRPC', 'WEBFLUX'].filter((concept) => concepts[concept]).length
   if (activeSignals >= 2 && /разработ|сервис|backend|back-end|api|микросервис/iu.test(description)) return { primary: 'BACKEND', match: 0.8, confidence: 0.75 }
@@ -181,6 +186,7 @@ async function scoringAnalyzeVacancy(vacancy, vacancyId) {
 function scoringCompactFeatures(features) {
   return {
     v: features.taxonomyVersion,
+    p: String(SCORING_CONFIG.meta?.profile || 'JAVA_BACKEND').toUpperCase(),
     r: [features.role.primary, features.role.match, features.role.confidence],
     s: [features.seniority.level, features.seniority.confidence],
     e: features.minExperienceYears,
@@ -191,7 +197,7 @@ function scoringCompactFeatures(features) {
 }
 
 function scoringInflateFeatures(compact, vacancyId) {
-  if (!compact || compact.v !== String(SCORING_CONFIG.meta?.version || '') || !Array.isArray(compact.c)) return null
+  if (!compact || compact.v !== String(SCORING_CONFIG.meta?.version || '') || compact.p !== String(SCORING_CONFIG.meta?.profile || 'JAVA_BACKEND').toUpperCase() || !Array.isArray(compact.c)) return null
   const concepts = {}
   for (const value of compact.c) {
     if (!Array.isArray(value) || value.length < 5) continue
@@ -225,6 +231,18 @@ function scoringResolveMatch(required, features, excluded) {
 }
 
 function scoringGateResults(profile, features) {
+  if (String(SCORING_CONFIG.meta?.profile || '').toUpperCase() === 'DEVOPS') {
+    const linuxMatch = Math.max(Number(features.concepts.LINUX?.match || 0), Number(features.concepts.UNIX?.match || 0))
+    const kubernetesIsMustHave = (profile.requirements || []).some((requirement) => requirement.concept === 'KUBERNETES' && requirement.importance === 'MUST_HAVE')
+    const kubernetesMatch = Math.max(Number(features.concepts.KUBERNETES?.match || 0), Number(features.concepts.OPENSHIFT?.match || 0) * 0.7)
+    const conditions = {
+      DEVOPS_ROLE_MISSING: Number(features.role?.match || 0) < 0.5,
+      LINUX_MISSING: linuxMatch < 0.5,
+      KUBERNETES_CRITICAL_MISSING: kubernetesIsMustHave && kubernetesMatch < 0.5,
+      WRONG_PRIMARY_ROLE: (features.negativeSignals || []).some((signal) => signal.primaryRoleConflict),
+    }
+    return (SCORING_CONFIG.gates || []).filter((gate) => conditions[gate.id]).map((gate) => ({ id: gate.id, maxScore: Number(gate.maxScore), reason: gate.reason }))
+  }
   const javaMatch = Number(features.concepts.JAVA?.match || 0)
   const frameworkMatch = Math.max(...['SPRING_BOOT', 'SPRING', 'QUARKUS', 'MICRONAUT'].map((concept) => Number(features.concepts[concept]?.match || 0)))
   const wrongRole = (features.negativeSignals || []).some((signal) => signal.primaryRoleConflict)
@@ -253,10 +271,11 @@ function scoringSeniority(candidate, vacancy) {
 
 function scoringSummary(level, gates) {
   if (gates.length) return `Низкая релевантность: ${gates.map((gate) => gate.reason).join('; ')}`
+  const profileName = String(SCORING_CONFIG.meta?.profile || '').toUpperCase() === 'DEVOPS' ? 'DevOps/SRE' : 'Java Backend'
   return {
-    EXCELLENT_MATCH: 'Отличное совпадение по основному Java Backend стеку.',
-    STRONG_MATCH: 'Сильное совпадение по основному Java Backend стеку.',
-    GOOD_MATCH: 'Хорошее совпадение по Java Backend стеку.',
+    EXCELLENT_MATCH: `Отличное совпадение по основному ${profileName} стеку.`,
+    STRONG_MATCH: `Сильное совпадение по основному ${profileName} стеку.`,
+    GOOD_MATCH: `Хорошее совпадение по ${profileName} стеку.`,
     PARTIAL_MATCH: 'Частичное совпадение, проверь важные пробелы.',
     WEAK_MATCH: 'Слабое совпадение по заявленным требованиям.'
   }[level] || 'Вакансия почти не соответствует заявленным требованиям.'
@@ -325,6 +344,7 @@ function scoringScore(profile, features) {
 function scoringCandidateProfile(account) {
   const resume = account.resume || {}
   const onboarding = account.onboarding || {}
+  const profile = String(resume.targetRole || SCORING_CONFIG.meta?.profile || 'JAVA_BACKEND').toUpperCase()
   const position = scoringNormalizeText(resume.position)
   const skills = Array.isArray(resume.skills) ? resume.skills : []
   const requirements = []
@@ -333,11 +353,17 @@ function scoringCandidateProfile(account) {
     const name = scoringNormalizeText(skill?.name)
     const concept = (SCORING_CONFIG.taxonomy || []).find((item) => (item.aliases || []).some((alias) => scoringPattern(scoringNormalizeText(alias)).test(name)))
     if (!concept || requirements.some((item) => item.concept === concept.concept)) continue
-    requirements.push({ concept: String(concept.concept).toUpperCase(), importance: /^java(?:\s|$)/iu.test(name) ? 'MUST_HAVE' : 'STRONG_PREFERENCE' })
+    const requirementConcept = String(concept.concept).toUpperCase()
+    const mustHave = profile === 'DEVOPS'
+      ? ['LINUX', 'KUBERNETES', 'TERRAFORM', 'ANSIBLE'].includes(requirementConcept)
+      : requirementConcept === 'JAVA'
+    requirements.push({ concept: requirementConcept, importance: mustHave ? 'MUST_HAVE' : 'STRONG_PREFERENCE' })
   }
-  const role = /backend|back-end|java|сервер|бэкенд|разработчик/iu.test(position) || onboarding.roles?.some((value) => /backend|back-end|java/iu.test(value)) ? 'BACKEND' : 'UNKNOWN'
+  const role = profile === 'DEVOPS'
+    ? 'DEVOPS'
+    : /backend|back-end|java|сервер|бэкенд|разработчик/iu.test(position) || onboarding.roles?.some((value) => /backend|back-end|java/iu.test(value)) ? 'BACKEND' : 'UNKNOWN'
   const levelAliases = SCORING_CONFIG.seniority?.aliases || {}
   const targetSeniority = Object.entries(levelAliases).find(([, aliases]) => aliases.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(position)))?.[0]
     || (Number(resume.experienceYears) >= 5 ? 'SENIOR' : Number(resume.experienceYears) >= 3 ? 'MIDDLE' : 'UNKNOWN')
-  return { targetRole: role, targetSeniority, experienceYears: Number.isFinite(Number(resume.experienceYears)) ? Number(resume.experienceYears) : null, requirements, excludedConcepts: [] }
+  return { targetRole: role, targetProfile: profile, targetSeniority, experienceYears: Number.isFinite(Number(resume.experienceYears)) ? Number(resume.experienceYears) : null, requirements, excludedConcepts: [] }
 }

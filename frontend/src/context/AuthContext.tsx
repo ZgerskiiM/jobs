@@ -8,10 +8,11 @@ export interface AccountSettings { profileVisible: boolean; showSalaryExpectatio
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
 export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; }
 export interface ResumeSkill { name: string; category: string; confirmed: boolean; }
+export type ResumeTargetRole = "JAVA_BACKEND" | "DEVOPS";
 export interface ResumeData {
   id: string; source?: "upload" | "hh"; sourceId?: string; sourceUrl?: string; fileName: string; uploadedAt: string; experience: string;
   experienceYears?: number | null; experienceMonths?: number | null; position: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string;
-  hasFile?: boolean; skills: ResumeSkill[]; isActive?: boolean;
+  hasFile?: boolean; skills: ResumeSkill[]; isActive?: boolean; targetRole?: ResumeTargetRole;
 }
 
 interface AuthState {
@@ -19,7 +20,7 @@ interface AuthState {
   coverLetter: string; savedJobIds: number[]; savedJobNotes: Record<string, string>; applications: Application[]; isPro: boolean; isLoading: boolean;
   showAuthModal: boolean; showImportStep: boolean; showOnboarding: boolean; initialOnboarding: Partial<OnboardingData>;
   resumeSkills: ResumeSkill[]; setCoverLetter: (text: string) => Promise<void>; setResumeSkills: (skills: ResumeSkill[]) => Promise<void>;
-  uploadResume: (file: File) => Promise<ResumeData>; selectResume: (id: string) => Promise<void>; updateResumeDetails: (details: Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram">) => Promise<void>; deleteResume: (id?: string) => Promise<void>; startHhImport: () => Promise<string>; clearResume: () => Promise<void>; toggleSavedJob: (id: number) => Promise<void>;
+  uploadResume: (file: File) => Promise<ResumeData>; selectResume: (id: string) => Promise<void>; updateResumeDetails: (details: Partial<Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram" | "targetRole">>) => Promise<void>; deleteResume: (id?: string) => Promise<void>; startHhImport: () => Promise<string>; clearResume: () => Promise<void>; toggleSavedJob: (id: number) => Promise<void>;
   updateSavedJobNote: (id: number, note: string) => Promise<void>;
   isJobSaved: (id: number) => boolean; addApplication: (app: Application) => Promise<void>; updateApplication: (id: number, patch: Partial<Application>) => Promise<void>;
   activatePro: () => void; loginWithEmail: (email: string, password: string, mode: "login" | "register") => Promise<void>; logout: () => Promise<void>;
@@ -105,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setResumeSkills = async (skills: ResumeSkill[]) => { setResumeSkillsState(skills); setResume((current) => current ? { ...current, skills } : current); const result = await accountApi.patchResume({ skills }); applyResumeResult(result); };
   const uploadResume = async (file: File) => { const result = await accountApi.uploadResume(file); return applyResumeResult(result) as ResumeData; };
   const selectResume = async (id: string) => { const result = await accountApi.patchResume({ activeResumeId: id }); applyResumeResult(result); };
-  const updateResumeDetails = async (details: Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram">) => { const result = await accountApi.patchResume(details); applyResumeResult(result); };
+  const updateResumeDetails = async (details: Partial<Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram" | "targetRole">>) => { const result = await accountApi.patchResume(details); applyResumeResult(result); };
   const deleteResume = async (id?: string) => { const result = await accountApi.deleteResume(id); applyResumeResult(result); };
   const startHhImport = async () => (await accountApi.startHhImport()).url;
   const clearResume = async () => { await deleteResume(); };
