@@ -63,6 +63,7 @@
     if (!input) return { ok: false, reason: "на странице не найдено поле для файла" };
     if (!bytes) return { ok: false, reason: "расширение не получило файл с jobs.dev" };
     let transfer;
+    let eventSent = false;
     try {
       const file = new File([bytes], fileName || "resume.pdf", { type: type || "application/pdf" });
       transfer = new DataTransfer();
@@ -70,22 +71,24 @@
       input.files = transfer.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
+      eventSent = true;
     } catch {
       // Some frameworks reject the files setter; try their drop handler below.
     }
-    if (input.files?.length > 0) return { ok: true };
+    if (input.files?.length > 0) return { ok: true, verified: true };
     try {
       const dropTarget = input.closest("label, [role='button'], .upload, .file-upload") || input.parentElement;
-      if (!dropTarget || !transfer) return { ok: false, reason: "страница не приняла файл" };
+      if (!dropTarget || !transfer) return eventSent ? { ok: true, verified: false } : { ok: false, reason: "страница не приняла файл" };
       const EventConstructor = typeof DragEvent === "function" ? DragEvent : Event;
       for (const eventName of ["dragenter", "dragover", "drop"]) {
         const event = new EventConstructor(eventName, { bubbles: true, cancelable: true });
         if ("dataTransfer" in event) Object.defineProperty(event, "dataTransfer", { value: transfer });
         dropTarget.dispatchEvent(event);
       }
-      return input.files?.length > 0 ? { ok: true } : { ok: false, reason: "страница не приняла файл" };
+      eventSent = true;
+      return input.files?.length > 0 ? { ok: true, verified: true } : { ok: true, verified: false };
     } catch {
-      return { ok: false, reason: "страница не приняла файл" };
+      return eventSent ? { ok: true, verified: false } : { ok: false, reason: "страница не приняла файл" };
     }
   }
 
@@ -143,7 +146,8 @@
     if (!email) missing.push("email");
     if (!about) missing.push("о себе");
     if (fileInput && !attached) missing.push(`файл резюме (${message.fileError || attachment.reason})`);
-    const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : " Проверь данные и нажми «Отправить заявку»."}`;
+    const fileNotice = attached && !attachment.verified ? " Файл передан форме — проверь, что он отображается в загрузчике." : "";
+    const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : `${fileNotice} Проверь данные и нажми «Отправить заявку».`}`;
     showPanel(messageText, !missing.length);
     return { message: messageText };
   });
