@@ -60,21 +60,32 @@
   }
 
   function attachFile(input, bytes, fileName, type) {
-    if (!input || !bytes) return false;
+    if (!input) return { ok: false, reason: "на странице не найдено поле для файла" };
+    if (!bytes) return { ok: false, reason: "расширение не получило файл с jobs.dev" };
+    let transfer;
     try {
       const file = new File([bytes], fileName || "resume.pdf", { type: type || "application/pdf" });
-      const transfer = new DataTransfer();
+      transfer = new DataTransfer();
       transfer.items.add(file);
       input.files = transfer.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-      if (input.files.length > 0) return true;
-      const dropTarget = input.closest("label, [role='button'], .upload, .file-upload") || input.parentElement;
-      if (!dropTarget) return false;
-      for (const eventName of ["dragenter", "dragover", "drop"]) dropTarget.dispatchEvent(new DragEvent(eventName, { bubbles: true, cancelable: true, dataTransfer: transfer }));
-      return input.files.length > 0;
     } catch {
-      return false;
+      // Some frameworks reject the files setter; try their drop handler below.
+    }
+    if (input.files?.length > 0) return { ok: true };
+    try {
+      const dropTarget = input.closest("label, [role='button'], .upload, .file-upload") || input.parentElement;
+      if (!dropTarget || !transfer) return { ok: false, reason: "страница не приняла файл" };
+      const EventConstructor = typeof DragEvent === "function" ? DragEvent : Event;
+      for (const eventName of ["dragenter", "dragover", "drop"]) {
+        const event = new EventConstructor(eventName, { bubbles: true, cancelable: true });
+        if ("dataTransfer" in event) Object.defineProperty(event, "dataTransfer", { value: transfer });
+        dropTarget.dispatchEvent(event);
+      }
+      return input.files?.length > 0 ? { ok: true } : { ok: false, reason: "страница не приняла файл" };
+    } catch {
+      return { ok: false, reason: "страница не приняла файл" };
     }
   }
 
@@ -123,14 +134,15 @@
     const fileInput = root.querySelector("input[type='file']") || document.querySelector("input[type='file']");
     const storedFile = await loadFile(message.fileRequestId);
     const filled = [setValue(first, name.firstName), setValue(last, name.lastName), setValue(email, resume.contactEmail), setValue(phone, resume.contactPhone), setValue(telegram, resume.contactTelegram), setValue(about, message.coverLetter)].filter(Boolean).length;
-    const attached = attachFile(fileInput, storedFile?.bytes, storedFile?.fileName || resume.fileName, storedFile?.type || (/\.docx$/i.test(resume.fileName || "") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"));
+    const attachment = attachFile(fileInput, storedFile?.bytes, storedFile?.fileName || resume.fileName, storedFile?.type || (/\.docx$/i.test(resume.fileName || "") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"));
+    const attached = attachment.ok;
     const total = [first, last, email, phone, telegram, about].filter(Boolean).length + (fileInput ? 1 : 0);
     const missing = [];
     if (!first) missing.push("имя");
     if (!last) missing.push("фамилия");
     if (!email) missing.push("email");
     if (!about) missing.push("о себе");
-    if (fileInput && !attached) missing.push(`файл резюме${message.fileError ? ` (${message.fileError})` : ""}`);
+    if (fileInput && !attached) missing.push(`файл резюме (${message.fileError || attachment.reason})`);
     const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : " Проверь данные и нажми «Отправить заявку»."}`;
     showPanel(messageText, !missing.length);
     return { message: messageText };
