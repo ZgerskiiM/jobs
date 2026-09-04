@@ -8,22 +8,28 @@ interface Props {
 }
 
 export default function QuickApplyModal({ job, onClose }: Props) {
-  const { coverLetter: savedCoverLetter, resumeSkills, addApplication, isPro, activatePro, user } = useAuth();
+  const { coverLetter: savedCoverLetter, resume, resumes, resumeSkills, addApplication, isPro, activatePro, user } = useAuth();
 
   // Основное резюме отражает реально подтверждённые навыки из профиля
   const confirmedCount = resumeSkills.filter((s) => s.confirmed).length || resumeSkills.length;
-  const RESUMES = [
-    {
+  const contactSummary = (item: typeof resume) => item ? [item.fullName, item.contactEmail, item.contactPhone, item.contactTelegram].filter(Boolean).join(", ") : "Контакты не заполнены";
+  const RESUMES = resumes.length > 0
+    ? resumes.map((item) => ({
+      id: item.id,
+      label: item.fullName || item.position || item.fileName,
+      desc: [item.source === "hh" ? "HH.ru" : item.fileName, item.experience, contactSummary(item)].filter(Boolean).join(" · "),
+      skills: item.skills.filter((skill) => skill.confirmed).length || item.skills.length,
+      contact: contactSummary(item),
+    }))
+    : [{
       id: "general",
       label: "Основное резюме",
       desc: resumeSkills.length ? "Из профиля — полный стек" : "Загрузите резюме в профиле",
       skills: confirmedCount,
-    },
-    { id: "backend", label: "Backend-версия", desc: "Акцент на системный дизайн и Rust/Go", skills: Math.max(confirmedCount - 3, 4) },
-    { id: "aiml", label: "AI/ML-версия", desc: "ML pipeline, LLM fine-tuning, Python", skills: Math.max(confirmedCount - 5, 3) },
-  ];
+      contact: [user?.name, user?.email, user?.telegram].filter(Boolean).join(", ") || "Контакты не заполнены",
+    }];
 
-  const [selectedResume, setSelectedResume] = useState("general");
+  const [selectedResume, setSelectedResume] = useState(resume?.id ?? resumes[0]?.id ?? "general");
   const [coverLetter, setCoverLetter] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,6 +41,11 @@ export default function QuickApplyModal({ job, onClose }: Props) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
+
+  useEffect(() => {
+    if (RESUMES.some((item) => item.id === selectedResume)) return;
+    setSelectedResume(resume?.id ?? resumes[0]?.id ?? "general");
+  }, [resume, resumes, selectedResume]);
 
   const adaptLetter = () => {
     setProPaywall(false);
@@ -79,7 +90,7 @@ export default function QuickApplyModal({ job, onClose }: Props) {
         updatedDaysAgo: 0,
         deadline: "",
         note: coverLetter ? `Сопроводительное письмо: ${coverLetter}` : "",
-        contact: "",
+        contact: selectedResumeData.contact,
         tags: job.tags,
         timeline: [{ date: "сегодня", label: "Отклик отправлен" }],
         notificationsOn: true,
