@@ -34,6 +34,16 @@ function redirect(location) {
   return new Response(null, { status: 302, headers: { Location: location } })
 }
 
+function extensionCors(request, response) {
+  const origin = request.headers.get('Origin') || ''
+  if (!/^(?:moz|chrome|safari)-extension:\/\//i.test(origin)) return response
+  const headers = new Headers(response.headers)
+  headers.set('Access-Control-Allow-Origin', origin)
+  headers.set('Access-Control-Allow-Credentials', 'true')
+  headers.append('Vary', 'Origin')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
 function cookie(request, name) {
   const header = request.headers.get('Cookie') || ''
   const pair = header.split(';').map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))
@@ -758,7 +768,7 @@ async function fetchHandler(request, env) {
   await initSchema(env)
   const url = new URL(request.url)
   if (url.pathname.startsWith('/api/')) {
-    try { return await routeApi(request, env) } catch (error) { console.error(error); return json({ message: 'Внутренняя ошибка сервера' }, 500) }
+    try { return extensionCors(request, await routeApi(request, env)) } catch (error) { console.error(error); return extensionCors(request, json({ message: 'Внутренняя ошибка сервера' }, 500)) }
   }
   let response = await env.ASSETS.fetch(request)
   if (response.status === 404 && request.method === 'GET' && request.headers.get('accept')?.includes('text/html')) response = await env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))

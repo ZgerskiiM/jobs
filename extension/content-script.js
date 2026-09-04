@@ -68,6 +68,10 @@
       input.files = transfer.files;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
+      if (input.files.length > 0) return true;
+      const dropTarget = input.closest("label, [role='button'], .upload, .file-upload") || input.parentElement;
+      if (!dropTarget) return false;
+      for (const eventName of ["dragenter", "dragover", "drop"]) dropTarget.dispatchEvent(new DragEvent(eventName, { bubbles: true, cancelable: true, dataTransfer: transfer }));
       return input.files.length > 0;
     } catch {
       return false;
