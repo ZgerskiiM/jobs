@@ -191,7 +191,7 @@ function resumeStatePayload(records, activeId) {
   const publicResume = (record) => {
     if (!record) return null
     const { fileKey, ...data } = record
-    return { ...data, isActive: record.id === active?.id }
+    return { ...data, hasFile: Boolean(fileKey), isActive: record.id === active?.id }
   }
   return { active: publicResume(active), resumes: records.map(publicResume) }
 }

@@ -16,6 +16,7 @@ export interface ResumeData {
   contactEmail?: string;
   contactPhone?: string;
   contactTelegram?: string;
+  hasFile?: boolean;
   skills: ResumeSkill[];
   isActive?: boolean;
 }

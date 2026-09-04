@@ -45,7 +45,8 @@ function updateMeta() {
   const resume = selectedResume();
   if (!resume) return;
   const contacts = [resume.contactEmail, resume.contactPhone].filter(Boolean).join(" · ");
-  resumeMeta.textContent = [resume.position, resume.experience, contacts].filter(Boolean).join(" · ") || "данные готовы к подстановке";
+  const fileStatus = resume.hasFile === false ? "файл отсутствует — загрузи заново в профиле" : "файл сохранён";
+  resumeMeta.textContent = [resume.position, resume.experience, contacts, fileStatus].filter(Boolean).join(" · ") || "данные готовы к подстановке";
 }
 
 async function fetchAccount() {
@@ -61,7 +62,7 @@ async function fillCurrentPage() {
   fillButton.disabled = true;
   setResult("получаем файл резюме...");
   try {
-    const preparedFile = await api.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, fileName: resume.fileName });
+    const preparedFile = await api.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, hasFile: resume.hasFile, fileName: resume.fileName });
     await api.tabs.executeScript(activeTab.id, { file: "content-script.js" });
     const response = await api.tabs.sendMessage(activeTab.id, {
       type: "fill-resume",

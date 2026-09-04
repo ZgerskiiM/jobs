@@ -8,7 +8,7 @@ function expireFile(requestId) {
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === "prepare-file") {
-    if (!message.resumeId || message.source === "hh") return { ok: false, error: "У этого резюме нет сохранённого файла" };
+    if (!message.resumeId || message.source === "hh" || message.hasFile === false) return { ok: false, error: "У этого резюме нет сохранённого файла — загрузи его заново в профиле" };
     try {
       const response = await fetch(`${API_ORIGIN}/api/profile/resume/file/?id=${encodeURIComponent(message.resumeId)}`, { credentials: "include" });
       if (!response.ok) return { ok: false, error: `Не удалось получить файл с jobs.dev (HTTP ${response.status})` };

@@ -11,7 +11,7 @@ export interface ResumeSkill { name: string; category: string; confirmed: boolea
 export interface ResumeData {
   id: string; source?: "upload" | "hh"; sourceId?: string; sourceUrl?: string; fileName: string; uploadedAt: string; experience: string;
   experienceYears?: number | null; experienceMonths?: number | null; position: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string;
-  skills: ResumeSkill[]; isActive?: boolean;
+  hasFile?: boolean; skills: ResumeSkill[]; isActive?: boolean;
 }
 
 interface AuthState {

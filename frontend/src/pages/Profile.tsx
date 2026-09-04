@@ -500,7 +500,7 @@ export default function Profile() {
                   >
                     <span className="min-w-0">
                       <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
-                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.experience || "опыт не найден"}</span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
                     </span>
                     <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
                   </button>
@@ -572,7 +572,7 @@ export default function Profile() {
                   <div>
                     <div className="font-sans text-sm text-white font-medium">{resumeData.position || "Резюме загружено"}</div>
                     <div className="font-mono text-xs text-[#5a6070]">
-                      {[resumeData.fileName, resumeData.source === "hh" ? "импортировано с HH.ru" : resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`].filter(Boolean).join(" · ")}
+                      {[resumeData.fileName, resumeData.source === "hh" ? "импортировано с HH.ru" : resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`, resumeData.hasFile === false ? "файл отсутствует — загрузи заново" : "файл сохранён"].filter(Boolean).join(" · ")}
                     </div>
                     {resumeData.sourceUrl && <a href={resumeData.sourceUrl} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-[#00d4ff] hover:text-white">открыть на HH.ru ↗</a>}
                   </div>
