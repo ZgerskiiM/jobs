@@ -8,6 +8,7 @@
   const phonePattern = /телефон|phone|mobile|мобильн/i;
   const telegramPattern = /telegram|телеграм|tg|username/i;
   const aboutPattern = /о\s*себе|сопровод|about|cover|message|комментар/i;
+  const vacancyPathPattern = /\/(?:vacanc(?:y|ies)|job|jobs|position|positions)\/[^/]+/i;
 
   function visibleControls() {
     return [...document.querySelectorAll("input, textarea, [contenteditable='true']")].filter((element) => {
@@ -121,8 +122,55 @@
     window.setTimeout(() => host.remove(), 9000);
   }
 
-  browser.runtime.onMessage.addListener(async (message) => {
-    if (message?.type !== "fill-resume") return undefined;
+  function likelyVacancyPage() {
+    return vacancyPathPattern.test(location.pathname);
+  }
+
+  function showAutofillOffer() {
+    if (!likelyVacancyPage() || document.querySelector("[data-jobs-dev-offer='true']")) return;
+    const host = document.createElement("section");
+    host.dataset.jobsDevOffer = "true";
+    host.setAttribute("aria-live", "polite");
+    host.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;width:330px;background:#0e1018;border:1px solid rgba(51,255,119,.4);border-radius:4px;color:#e8eaf0;font:12px/1.45 Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)";
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:#33ff77;font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{margin-top:10px;padding:8px 10px;border:1px solid rgba(51,255,119,.5);border-radius:3px;background:#33ff77;color:#07080e;cursor:pointer;font:11px "Courier New",monospace}button.secondary{margin-left:8px;border-color:rgba(58,64,79,.7);background:transparent;color:#7d8494}button:disabled{cursor:wait;opacity:.5}button:focus-visible{outline:2px solid #00d4ff;outline-offset:2px}</style><section><strong>// jobs.dev</strong><p>Похоже, это страница вакансии. Заполнить форму данными активного резюме?</p><button class="accept" type="button">заполнить из jobs.dev →</button><button class="secondary close" type="button">не сейчас</button></section>`;
+    document.body.append(host);
+    const accept = shadow.querySelector(".accept");
+    const close = shadow.querySelector(".close");
+    close.addEventListener("click", () => host.remove());
+    accept.addEventListener("click", async () => {
+      accept.disabled = true;
+      accept.textContent = "получаем резюме...";
+      const result = await autofillFromOffer();
+      if (!result.ok) {
+        accept.disabled = false;
+        accept.textContent = "повторить заполнение →";
+        showPanel(result.error, false);
+        return;
+      }
+      host.remove();
+    });
+  }
+
+  async function autofillFromOffer() {
+    const accountResponse = await browser.runtime.sendMessage({ type: "get-account" });
+    if (!accountResponse?.ok) return { ok: false, error: accountResponse?.error || "Не удалось загрузить профиль jobs.dev" };
+    const account = accountResponse.account;
+    const resumes = account?.resumes?.length ? account.resumes : account?.resume ? [account.resume] : [];
+    const resume = account?.resume || resumes.find((item) => item.isActive) || resumes[0];
+    if (!resume) return { ok: false, error: "В профиле jobs.dev пока нет резюме" };
+    const preparedFile = await browser.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, hasFile: resume.hasFile, fileName: resume.fileName });
+    const response = await fillResume({
+      type: "fill-resume",
+      resume,
+      coverLetter: account.coverLetter || "",
+      fileRequestId: preparedFile?.ok ? preparedFile.requestId : null,
+      fileError: preparedFile?.error || "",
+    });
+    return { ok: !response?.message?.includes("Не найдено:") || !response.message.includes("файл резюме"), error: response?.message };
+  }
+
+  async function fillResume(message) {
     const resume = message.resume || {};
     const name = splitName(resume.fullName);
     const root = formRoot();
@@ -150,5 +198,12 @@
     const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : `${fileNotice} Проверь данные и нажми «Отправить заявку».`}`;
     showPanel(messageText, !missing.length);
     return { message: messageText };
+  }
+
+  browser.runtime.onMessage.addListener(async (message) => {
+    if (message?.type !== "fill-resume") return undefined;
+    return fillResume(message);
   });
+
+  if (likelyVacancyPage()) window.setTimeout(showAutofillOffer, 700);
 })();

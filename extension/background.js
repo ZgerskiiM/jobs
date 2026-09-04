@@ -7,6 +7,17 @@ function expireFile(requestId) {
 }
 
 browser.runtime.onMessage.addListener(async (message) => {
+  if (message?.type === "get-account") {
+    try {
+      const response = await fetch(`${API_ORIGIN}/api/auth/me/`, { credentials: "include" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) return { ok: false, error: body.message || "Войди в jobs.dev в этом браузере" };
+      return { ok: true, account: body };
+    } catch {
+      return { ok: false, error: "Не удалось загрузить профиль jobs.dev" };
+    }
+  }
+
   if (message?.type === "prepare-file") {
     if (!message.resumeId || message.source === "hh" || message.hasFile === false) return { ok: false, error: "У этого резюме нет сохранённого файла — загрузи его заново в профиле" };
     try {

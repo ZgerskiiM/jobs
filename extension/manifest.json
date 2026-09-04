@@ -1,17 +1,25 @@
 {
   "manifest_version": 2,
   "name": "jobs.dev — быстрый отклик",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Заполняет формы отклика данными активного резюме из jobs.dev.",
   "permissions": [
     "activeTab",
     "tabs",
+    "<all_urls>",
     "https://jobs-dev.zgerskiim.chatgpt.site/*"
   ],
   "browser_action": {
     "default_title": "Заполнить отклик из jobs.dev",
     "default_popup": "popup.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "background": {
     "scripts": ["background.js"]
   },
