@@ -1,0 +1,1820 @@
+{
+  "meta": {
+    "name": "1c-developer-vacancy-relevance-ru",
+    "version": "1.0.0",
+    "market": "RU",
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "profile": "1C_DEVELOPER",
+    "description": "Deterministic taxonomy for 1C Developer vacancies on the Russian job market."
+  },
+  "scoring": {
+    "scoreRange": [
+      0,
+      100
+    ],
+    "categoryWeights": {
+      "PLATFORM_CORE": 0.22,
+      "CONFIGURATIONS": 0.18,
+      "DEVELOPMENT": 0.18,
+      "INTEGRATIONS": 0.1,
+      "DATA_REPORTING": 0.08,
+      "PERFORMANCE_ADMIN": 0.07,
+      "TOOLS_CICD": 0.05,
+      "BUSINESS_DOMAIN": 0.05,
+      "TESTING_QUALITY": 0.03,
+      "SENIORITY_RESPONSIBILITY": 0.04
+    },
+    "importanceWeights": {
+      "MUST_HAVE": 10,
+      "STRONG_PREFERENCE": 6,
+      "NICE_TO_HAVE": 3,
+      "BONUS": 1
+    },
+    "defaultSemanticMatch": {
+      "EXACT": 1.0,
+      "ALIAS": 1.0,
+      "RELATED_STRONG": 0.75,
+      "RELATED_MEDIUM": 0.55,
+      "RELATED_WEAK": 0.3,
+      "MISSING": 0.0
+    },
+    "frequencyBoost": {
+      "enabled": true,
+      "maxBoost": 0.05,
+      "minMentionsForBoost": 2,
+      "maxMentionsCounted": 4
+    },
+    "finalFormula": "clamp(applyGates(rawCategoryScore * 100 - penalties), 0, 100)"
+  },
+  "contextModifiers": [
+    {
+      "id": "REQUIRED",
+      "multiplier": 1.0,
+      "patterns": [
+        "обязательно",
+        "необходимо",
+        "требуется",
+        "must have",
+        "required",
+        "уверенное знание",
+        "глубокое знание",
+        "опыт разработки",
+        "опыт программирования",
+        "опыт доработки",
+        "практический опыт",
+        "опыт работы с",
+        "знание платформы"
+      ]
+    },
+    {
+      "id": "RESPONSIBILITY_OR_STACK",
+      "multiplier": 0.95,
+      "patterns": [
+        "предстоит работать с",
+        "будете работать с",
+        "используем",
+        "наш стек",
+        "стек проекта",
+        "разработка и сопровождение",
+        "доработка конфигурации",
+        "разработка функционала",
+        "поддержка и развитие",
+        "автоматизация бизнес-процессов"
+      ]
+    },
+    {
+      "id": "PREFERRED",
+      "multiplier": 0.7,
+      "patterns": [
+        "желательно",
+        "предпочтительно",
+        "будет преимуществом",
+        "приветствуется",
+        "preferred"
+      ]
+    },
+    {
+      "id": "NICE_TO_HAVE",
+      "multiplier": 0.5,
+      "patterns": [
+        "будет плюсом",
+        "плюсом будет",
+        "как плюс",
+        "nice to have",
+        "bonus"
+      ]
+    },
+    {
+      "id": "FAMILIARITY",
+      "multiplier": 0.4,
+      "patterns": [
+        "знакомство с",
+        "базовое понимание",
+        "понимание основ",
+        "familiar with",
+        "basic knowledge"
+      ]
+    },
+    {
+      "id": "NOT_REQUIRED",
+      "multiplier": 0.15,
+      "patterns": [
+        "не обязательно",
+        "не требуется",
+        "опыт не обязателен",
+        "можно без опыта",
+        "not required"
+      ]
+    },
+    {
+      "id": "NEGATED_OR_DEPRECATED",
+      "multiplier": 0.05,
+      "patterns": [
+        "не используем",
+        "отказываемся от",
+        "переходим с",
+        "мигрируем с",
+        "устаревшая конфигурация",
+        "deprecated",
+        "migrating from"
+      ]
+    }
+  ],
+  "experienceParsing": {
+    "patterns": [
+      "(?:от|не менее|минимум)\\s+(\\d+)\\s+(?:лет|года|год)",
+      "(\\d+)\\s*\\+\\s*(?:лет|года|год)",
+      "(\\d+)\\+?\\s*years?",
+      "at least\\s+(\\d+)\\s+years?"
+    ],
+    "wordNumbers": {
+      "одного": 1,
+      "один": 1,
+      "двух": 2,
+      "два": 2,
+      "трех": 3,
+      "трёх": 3,
+      "три": 3,
+      "четырех": 4,
+      "четырёх": 4,
+      "четыре": 4,
+      "пяти": 5,
+      "пять": 5,
+      "шести": 6,
+      "шесть": 6,
+      "семи": 7,
+      "семь": 7,
+      "восьми": 8,
+      "восемь": 8,
+      "девяти": 9,
+      "девять": 9,
+      "десяти": 10,
+      "десять": 10
+    },
+    "matchRules": [
+      {
+        "candidateDeltaMin": 0,
+        "coefficient": 1.0
+      },
+      {
+        "candidateDeltaMin": -1,
+        "coefficient": 0.8
+      },
+      {
+        "candidateDeltaMin": -2,
+        "coefficient": 0.5
+      },
+      {
+        "candidateDeltaMin": -999,
+        "coefficient": 0.2
+      }
+    ]
+  },
+  "seniority": {
+    "levels": {
+      "INTERN": 0,
+      "JUNIOR": 1,
+      "MIDDLE": 2,
+      "SENIOR": 3,
+      "LEAD": 4,
+      "ARCHITECT": 5
+    },
+    "aliases": {
+      "INTERN": [
+        "стажер",
+        "стажёр",
+        "intern"
+      ],
+      "JUNIOR": [
+        "junior",
+        "jun",
+        "младший программист 1с",
+        "младший разработчик 1с",
+        "джуниор"
+      ],
+      "MIDDLE": [
+        "middle",
+        "mid",
+        "middle 1c developer",
+        "мидл",
+        "программист 1с"
+      ],
+      "SENIOR": [
+        "senior",
+        "sr",
+        "senior 1c developer",
+        "старший программист 1с",
+        "старший разработчик 1с",
+        "сеньор"
+      ],
+      "LEAD": [
+        "lead",
+        "team lead",
+        "tech lead",
+        "ведущий программист 1с",
+        "ведущий разработчик 1с",
+        "техлид"
+      ],
+      "ARCHITECT": [
+        "архитектор 1с",
+        "1с архитектор",
+        "1c architect",
+        "solution architect 1c"
+      ]
+    },
+    "distanceMatch": {
+      "0": 1.0,
+      "1": 0.8,
+      "2": 0.45,
+      "3": 0.15,
+      "4": 0.05
+    }
+  },
+  "gates": [
+    {
+      "id": "ONE_C_PRIMARY_MISSING",
+      "condition": "concept.ONE_C_PLATFORM.match < 0.5 && role.ONE_C_DEVELOPER.match < 0.5",
+      "maxScore": 25,
+      "reason": "Нет подтвержденной 1С-разработки."
+    },
+    {
+      "id": "DEVELOPER_ROLE_MISSING",
+      "condition": "role.ONE_C_DEVELOPER.match < 0.5",
+      "maxScore": 40,
+      "reason": "Роль не выглядит как разработчик/программист 1С."
+    },
+    {
+      "id": "QUERY_LANGUAGE_CRITICAL_MISSING",
+      "condition": "profile.requirement.ONE_C_QUERY_LANGUAGE.importance == MUST_HAVE && concept.ONE_C_QUERY_LANGUAGE.match < 0.5",
+      "maxScore": 65,
+      "reason": "Язык запросов 1С обязателен, но не подтвержден."
+    },
+    {
+      "id": "WRONG_PRIMARY_ROLE",
+      "condition": "negative.primaryRoleConflict == true",
+      "maxScore": 20,
+      "reason": "Вакансия относится к другой основной специализации."
+    }
+  ],
+  "negativeSignals": [
+    {
+      "id": "ONE_C_OPERATOR_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "оператор 1с",
+        "1с оператор",
+        "оператор базы 1с",
+        "ввод данных в 1с"
+      ]
+    },
+    {
+      "id": "ACCOUNTANT_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "бухгалтер 1с",
+        "бухгалтер-консультант",
+        "главный бухгалтер"
+      ]
+    },
+    {
+      "id": "CONSULTANT_ONLY",
+      "penalty": 30,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "консультант 1с без программирования",
+        "функциональный консультант 1с",
+        "консультирование пользователей без разработки"
+      ]
+    },
+    {
+      "id": "SUPPORT_ONLY",
+      "penalty": 15,
+      "primaryRoleConflict": false,
+      "patterns": [
+        "только поддержка пользователей",
+        "без разработки",
+        "разработка не предполагается",
+        "только консультации пользователей"
+      ]
+    },
+    {
+      "id": "HELPDESK_PRIMARY",
+      "penalty": 35,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "helpdesk",
+        "service desk",
+        "техническая поддержка пользователей"
+      ]
+    },
+    {
+      "id": "SYSADMIN_PRIMARY",
+      "penalty": 30,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "системный администратор",
+        "system administrator"
+      ]
+    },
+    {
+      "id": "SALES_PRIMARY",
+      "penalty": 40,
+      "primaryRoleConflict": true,
+      "patterns": [
+        "менеджер по продажам 1с",
+        "продажа продуктов 1с",
+        "sales manager 1c"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "concept": "ONE_C_DEVELOPER",
+      "aliases": [
+        "программист 1с",
+        "1с программист",
+        "разработчик 1с",
+        "1с разработчик",
+        "developer 1c",
+        "1c developer",
+        "программист-консультант 1с",
+        "ведущий программист 1с",
+        "старший программист 1с"
+      ]
+    },
+    {
+      "concept": "ONE_C_ARCHITECT",
+      "aliases": [
+        "архитектор 1с",
+        "1с архитектор",
+        "1c architect"
+      ]
+    },
+    {
+      "concept": "ONE_C_TECH_LEAD",
+      "aliases": [
+        "техлид 1с",
+        "tech lead 1c",
+        "ведущий разработчик 1с"
+      ]
+    }
+  ],
+  "taxonomy": [
+    {
+      "concept": "ONE_C_PLATFORM",
+      "category": "PLATFORM_CORE",
+      "weight": 10,
+      "aliases": [
+        "1с:предприятие",
+        "1с предприятие",
+        "1c:enterprise",
+        "1c enterprise",
+        "платформа 1с",
+        "платформа 1с:предприятие"
+      ]
+    },
+    {
+      "concept": "ONE_C_8_3",
+      "category": "PLATFORM_CORE",
+      "weight": 9,
+      "aliases": [
+        "1с 8.3",
+        "1с:предприятие 8.3",
+        "1c 8.3"
+      ]
+    },
+    {
+      "concept": "ONE_C_8_2",
+      "category": "PLATFORM_CORE",
+      "weight": 4,
+      "aliases": [
+        "1с 8.2",
+        "1с:предприятие 8.2",
+        "1c 8.2"
+      ]
+    },
+    {
+      "concept": "MANAGED_APPLICATION",
+      "category": "PLATFORM_CORE",
+      "weight": 7,
+      "aliases": [
+        "управляемое приложение",
+        "managed application"
+      ]
+    },
+    {
+      "concept": "MANAGED_FORMS",
+      "category": "PLATFORM_CORE",
+      "weight": 8,
+      "aliases": [
+        "управляемые формы",
+        "управляемая форма",
+        "managed forms"
+      ]
+    },
+    {
+      "concept": "ORDINARY_FORMS",
+      "category": "PLATFORM_CORE",
+      "weight": 3,
+      "aliases": [
+        "обычные формы",
+        "обычное приложение",
+        "ordinary forms"
+      ]
+    },
+    {
+      "concept": "CLIENT_SERVER",
+      "category": "PLATFORM_CORE",
+      "weight": 6,
+      "aliases": [
+        "клиент-серверный вариант",
+        "клиент-сервер",
+        "client-server 1c",
+        "сервер 1с"
+      ]
+    },
+    {
+      "concept": "FILE_MODE",
+      "category": "PLATFORM_CORE",
+      "weight": 2,
+      "aliases": [
+        "файловый вариант",
+        "файловая база 1с"
+      ]
+    },
+    {
+      "concept": "THIN_CLIENT",
+      "category": "PLATFORM_CORE",
+      "weight": 3,
+      "aliases": [
+        "тонкий клиент",
+        "thin client"
+      ]
+    },
+    {
+      "concept": "WEB_CLIENT",
+      "category": "PLATFORM_CORE",
+      "weight": 3,
+      "aliases": [
+        "веб-клиент",
+        "web client"
+      ]
+    },
+    {
+      "concept": "CONFIGURATOR",
+      "category": "PLATFORM_CORE",
+      "weight": 5,
+      "aliases": [
+        "конфигуратор 1с",
+        "1c configurator"
+      ]
+    },
+    {
+      "concept": "METADATA",
+      "category": "PLATFORM_CORE",
+      "weight": 6,
+      "aliases": [
+        "метаданные 1с",
+        "объекты метаданных",
+        "metadata 1c"
+      ]
+    },
+    {
+      "concept": "BSP",
+      "category": "PLATFORM_CORE",
+      "weight": 8,
+      "aliases": [
+        "бсп",
+        "библиотека стандартных подсистем",
+        "standard subsystems library"
+      ]
+    },
+    {
+      "concept": "ERP",
+      "category": "CONFIGURATIONS",
+      "weight": 10,
+      "aliases": [
+        "1с:erp",
+        "1с erp",
+        "1c erp",
+        "erp управление предприятием"
+      ],
+      "related": [
+        {
+          "concept": "KA",
+          "match": 0.7
+        }
+      ]
+    },
+    {
+      "concept": "UT",
+      "category": "CONFIGURATIONS",
+      "weight": 8,
+      "aliases": [
+        "1с:ут",
+        "1с ут",
+        "управление торговлей",
+        "1c trade management"
+      ],
+      "related": [
+        {
+          "concept": "ERP",
+          "match": 0.55
+        },
+        {
+          "concept": "KA",
+          "match": 0.65
+        }
+      ]
+    },
+    {
+      "concept": "ZUP",
+      "category": "CONFIGURATIONS",
+      "weight": 8,
+      "aliases": [
+        "1с:зуп",
+        "1с зуп",
+        "зарплата и управление персоналом",
+        "1c zup"
+      ]
+    },
+    {
+      "concept": "BP",
+      "category": "CONFIGURATIONS",
+      "weight": 7,
+      "aliases": [
+        "1с:бп",
+        "1с бухгалтерия",
+        "бухгалтерия предприятия",
+        "1c accounting"
+      ]
+    },
+    {
+      "concept": "KA",
+      "category": "CONFIGURATIONS",
+      "weight": 8,
+      "aliases": [
+        "1с:ка",
+        "комплексная автоматизация",
+        "1c comprehensive automation"
+      ],
+      "related": [
+        {
+          "concept": "ERP",
+          "match": 0.7
+        },
+        {
+          "concept": "UT",
+          "match": 0.65
+        }
+      ]
+    },
+    {
+      "concept": "UNF",
+      "category": "CONFIGURATIONS",
+      "weight": 6,
+      "aliases": [
+        "1с:унф",
+        "управление нашей фирмой",
+        "1c small business"
+      ]
+    },
+    {
+      "concept": "DOC_FLOW",
+      "category": "CONFIGURATIONS",
+      "weight": 6,
+      "aliases": [
+        "1с:документооборот",
+        "1с документооборот",
+        "document management 1c"
+      ]
+    },
+    {
+      "concept": "RETAIL",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "1с:розница",
+        "1с розница",
+        "1c retail"
+      ]
+    },
+    {
+      "concept": "CRM",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "1с:crm",
+        "1с crm",
+        "1c crm"
+      ]
+    },
+    {
+      "concept": "TRADE_11",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "ут 11",
+        "управление торговлей 11",
+        "1с ут 11"
+      ]
+    },
+    {
+      "concept": "ERP_2",
+      "category": "CONFIGURATIONS",
+      "weight": 6,
+      "aliases": [
+        "erp 2",
+        "1с erp 2",
+        "1с:erp 2"
+      ]
+    },
+    {
+      "concept": "ZUP_3",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "зуп 3",
+        "зуп 3.1",
+        "1с зуп 3.1"
+      ]
+    },
+    {
+      "concept": "BP_3",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "бп 3",
+        "бп 3.0",
+        "1с бухгалтерия 3.0"
+      ]
+    },
+    {
+      "concept": "TYPICAL_CONFIG",
+      "category": "CONFIGURATIONS",
+      "weight": 5,
+      "aliases": [
+        "типовая конфигурация",
+        "типовые конфигурации",
+        "типовое решение 1с"
+      ]
+    },
+    {
+      "concept": "NON_TYPICAL_CONFIG",
+      "category": "CONFIGURATIONS",
+      "weight": 7,
+      "aliases": [
+        "нетиповая конфигурация",
+        "сильно доработанная конфигурация",
+        "кастомная конфигурация 1с"
+      ]
+    },
+    {
+      "concept": "ONE_C_LANGUAGE",
+      "category": "DEVELOPMENT",
+      "weight": 10,
+      "aliases": [
+        "встроенный язык 1с",
+        "язык 1с",
+        "1c language",
+        "встроенный язык"
+      ]
+    },
+    {
+      "concept": "ONE_C_QUERY_LANGUAGE",
+      "category": "DEVELOPMENT",
+      "weight": 10,
+      "aliases": [
+        "язык запросов 1с",
+        "запросы 1с",
+        "1c query language"
+      ]
+    },
+    {
+      "concept": "QUERY_BUILDER",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "конструктор запросов",
+        "query builder 1c"
+      ]
+    },
+    {
+      "concept": "DCS_SKD",
+      "category": "DEVELOPMENT",
+      "weight": 9,
+      "aliases": [
+        "скд",
+        "система компоновки данных",
+        "data composition system"
+      ]
+    },
+    {
+      "concept": "EXTENSIONS",
+      "category": "DEVELOPMENT",
+      "weight": 9,
+      "aliases": [
+        "расширения 1с",
+        "расширение конфигурации",
+        "configuration extensions"
+      ]
+    },
+    {
+      "concept": "EXTERNAL_PROCESSING",
+      "category": "DEVELOPMENT",
+      "weight": 7,
+      "aliases": [
+        "внешние обработки",
+        "внешняя обработка",
+        "external processing"
+      ]
+    },
+    {
+      "concept": "EXTERNAL_REPORTS",
+      "category": "DEVELOPMENT",
+      "weight": 6,
+      "aliases": [
+        "внешние отчеты",
+        "внешний отчет",
+        "external reports"
+      ]
+    },
+    {
+      "concept": "PRINT_FORMS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "печатные формы",
+        "печатная форма",
+        "print forms"
+      ]
+    },
+    {
+      "concept": "SUBSYSTEMS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "подсистемы 1с",
+        "subsystems 1c"
+      ]
+    },
+    {
+      "concept": "ACCUMULATION_REGISTERS",
+      "category": "DEVELOPMENT",
+      "weight": 7,
+      "aliases": [
+        "регистры накопления",
+        "регистр накопления"
+      ]
+    },
+    {
+      "concept": "INFORMATION_REGISTERS",
+      "category": "DEVELOPMENT",
+      "weight": 6,
+      "aliases": [
+        "регистры сведений",
+        "регистр сведений"
+      ]
+    },
+    {
+      "concept": "ACCOUNTING_REGISTERS",
+      "category": "DEVELOPMENT",
+      "weight": 6,
+      "aliases": [
+        "регистры бухгалтерии",
+        "регистр бухгалтерии"
+      ]
+    },
+    {
+      "concept": "CALCULATION_REGISTERS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "регистры расчета",
+        "регистр расчета"
+      ]
+    },
+    {
+      "concept": "DOCUMENTS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "документы 1с",
+        "объект документ"
+      ]
+    },
+    {
+      "concept": "CATALOGS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "справочники 1с",
+        "объект справочник"
+      ]
+    },
+    {
+      "concept": "BUSINESS_PROCESSES",
+      "category": "DEVELOPMENT",
+      "weight": 6,
+      "aliases": [
+        "бизнес-процессы 1с",
+        "бизнес процессы 1с"
+      ]
+    },
+    {
+      "concept": "SUBSCRIPTIONS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "подписки на события",
+        "subscription to events"
+      ]
+    },
+    {
+      "concept": "SCHEDULED_JOBS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "регламентные задания",
+        "фоновые задания",
+        "scheduled jobs"
+      ]
+    },
+    {
+      "concept": "COMMON_MODULES",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "общие модули",
+        "common modules"
+      ]
+    },
+    {
+      "concept": "FORM_MODULES",
+      "category": "DEVELOPMENT",
+      "weight": 4,
+      "aliases": [
+        "модули форм",
+        "модуль формы"
+      ]
+    },
+    {
+      "concept": "OBJECT_MODULES",
+      "category": "DEVELOPMENT",
+      "weight": 4,
+      "aliases": [
+        "модули объектов",
+        "модуль объекта"
+      ]
+    },
+    {
+      "concept": "TRANSACTIONS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "транзакции 1с",
+        "начатьтранзакцию",
+        "зафиксироватьтранзакцию"
+      ]
+    },
+    {
+      "concept": "LOCKS",
+      "category": "DEVELOPMENT",
+      "weight": 5,
+      "aliases": [
+        "управляемые блокировки",
+        "блокировки 1с",
+        "managed locks"
+      ]
+    },
+    {
+      "concept": "TEMP_TABLES",
+      "category": "DEVELOPMENT",
+      "weight": 4,
+      "aliases": [
+        "временные таблицы 1с",
+        "temporary tables"
+      ]
+    },
+    {
+      "concept": "FUNCTIONAL_OPTIONS",
+      "category": "DEVELOPMENT",
+      "weight": 3,
+      "aliases": [
+        "функциональные опции",
+        "functional options"
+      ]
+    },
+    {
+      "concept": "HTTP_SERVICES",
+      "category": "INTEGRATIONS",
+      "weight": 8,
+      "aliases": [
+        "http-сервисы 1с",
+        "http сервисы 1с",
+        "http services 1c"
+      ]
+    },
+    {
+      "concept": "WEB_SERVICES",
+      "category": "INTEGRATIONS",
+      "weight": 6,
+      "aliases": [
+        "web-сервисы 1с",
+        "web services 1c",
+        "веб-сервисы 1с"
+      ]
+    },
+    {
+      "concept": "REST",
+      "category": "INTEGRATIONS",
+      "weight": 6,
+      "aliases": [
+        "rest",
+        "rest api",
+        "restful api"
+      ]
+    },
+    {
+      "concept": "SOAP",
+      "category": "INTEGRATIONS",
+      "weight": 4,
+      "aliases": [
+        "soap",
+        "soap services"
+      ]
+    },
+    {
+      "concept": "JSON",
+      "category": "INTEGRATIONS",
+      "weight": 6,
+      "aliases": [
+        "json",
+        "чтениеjson",
+        "записьjson"
+      ]
+    },
+    {
+      "concept": "XML",
+      "category": "INTEGRATIONS",
+      "weight": 6,
+      "aliases": [
+        "xml",
+        "чтениеxml",
+        "записьxml",
+        "xdto"
+      ]
+    },
+    {
+      "concept": "XDTO",
+      "category": "INTEGRATIONS",
+      "weight": 5,
+      "aliases": [
+        "xdto",
+        "фабрикаxdto"
+      ]
+    },
+    {
+      "concept": "COM",
+      "category": "INTEGRATIONS",
+      "weight": 4,
+      "aliases": [
+        "com connector",
+        "com-соединение",
+        "com соединение",
+        "v8.comconnector"
+      ]
+    },
+    {
+      "concept": "OLE",
+      "category": "INTEGRATIONS",
+      "weight": 3,
+      "aliases": [
+        "ole",
+        "ole automation"
+      ]
+    },
+    {
+      "concept": "EXCHANGE_PLANS",
+      "category": "INTEGRATIONS",
+      "weight": 8,
+      "aliases": [
+        "планы обмена",
+        "план обмена",
+        "exchange plans"
+      ]
+    },
+    {
+      "concept": "DISTRIBUTED_IB",
+      "category": "INTEGRATIONS",
+      "weight": 5,
+      "aliases": [
+        "риб",
+        "распределенная информационная база",
+        "распределённая информационная база"
+      ]
+    },
+    {
+      "concept": "ENTERPRISE_DATA",
+      "category": "INTEGRATIONS",
+      "weight": 8,
+      "aliases": [
+        "enterprise data",
+        "формат enterprise data",
+        "1с enterprise data"
+      ]
+    },
+    {
+      "concept": "DATA_CONVERSION",
+      "category": "INTEGRATIONS",
+      "weight": 7,
+      "aliases": [
+        "конвертация данных",
+        "кд 2",
+        "кд 3",
+        "data conversion 1c"
+      ]
+    },
+    {
+      "concept": "KAFKA",
+      "category": "INTEGRATIONS",
+      "weight": 4,
+      "aliases": [
+        "kafka",
+        "apache kafka",
+        "кафка"
+      ]
+    },
+    {
+      "concept": "RABBITMQ",
+      "category": "INTEGRATIONS",
+      "weight": 3,
+      "aliases": [
+        "rabbitmq",
+        "rabbit mq"
+      ]
+    },
+    {
+      "concept": "ESB",
+      "category": "INTEGRATIONS",
+      "weight": 3,
+      "aliases": [
+        "esb",
+        "интеграционная шина",
+        "шина данных"
+      ]
+    },
+    {
+      "concept": "EDO",
+      "category": "INTEGRATIONS",
+      "weight": 5,
+      "aliases": [
+        "эдо",
+        "электронный документооборот",
+        "диадок",
+        "сбис"
+      ]
+    },
+    {
+      "concept": "HTTP_CLIENT",
+      "category": "INTEGRATIONS",
+      "weight": 5,
+      "aliases": [
+        "httpсоединение",
+        "httpзапрос",
+        "http client 1c"
+      ]
+    },
+    {
+      "concept": "REPORTS",
+      "category": "DATA_REPORTING",
+      "weight": 6,
+      "aliases": [
+        "отчеты 1с",
+        "разработка отчетов",
+        "reports 1c"
+      ]
+    },
+    {
+      "concept": "ANALYTICAL_REPORTS",
+      "category": "DATA_REPORTING",
+      "weight": 5,
+      "aliases": [
+        "аналитические отчеты",
+        "аналитическая отчетность"
+      ]
+    },
+    {
+      "concept": "SQL",
+      "category": "DATA_REPORTING",
+      "weight": 6,
+      "aliases": [
+        "sql",
+        "язык sql"
+      ]
+    },
+    {
+      "concept": "MS_SQL",
+      "category": "DATA_REPORTING",
+      "weight": 7,
+      "aliases": [
+        "microsoft sql server",
+        "ms sql",
+        "mssql",
+        "sql server"
+      ],
+      "related": [
+        {
+          "concept": "POSTGRESQL",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "POSTGRESQL",
+      "category": "DATA_REPORTING",
+      "weight": 6,
+      "aliases": [
+        "postgresql",
+        "postgres",
+        "постгрес"
+      ],
+      "related": [
+        {
+          "concept": "MS_SQL",
+          "match": 0.55
+        }
+      ]
+    },
+    {
+      "concept": "DBMS",
+      "category": "DATA_REPORTING",
+      "weight": 5,
+      "aliases": [
+        "субд",
+        "dbms",
+        "реляционная субд"
+      ]
+    },
+    {
+      "concept": "DATA_MIGRATION",
+      "category": "DATA_REPORTING",
+      "weight": 6,
+      "aliases": [
+        "перенос данных",
+        "миграция данных",
+        "data migration"
+      ]
+    },
+    {
+      "concept": "DATA_CLEANING",
+      "category": "DATA_REPORTING",
+      "weight": 3,
+      "aliases": [
+        "очистка данных",
+        "нормализация данных"
+      ]
+    },
+    {
+      "concept": "PERFORMANCE_OPTIMIZATION",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 9,
+      "aliases": [
+        "оптимизация производительности 1с",
+        "оптимизация 1с",
+        "performance optimization 1c"
+      ]
+    },
+    {
+      "concept": "QUERY_OPTIMIZATION",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 8,
+      "aliases": [
+        "оптимизация запросов 1с",
+        "оптимизация запросов",
+        "query optimization"
+      ]
+    },
+    {
+      "concept": "TECHNOLOGICAL_LOG",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 7,
+      "aliases": [
+        "технологический журнал",
+        "техжурнал",
+        "technological log"
+      ]
+    },
+    {
+      "concept": "PERFORMANCE_CENTER",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 6,
+      "aliases": [
+        "центр управления производительностью",
+        "цуп",
+        "performance center"
+      ]
+    },
+    {
+      "concept": "APDEX",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 4,
+      "aliases": [
+        "apdex",
+        "индекс apdex"
+      ]
+    },
+    {
+      "concept": "CLUSTER_ADMIN",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 5,
+      "aliases": [
+        "кластер серверов 1с",
+        "администрирование кластера 1с",
+        "1c cluster"
+      ]
+    },
+    {
+      "concept": "RAC_RAS",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 5,
+      "aliases": [
+        "rac",
+        "ras",
+        "администрирование rac ras"
+      ]
+    },
+    {
+      "concept": "LICENSE_SERVER",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 3,
+      "aliases": [
+        "сервер лицензирования 1с",
+        "лицензирование 1с"
+      ]
+    },
+    {
+      "concept": "BACKUPS",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 3,
+      "aliases": [
+        "резервное копирование 1с",
+        "backup 1c"
+      ]
+    },
+    {
+      "concept": "DB_INDEXES",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 4,
+      "aliases": [
+        "индексы sql",
+        "индексы базы данных",
+        "database indexes"
+      ]
+    },
+    {
+      "concept": "DEADLOCKS",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 4,
+      "aliases": [
+        "взаимоблокировки",
+        "deadlocks",
+        "блокировки sql"
+      ]
+    },
+    {
+      "concept": "LOAD_TESTING",
+      "category": "PERFORMANCE_ADMIN",
+      "weight": 4,
+      "aliases": [
+        "нагрузочное тестирование 1с",
+        "тестирование производительности"
+      ]
+    },
+    {
+      "concept": "EDT",
+      "category": "TOOLS_CICD",
+      "weight": 9,
+      "aliases": [
+        "1с edt",
+        "edt",
+        "1c enterprise development tools"
+      ]
+    },
+    {
+      "concept": "GIT",
+      "category": "TOOLS_CICD",
+      "weight": 7,
+      "aliases": [
+        "git",
+        "gitlab",
+        "github",
+        "bitbucket"
+      ]
+    },
+    {
+      "concept": "STORAGE",
+      "category": "TOOLS_CICD",
+      "weight": 7,
+      "aliases": [
+        "хранилище конфигурации",
+        "хранилище 1с",
+        "configuration repository"
+      ]
+    },
+    {
+      "concept": "VANESSA_AUTOMATION",
+      "category": "TOOLS_CICD",
+      "weight": 6,
+      "aliases": [
+        "vanessa automation",
+        "ванесса automation",
+        "vanessa"
+      ]
+    },
+    {
+      "concept": "BSL_LS",
+      "category": "TOOLS_CICD",
+      "weight": 4,
+      "aliases": [
+        "bsl language server",
+        "bsl ls",
+        "bsl-language-server"
+      ]
+    },
+    {
+      "concept": "SONARQUBE",
+      "category": "TOOLS_CICD",
+      "weight": 3,
+      "aliases": [
+        "sonarqube",
+        "sonar qube"
+      ]
+    },
+    {
+      "concept": "ONESCRIPT",
+      "category": "TOOLS_CICD",
+      "weight": 5,
+      "aliases": [
+        "onescript",
+        "one script",
+        "oscript"
+      ]
+    },
+    {
+      "concept": "GITSYNC",
+      "category": "TOOLS_CICD",
+      "weight": 5,
+      "aliases": [
+        "gitsync",
+        "git sync 1c"
+      ]
+    },
+    {
+      "concept": "RING",
+      "category": "TOOLS_CICD",
+      "weight": 3,
+      "aliases": [
+        "1c ring",
+        "ring 1c"
+      ]
+    },
+    {
+      "concept": "JENKINS",
+      "category": "TOOLS_CICD",
+      "weight": 3,
+      "aliases": [
+        "jenkins"
+      ]
+    },
+    {
+      "concept": "GITLAB_CI",
+      "category": "TOOLS_CICD",
+      "weight": 4,
+      "aliases": [
+        "gitlab ci",
+        "gitlab ci/cd"
+      ]
+    },
+    {
+      "concept": "CI_CD",
+      "category": "TOOLS_CICD",
+      "weight": 5,
+      "aliases": [
+        "ci/cd",
+        "ci cd",
+        "непрерывная интеграция",
+        "непрерывная доставка"
+      ]
+    },
+    {
+      "concept": "DOCKER",
+      "category": "TOOLS_CICD",
+      "weight": 3,
+      "aliases": [
+        "docker",
+        "докер"
+      ]
+    },
+    {
+      "concept": "YAXUNIT",
+      "category": "TOOLS_CICD",
+      "weight": 5,
+      "aliases": [
+        "yaxunit",
+        "xunitfor1c",
+        "xunit for 1c"
+      ]
+    },
+    {
+      "concept": "ACCOUNTING",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 6,
+      "aliases": [
+        "бухгалтерский учет",
+        "бухгалтерский учёт",
+        "accounting"
+      ]
+    },
+    {
+      "concept": "MANAGEMENT_ACCOUNTING",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "управленческий учет",
+        "управленческий учёт"
+      ]
+    },
+    {
+      "concept": "TAX_ACCOUNTING",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 4,
+      "aliases": [
+        "налоговый учет",
+        "налоговый учёт"
+      ]
+    },
+    {
+      "concept": "PAYROLL",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 6,
+      "aliases": [
+        "расчет заработной платы",
+        "расчёт заработной платы",
+        "зарплата",
+        "payroll"
+      ]
+    },
+    {
+      "concept": "HR",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "кадровый учет",
+        "кадровый учёт",
+        "hr processes"
+      ]
+    },
+    {
+      "concept": "WAREHOUSE",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 6,
+      "aliases": [
+        "складской учет",
+        "складской учёт",
+        "warehouse"
+      ]
+    },
+    {
+      "concept": "SALES",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "продажи",
+        "учет продаж",
+        "sales processes"
+      ]
+    },
+    {
+      "concept": "PURCHASING",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "закупки",
+        "procurement",
+        "purchasing"
+      ]
+    },
+    {
+      "concept": "PRODUCTION",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 7,
+      "aliases": [
+        "производственный учет",
+        "производственный учёт",
+        "производство",
+        "manufacturing"
+      ]
+    },
+    {
+      "concept": "TREASURY",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "казначейство",
+        "treasury"
+      ]
+    },
+    {
+      "concept": "BUDGETING",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 5,
+      "aliases": [
+        "бюджетирование",
+        "budgeting"
+      ]
+    },
+    {
+      "concept": "IFRS",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 4,
+      "aliases": [
+        "мсфо",
+        "ifrs"
+      ]
+    },
+    {
+      "concept": "CRM_DOMAIN",
+      "category": "BUSINESS_DOMAIN",
+      "weight": 4,
+      "aliases": [
+        "crm процессы",
+        "управление взаимоотношениями с клиентами"
+      ]
+    },
+    {
+      "concept": "UNIT_TESTS",
+      "category": "TESTING_QUALITY",
+      "weight": 6,
+      "aliases": [
+        "юнит-тесты 1с",
+        "unit tests 1c",
+        "модульные тесты 1с"
+      ]
+    },
+    {
+      "concept": "BDD",
+      "category": "TESTING_QUALITY",
+      "weight": 5,
+      "aliases": [
+        "bdd",
+        "behavior driven development",
+        "gherkin",
+        "сценарное тестирование"
+      ]
+    },
+    {
+      "concept": "CODE_REVIEW",
+      "category": "TESTING_QUALITY",
+      "weight": 7,
+      "aliases": [
+        "code review",
+        "ревью кода",
+        "код-ревью",
+        "проверка кода"
+      ]
+    },
+    {
+      "concept": "STANDARDS",
+      "category": "TESTING_QUALITY",
+      "weight": 7,
+      "aliases": [
+        "стандарты разработки 1с",
+        "стандарты кодирования 1с",
+        "стандарты 1с"
+      ]
+    },
+    {
+      "concept": "ITS_STANDARDS",
+      "category": "TESTING_QUALITY",
+      "weight": 5,
+      "aliases": [
+        "итс стандарты разработки",
+        "1с итс стандарты"
+      ]
+    },
+    {
+      "concept": "STATIC_ANALYSIS",
+      "category": "TESTING_QUALITY",
+      "weight": 5,
+      "aliases": [
+        "статический анализ кода 1с",
+        "static analysis 1c"
+      ]
+    },
+    {
+      "concept": "REGRESSION_TESTING",
+      "category": "TESTING_QUALITY",
+      "weight": 4,
+      "aliases": [
+        "регрессионное тестирование 1с",
+        "регрессионные тесты"
+      ]
+    },
+    {
+      "concept": "TECHNICAL_DESIGN",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 7,
+      "aliases": [
+        "техническое проектирование 1с",
+        "проектирование решения 1с",
+        "solution design 1c"
+      ]
+    },
+    {
+      "concept": "ARCHITECTURE",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 8,
+      "aliases": [
+        "архитектура 1с",
+        "архитектура решения 1с",
+        "1c architecture"
+      ]
+    },
+    {
+      "concept": "MENTORING",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "менторинг",
+        "наставничество",
+        "обучение разработчиков 1с"
+      ]
+    },
+    {
+      "concept": "TECH_LEADERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 7,
+      "aliases": [
+        "техническое лидерство",
+        "техлид 1с",
+        "ведение команды разработчиков 1с"
+      ]
+    },
+    {
+      "concept": "CODE_REVIEW_RESPONSIBILITY",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 5,
+      "aliases": [
+        "проведение code review",
+        "ревью разработчиков 1с"
+      ]
+    },
+    {
+      "concept": "ESTIMATION",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "оценка трудозатрат",
+        "оценка задач",
+        "task estimation"
+      ]
+    },
+    {
+      "concept": "REQUIREMENTS_ANALYSIS",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 5,
+      "aliases": [
+        "анализ требований",
+        "сбор требований",
+        "requirements analysis"
+      ]
+    },
+    {
+      "concept": "TASK_DECOMPOSITION",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "декомпозиция задач",
+        "постановка задач разработчикам"
+      ]
+    },
+    {
+      "concept": "OWNERSHIP",
+      "category": "SENIORITY_RESPONSIBILITY",
+      "weight": 4,
+      "aliases": [
+        "ответственность за результат",
+        "ведение задачи от постановки до внедрения",
+        "end-to-end ownership"
+      ]
+    }
+  ],
+  "outputBands": [
+    {
+      "min": 90,
+      "max": 100,
+      "code": "EXCELLENT_MATCH",
+      "labelRu": "Отличное совпадение"
+    },
+    {
+      "min": 80,
+      "max": 89.99,
+      "code": "STRONG_MATCH",
+      "labelRu": "Сильное совпадение"
+    },
+    {
+      "min": 70,
+      "max": 79.99,
+      "code": "GOOD_MATCH",
+      "labelRu": "Хорошее совпадение"
+    },
+    {
+      "min": 55,
+      "max": 69.99,
+      "code": "PARTIAL_MATCH",
+      "labelRu": "Частичное совпадение"
+    },
+    {
+      "min": 40,
+      "max": 54.99,
+      "code": "WEAK_MATCH",
+      "labelRu": "Слабое совпадение"
+    },
+    {
+      "min": 0,
+      "max": 39.99,
+      "code": "NOT_RELEVANT",
+      "labelRu": "Нерелевантно"
+    }
+  ],
+  "recommendedOutput": {
+    "fields": [
+      "score",
+      "level",
+      "hardMatchScore",
+      "categoryScores",
+      "matched",
+      "partialMatches",
+      "missingImportant",
+      "negativeSignals",
+      "gatesApplied",
+      "experienceMatch",
+      "seniorityMatch",
+      "summary"
+    ],
+    "example": {
+      "score": 89,
+      "level": "STRONG_MATCH",
+      "hardMatchScore": 96,
+      "matched": [
+        "ONE_C_PLATFORM",
+        "ONE_C_8_3",
+        "ONE_C_LANGUAGE",
+        "ONE_C_QUERY_LANGUAGE",
+        "DCS_SKD",
+        "EXTENSIONS",
+        "BSP",
+        "ERP",
+        "HTTP_SERVICES",
+        "GIT"
+      ],
+      "partialMatches": [
+        {
+          "required": "ERP",
+          "found": "KA",
+          "coefficient": 0.7
+        }
+      ],
+      "missingImportant": [],
+      "negativeSignals": [],
+      "gatesApplied": [],
+      "summary": "Сильное совпадение по основному стеку 1С-разработки."
+    }
+  }
+}

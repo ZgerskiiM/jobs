@@ -94,6 +94,12 @@ function scoringDetectRole(title, description, concepts) {
     if (activeSignals >= 2 && /инфраструктур|эксплуатац|депло|мониторинг|контейнер|облачн|reliability/iu.test(description)) return { primary: 'DEVOPS', match: 0.75, confidence: 0.75 }
     return { primary: 'UNKNOWN', match: 0, confidence: 0.4 }
   }
+  if (profile === 'ONE_C_DEVELOPER') {
+    if (/(?:1с|1c)\s*(?:программист|разработчик|developer)|программист\s*(?:1с|1c)/iu.test(title)) return { primary: 'ONE_C_DEVELOPER', match: 0.9, confidence: 0.9 }
+    const activeSignals = ['ONE_C_PLATFORM', 'ONE_C_LANGUAGE', 'ONE_C_QUERY_LANGUAGE', 'CONFIGURATOR', 'BSP', 'DCS_SKD'].filter((concept) => concepts[concept]).length
+    if (activeSignals >= 2 && /(?:1с|1c)|конфигурац|бухгалтер|уч[её]т/iu.test(description)) return { primary: 'ONE_C_DEVELOPER', match: 0.75, confidence: 0.75 }
+    return { primary: 'UNKNOWN', match: 0, confidence: 0.4 }
+  }
   if (/java\s+(?:developer|engineer|разработчик)|java-разработчик/iu.test(title)) return { primary: 'BACKEND', match: 0.8, confidence: 0.8 }
   const activeSignals = ['SPRING_BOOT', 'MICROSERVICES', 'REST', 'GRPC', 'WEBFLUX'].filter((concept) => concepts[concept]).length
   if (activeSignals >= 2 && /разработ|сервис|backend|back-end|api|микросервис/iu.test(description)) return { primary: 'BACKEND', match: 0.8, confidence: 0.75 }
@@ -243,6 +249,18 @@ function scoringGateResults(profile, features) {
     }
     return (SCORING_CONFIG.gates || []).filter((gate) => conditions[gate.id]).map((gate) => ({ id: gate.id, maxScore: Number(gate.maxScore), reason: gate.reason }))
   }
+  if (String(SCORING_CONFIG.meta?.profile || '').toUpperCase() === 'ONE_C_DEVELOPER') {
+    const oneCMatch = Number(features.concepts.ONE_C_PLATFORM?.match || 0)
+    const roleMatch = Number(features.role?.match || 0)
+    const queryIsMustHave = (profile.requirements || []).some((requirement) => requirement.concept === 'ONE_C_QUERY_LANGUAGE' && requirement.importance === 'MUST_HAVE')
+    const conditions = {
+      ONE_C_PRIMARY_MISSING: oneCMatch < 0.5 && roleMatch < 0.5,
+      DEVELOPER_ROLE_MISSING: roleMatch < 0.5,
+      QUERY_LANGUAGE_CRITICAL_MISSING: queryIsMustHave && Number(features.concepts.ONE_C_QUERY_LANGUAGE?.match || 0) < 0.5,
+      WRONG_PRIMARY_ROLE: (features.negativeSignals || []).some((signal) => signal.primaryRoleConflict),
+    }
+    return (SCORING_CONFIG.gates || []).filter((gate) => conditions[gate.id]).map((gate) => ({ id: gate.id, maxScore: Number(gate.maxScore), reason: gate.reason }))
+  }
   const javaMatch = Number(features.concepts.JAVA?.match || 0)
   const frameworkMatch = Math.max(...['SPRING_BOOT', 'SPRING', 'QUARKUS', 'MICRONAUT'].map((concept) => Number(features.concepts[concept]?.match || 0)))
   const wrongRole = (features.negativeSignals || []).some((signal) => signal.primaryRoleConflict)
@@ -271,7 +289,8 @@ function scoringSeniority(candidate, vacancy) {
 
 function scoringSummary(level, gates) {
   if (gates.length) return `Низкая релевантность: ${gates.map((gate) => gate.reason).join('; ')}`
-  const profileName = String(SCORING_CONFIG.meta?.profile || '').toUpperCase() === 'DEVOPS' ? 'DevOps/SRE' : 'Java Backend'
+  const profileCode = String(SCORING_CONFIG.meta?.profile || '').toUpperCase()
+  const profileName = profileCode === 'DEVOPS' ? 'DevOps/SRE' : profileCode === 'ONE_C_DEVELOPER' ? '1С-разработки' : 'Java Backend'
   return {
     EXCELLENT_MATCH: `Отличное совпадение по основному ${profileName} стеку.`,
     STRONG_MATCH: `Сильное совпадение по основному ${profileName} стеку.`,
@@ -356,11 +375,15 @@ function scoringCandidateProfile(account) {
     const requirementConcept = String(concept.concept).toUpperCase()
     const mustHave = profile === 'DEVOPS'
       ? ['LINUX', 'KUBERNETES', 'TERRAFORM', 'ANSIBLE'].includes(requirementConcept)
-      : requirementConcept === 'JAVA'
+      : profile === 'ONE_C_DEVELOPER'
+        ? ['ONE_C_PLATFORM', 'ONE_C_QUERY_LANGUAGE'].includes(requirementConcept)
+        : requirementConcept === 'JAVA'
     requirements.push({ concept: requirementConcept, importance: mustHave ? 'MUST_HAVE' : 'STRONG_PREFERENCE' })
   }
   const role = profile === 'DEVOPS'
     ? 'DEVOPS'
+    : profile === 'ONE_C_DEVELOPER'
+      ? 'ONE_C_DEVELOPER'
     : /backend|back-end|java|сервер|бэкенд|разработчик/iu.test(position) || onboarding.roles?.some((value) => /backend|back-end|java/iu.test(value)) ? 'BACKEND' : 'UNKNOWN'
   const levelAliases = SCORING_CONFIG.seniority?.aliases || {}
   const targetSeniority = Object.entries(levelAliases).find(([, aliases]) => aliases.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(position)))?.[0]

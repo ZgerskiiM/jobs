@@ -198,7 +198,8 @@ export default function Profile() {
     setTargetRoleSaving(true);
     try {
       await updateResumeDetails({ targetRole });
-      setResumeNotice(`Профиль «${targetRole === "DEVOPS" ? "DevOps / SRE" : "Java Backend"}» выбран для этого резюме`);
+      const targetRoleLabel = targetRole === "DEVOPS" ? "DevOps / SRE" : targetRole === "ONE_C_DEVELOPER" ? "1С-разработчик" : "Java Backend";
+      setResumeNotice(`Профиль «${targetRoleLabel}» выбран для этого резюме`);
       setShowMatches(false);
     } catch (requestError) {
       setResumeError(requestError instanceof Error ? requestError.message : "Не удалось сохранить специализацию");
@@ -550,7 +551,7 @@ export default function Profile() {
                   >
                     <span className="min-w-0">
                       <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
-                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : "Java Backend"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : item.targetRole === "ONE_C_DEVELOPER" ? "1С-разработчик" : "Java Backend"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
                     </span>
                     <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
                   </button>
@@ -648,10 +649,11 @@ export default function Profile() {
                   <div className="font-mono text-xs text-[#33ff77] uppercase tracking-widest">// специализация для поиска</div>
                   <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Она определяет, по какому стеку оценивать вакансии для этого резюме</div>
                 </div>
-                <div role="group" aria-label="Специализация резюме" className="p-4 bg-[#0e1018] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div role="group" aria-label="Специализация резюме" className="p-4 bg-[#0e1018] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {([
                     { value: "JAVA_BACKEND", title: "Java Backend", text: "Java, Spring, базы данных и backend-архитектура" },
                     { value: "DEVOPS", title: "DevOps / SRE", text: "Linux, Kubernetes, облака, CI/CD и инфраструктура" },
+                    { value: "ONE_C_DEVELOPER", title: "1С-разработчик", text: "1С:Предприятие, конфигурации, запросы и интеграции" },
                   ] as const).map((option) => {
                     const selected = (resumeData.targetRole ?? "JAVA_BACKEND") === option.value;
                     return (

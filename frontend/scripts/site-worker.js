@@ -249,7 +249,7 @@ function scoringVacancyId(vacancy) {
 }
 
 function scoringProfileKey(resume) {
-  return resume?.targetRole === 'DEVOPS' ? 'DEVOPS' : 'JAVA_BACKEND'
+  return ['DEVOPS', 'ONE_C_DEVELOPER'].includes(resume?.targetRole) ? resume.targetRole : 'JAVA_BACKEND'
 }
 
 function scoringEngineFor(resume) {
@@ -382,7 +382,7 @@ async function savedJobs(request, env, user) {
   return json({ savedJobIds, savedJobNotes: notes })
 }
 
-const RESUME_ANALYSIS_VERSION = 4
+const RESUME_ANALYSIS_VERSION = 5
 const RESUME_SKILLS = [
   ['Python', 'Языки', ['python', 'питон']], ['JavaScript', 'Языки', ['javascript', 'js']], ['TypeScript', 'Языки', ['typescript', 'ts']],
   ['Go', 'Языки', ['go', 'golang', 'го']], ['Rust', 'Языки', ['rust']], ['Java', 'Языки', ['java']], ['Kotlin', 'Языки', ['kotlin']],
@@ -404,8 +404,13 @@ const RESUME_SKILLS = [
   ['Agile', 'Практики', ['agile']], ['Scrum', 'Практики', ['scrum']], ['JUnit', 'Практики', ['junit']], ['Mockito', 'Практики', ['mockito']],
   ['Testcontainers', 'Практики', ['testcontainers']], ['Maven', 'Практики', ['maven']], ['Gradle', 'Практики', ['gradle']], ['Jenkins', 'Практики', ['jenkins']],
   ['Liquibase', 'Практики', ['liquibase']], ['ELK', 'Практики', ['elk']], ['SOLID', 'Практики', ['solid']], ['Selenium', 'Практики', ['selenium']], ['Playwright', 'Практики', ['playwright']],
+  ['1С:Предприятие', '1С', ['1с:предприятие', '1с предприятие', '1c:enterprise', '1c enterprise']], ['1С 8.3', '1С', ['1с 8.3', '1с:предприятие 8.3', '1c 8.3']],
+  ['Встроенный язык 1С', '1С', ['встроенный язык 1с', 'язык 1с', '1c language']], ['Язык запросов 1С', '1С', ['язык запросов 1с', 'запросы 1с', '1c query language']],
+  ['Управляемые формы', '1С', ['управляемые формы', 'управляемая форма']], ['БСП', '1С', ['библиотека стандартных подсистем']], ['СКД', '1С', ['система компоновки данных']],
+  ['1С:ERP', '1С', ['1с:erp', '1с erp', '1c erp']], ['1С:УТ', '1С', ['1с:ут', '1с ут']], ['1С:ЗУП', '1С', ['1с:зуп', '1с зуп']], ['1С:Бухгалтерия', '1С', ['1с:бп', '1с бухгалтерия']],
+  ['Конвертация данных', '1С', ['конвертация данных', 'кд 2', 'кд 3']], ['EDT', '1С', ['1с edt', '1c enterprise development tools']], ['Vanessa Automation', '1С', ['vanessa automation', 'ванесса automation']],
 ]
-const RESUME_POSITION_RE = /developer|engineer|разработчик|инженер|аналитик|analyst|designer|дизайнер|manager|менеджер|devops|sre|qa|тестировщик|data scientist|machine learning/i
+const RESUME_POSITION_RE = /developer|engineer|разработчик|программист|инженер|аналитик|analyst|designer|дизайнер|manager|менеджер|devops|sre|qa|тестировщик|data scientist|machine learning|1с|1c/i
 
 function hexNumber(bytes, offset, length) {
   let value = 0
@@ -646,7 +651,7 @@ async function resume(request, env, user) {
       const updated = { ...record }
       if (Array.isArray(data.skills)) updated.skills = data.skills
       for (const field of editable) if (data[field] !== undefined) updated[field] = String(data[field]).trim()
-      if (!['JAVA_BACKEND', 'DEVOPS'].includes(updated.targetRole)) updated.targetRole = 'JAVA_BACKEND'
+      if (!['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER'].includes(updated.targetRole)) updated.targetRole = 'JAVA_BACKEND'
       return updated
     })
     const saved = await saveResumeState(env, user.id, updatedRecords, nextActive.id)

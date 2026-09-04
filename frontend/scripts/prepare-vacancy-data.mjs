@@ -10,6 +10,7 @@ const ozonSnapshotPath = path.resolve(process.cwd(), 'data/ozon-tech-vacancies.j
 const taxonomyPaths = {
   JAVA_BACKEND: path.resolve(process.cwd(), '../config/java_backend_vacancy_relevance_ru_v1.json'),
   DEVOPS: path.resolve(process.cwd(), '../config/devops_vacancy_relevance_ru_v1.json'),
+  ONE_C_DEVELOPER: path.resolve(process.cwd(), '../config/1c_developer_vacancy_relevance_ru_v1.json'),
 };
 const scoringEnginePath = path.resolve(process.cwd(), 'scripts/vacancy-scoring.js');
 const source = await readFile(sourcePath, 'utf8');

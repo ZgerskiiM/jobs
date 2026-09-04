@@ -16,6 +16,7 @@ await mkdir(server, { recursive: true })
 const taxonomies = {
   JAVA_BACKEND: JSON.parse(await readFile(join(root, '..', 'config', 'java_backend_vacancy_relevance_ru_v1.json'), 'utf8')),
   DEVOPS: JSON.parse(await readFile(join(root, '..', 'config', 'devops_vacancy_relevance_ru_v1.json'), 'utf8')),
+  ONE_C_DEVELOPER: JSON.parse(await readFile(join(root, '..', 'config', '1c_developer_vacancy_relevance_ru_v1.json'), 'utf8')),
 }
 const scoring = await readFile(join(root, 'scripts', 'vacancy-scoring.js'), 'utf8')
 const worker = await readFile(join(root, 'scripts', 'site-worker.js'), 'utf8')

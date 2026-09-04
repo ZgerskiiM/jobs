@@ -16,7 +16,7 @@ export interface ResumeData {
   contactEmail?: string;
   contactPhone?: string;
   contactTelegram?: string;
-  targetRole?: "JAVA_BACKEND" | "DEVOPS";
+  targetRole?: "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER";
   hasFile?: boolean;
   skills: ResumeSkill[];
   isActive?: boolean;
@@ -96,7 +96,7 @@ export const accountApi = {
     body.append("resume", file);
     return request<{ resume: ResumeData; resumes: ResumeData[] }>("/api/profile/resume/", { method: "POST", body });
   },
-  patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string; targetRole?: "JAVA_BACKEND" | "DEVOPS" }) =>
+  patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string; targetRole?: "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER" }) =>
     request<{ resume: ResumeData | null; resumes: ResumeData[] }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify(body) }),
   downloadExtension: async () => {
     const response = await fetch(`${API_ORIGIN}/api/extension/download/`, { credentials: "include" });
