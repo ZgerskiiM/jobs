@@ -126,8 +126,13 @@
     return vacancyPathPattern.test(location.pathname);
   }
 
-  function showAutofillOffer() {
+  async function showAutofillOffer() {
     if (!likelyVacancyPage() || document.querySelector("[data-jobs-dev-offer='true']")) return;
+    const accountResponse = await browser.runtime.sendMessage({ type: "get-account" });
+    if (!accountResponse?.ok) return;
+    const account = accountResponse.account;
+    const resumes = account?.resumes?.length ? account.resumes : account?.resume ? [account.resume] : [];
+    if (!(account?.resume || resumes.find((item) => item.isActive) || resumes[0])) return;
     const host = document.createElement("section");
     host.dataset.jobsDevOffer = "true";
     host.setAttribute("aria-live", "polite");
@@ -141,7 +146,7 @@
     accept.addEventListener("click", async () => {
       accept.disabled = true;
       accept.textContent = "получаем резюме...";
-      const result = await autofillFromOffer();
+      const result = await autofillFromOffer(account);
       if (!result.ok) {
         accept.disabled = false;
         accept.textContent = "повторить заполнение →";
@@ -152,10 +157,7 @@
     });
   }
 
-  async function autofillFromOffer() {
-    const accountResponse = await browser.runtime.sendMessage({ type: "get-account" });
-    if (!accountResponse?.ok) return { ok: false, error: accountResponse?.error || "Не удалось загрузить профиль jobs.dev" };
-    const account = accountResponse.account;
+  async function autofillFromOffer(account) {
     const resumes = account?.resumes?.length ? account.resumes : account?.resume ? [account.resume] : [];
     const resume = account?.resume || resumes.find((item) => item.isActive) || resumes[0];
     if (!resume) return { ok: false, error: "В профиле jobs.dev пока нет резюме" };

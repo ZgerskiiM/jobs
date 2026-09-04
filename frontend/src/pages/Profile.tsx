@@ -4,6 +4,7 @@ import { useAuth, OnboardingData, UserSettings, ResumeSkill, type ResumeData } f
 import QuickApplyModal from "../components/QuickApplyModal";
 import { type Job } from "../data";
 import { useVacancyData } from "../context/VacancyDataContext";
+import { accountApi } from "../api";
 
 // Jobs that match confirmed skills
 const MATCHED_JOBS = [
@@ -105,6 +106,8 @@ export default function Profile() {
   const [contactSaved, setContactSaved] = useState(false);
   const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
+  const [extensionDownloading, setExtensionDownloading] = useState(false);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
   const resumeFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -128,6 +131,24 @@ export default function Profile() {
   }, []);
 
   const openResumePicker = () => resumeFileRef.current?.click();
+
+  const handleExtensionDownload = async () => {
+    setExtensionError(null);
+    setExtensionDownloading(true);
+    try {
+      const blob = await accountApi.downloadExtension();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "jobs-dev-zen-extension.zip";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (requestError) {
+      setExtensionError(requestError instanceof Error ? requestError.message : "Не удалось скачать расширение");
+    } finally {
+      setExtensionDownloading(false);
+    }
+  };
 
   const handleResumeFile = async (file: File) => {
     const extension = file.name.toLowerCase().split(".").pop();
@@ -463,6 +484,19 @@ export default function Profile() {
       {tab === "resume" && (
         <div>
           <input ref={resumeFileRef} id="resume-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeInputChange} />
+          <div className="mb-6 border border-[rgba(0,212,255,0.14)] rounded-sm overflow-hidden">
+            <div className="px-5 py-3 bg-[rgba(0,212,255,0.04)] border-b border-[rgba(0,212,255,0.1)]">
+              <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// расширение для быстрого отклика</div>
+              <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Показывает подсказку на страницах вакансий и заполняет форму выбранным резюме</div>
+            </div>
+            <div className="p-5 bg-[#0e1018] flex items-center justify-between gap-4 flex-wrap">
+              <div className="font-mono text-[11px] text-[#5a6070]">доступно для авторизованного аккаунта · Zen / Firefox</div>
+              <button type="button" onClick={() => void handleExtensionDownload()} disabled={extensionDownloading} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
+                {extensionDownloading ? "готовим архив..." : "скачать расширение →"}
+              </button>
+            </div>
+            {extensionError && <div role="alert" className="px-5 pb-4 bg-[#0e1018] font-sans text-xs text-[#ff3e78]">{extensionError}</div>}
+          </div>
           {resumeNotice && (
             <div role="status" className="mb-5 border border-[rgba(51,255,119,0.25)] bg-[rgba(51,255,119,0.06)] rounded-sm px-4 py-3 flex items-center justify-between gap-4">
               <div className="font-sans text-xs text-[#e8eaf0]">{resumeNotice}</div>

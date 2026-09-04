@@ -227,6 +227,16 @@ async function resumeFile(request, env, user) {
   } })
 }
 
+async function extensionDownload(request, env) {
+  const asset = await env.ASSETS.fetch(new Request(new URL('/jobs-dev-zen-extension.zip', request.url), { method: 'GET' }))
+  if (!asset.ok) return json({ message: 'Архив расширения пока недоступен' }, 503)
+  const headers = new Headers(asset.headers)
+  headers.set('Content-Type', 'application/zip')
+  headers.set('Content-Disposition', 'attachment; filename="jobs-dev-zen-extension.zip"')
+  headers.set('Cache-Control', 'private, no-store')
+  return new Response(asset.body, { status: 200, headers })
+}
+
 async function requireUser(request, env) {
   const user = await currentUser(request, env)
   return user ? { user } : { response: json({ message: 'Требуется вход' }, 401) }
@@ -748,6 +758,7 @@ async function routeApi(request, env) {
   if (path === '/api/profile/hh/start/' && request.method === 'POST') return hhStart(request, env, user)
   if (path === '/api/profile/hh/callback/' && request.method === 'GET') return hhCallback(request, env, user)
   if (path === '/api/profile/resume/file/' && request.method === 'GET') return resumeFile(request, env, user)
+  if (path === '/api/extension/download/' && request.method === 'GET') return extensionDownload(request, env)
   if (path === '/api/auth/password/' && request.method === 'POST') {
     const data = await body(request)
     if (String(data.new || '').length < 8 || !(await verifyPassword(String(data.current || ''), user.password_hash))) return json({ message: 'Неверный текущий пароль или новый пароль слишком короткий' }, 400)
@@ -775,6 +786,7 @@ async function fetchHandler(request, env) {
   if (url.pathname.startsWith('/api/')) {
     try { return extensionCors(request, await routeApi(request, env)) } catch (error) { console.error(error); return extensionCors(request, json({ message: 'Внутренняя ошибка сервера' }, 500)) }
   }
+  if (url.pathname === '/jobs-dev-zen-extension.zip') return new Response('Not found', { status: 404 })
   let response = await env.ASSETS.fetch(request)
   if (response.status === 404 && request.method === 'GET' && request.headers.get('accept')?.includes('text/html')) response = await env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))
   const headers = new Headers(response.headers)

@@ -84,6 +84,14 @@ export const accountApi = {
   },
   patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string }) =>
     request<{ resume: ResumeData | null; resumes: ResumeData[] }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify(body) }),
+  downloadExtension: async () => {
+    const response = await fetch(`${API_ORIGIN}/api/extension/download/`, { credentials: "include" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message ?? "Не удалось скачать расширение");
+    }
+    return response.blob();
+  },
   deleteResume: (id?: string) => request<{ resume: ResumeData | null; resumes: ResumeData[] }>(`/api/profile/resume/${id ? `?id=${encodeURIComponent(id)}` : ""}`, { method: "DELETE" }),
   startHhImport: () => request<{ url: string }>("/api/profile/hh/start/", { method: "POST", body: "{}" }),
   createApplication: (application: Application) =>

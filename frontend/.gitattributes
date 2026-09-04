@@ -81,6 +81,9 @@
 *.woff2              filter=lfs diff=lfs merge=lfs -text
 *.eot                filter=lfs diff=lfs merge=lfs -text
 
+# The authenticated extension download is a small deploy asset, not an LFS object.
+/public/jobs-dev-zen-extension.zip -filter -diff -merge
+
 # ---------------------------------------------------------------------------
 # Data & Machine Learning
 # ---------------------------------------------------------------------------
