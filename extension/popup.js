@@ -60,8 +60,13 @@ async function fetchAccount() {
 }
 
 function showAuthState(error = "") {
+  account = null;
   authPanel.hidden = false;
   resumePanel.hidden = true;
+  resumeSelect.replaceChildren(new Option("войдите в jobs.dev", ""));
+  resumeSelect.disabled = true;
+  resumeMeta.textContent = "";
+  fillButton.disabled = true;
   pageStatus.textContent = error || "Войди в jobs.dev, чтобы использовать резюме";
   pageStatus.className = "muted";
 }
@@ -122,19 +127,15 @@ async function init() {
     const isWebPage = /^https?:\/\//i.test(activeTab?.url || "");
     if (!isWebPage) {
       pageStatus.textContent = "Открой обычную веб-страницу с формой отклика";
-      throw new Error("На этой вкладке нельзя заполнить форму.");
-    }
-    showAccountState(await fetchAccount());
-  } catch (error) {
-    if (error instanceof Error && /войд|авторизац|требуется вход/i.test(error.message)) {
-      showAuthState(error.message);
-    } else {
-      pageStatus.textContent = error instanceof Error ? error.message : "Не удалось загрузить профиль";
       pageStatus.className = "muted error";
       fillButton.disabled = true;
       authPanel.hidden = true;
       resumePanel.hidden = false;
+      return;
     }
+    showAccountState(await fetchAccount());
+  } catch (error) {
+    showAuthState(error instanceof Error ? error.message : "Не удалось загрузить профиль");
   }
 }
 
