@@ -55,26 +55,20 @@ async function fetchAccount() {
   return body;
 }
 
-async function fetchResumeFile(resume) {
-  if (!resume?.id || resume.source === "hh") return null;
-  const response = await fetch(`${API_ORIGIN}/api/profile/resume/file/?id=${encodeURIComponent(resume.id)}`, { credentials: "include" });
-  if (!response.ok) return null;
-  return response.arrayBuffer();
-}
-
 async function fillCurrentPage() {
   const resume = selectedResume();
   if (!resume || !activeTab?.id) return;
   fillButton.disabled = true;
   setResult("получаем файл резюме...");
   try {
-    const fileBytes = await fetchResumeFile(resume);
+    const preparedFile = await api.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, fileName: resume.fileName });
     await api.tabs.executeScript(activeTab.id, { file: "content-script.js" });
     const response = await api.tabs.sendMessage(activeTab.id, {
       type: "fill-resume",
       resume,
       coverLetter: account.coverLetter || "",
-      fileBytes,
+      fileRequestId: preparedFile?.ok ? preparedFile.requestId : null,
+      fileError: preparedFile?.error || "",
     });
     setResult(response?.message || "форма заполнена — проверь данные перед отправкой", "success");
   } catch (error) {

@@ -78,6 +78,24 @@
     }
   }
 
+  async function loadFile(requestId) {
+    if (!requestId) return null;
+    const meta = await browser.runtime.sendMessage({ type: "file-meta", requestId });
+    if (!meta?.ok) return null;
+    const bytes = new Uint8Array(meta.size);
+    const chunks = Math.ceil(meta.size / meta.chunkSize);
+    try {
+      for (let index = 0; index < chunks; index += 1) {
+        const chunk = await browser.runtime.sendMessage({ type: "file-chunk", requestId, index });
+        if (!chunk?.ok) return null;
+        bytes.set(new Uint8Array(chunk.bytes), index * meta.chunkSize);
+      }
+      return { bytes, fileName: meta.fileName, type: meta.type };
+    } finally {
+      await browser.runtime.sendMessage({ type: "release-file", requestId }).catch(() => undefined);
+    }
+  }
+
   function showPanel(message, success = true) {
     const host = document.createElement("section");
     host.setAttribute("aria-live", "polite");
@@ -103,17 +121,16 @@
     const telegram = controlNearLabel(telegramPattern, root) || controlByAttributes(telegramPattern, root);
     const about = controlNearLabel(aboutPattern, root) || controlByAttributes(aboutPattern, root) || controls.find((element) => element.tagName === "TEXTAREA" || element.isContentEditable);
     const fileInput = root.querySelector("input[type='file']") || document.querySelector("input[type='file']");
+    const storedFile = await loadFile(message.fileRequestId);
     const filled = [setValue(first, name.firstName), setValue(last, name.lastName), setValue(email, resume.contactEmail), setValue(phone, resume.contactPhone), setValue(telegram, resume.contactTelegram), setValue(about, message.coverLetter)].filter(Boolean).length;
-    const attached = attachFile(fileInput, message.fileBytes, resume.fileName, /\.docx$/i.test(resume.fileName || "") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf");
+    const attached = attachFile(fileInput, storedFile?.bytes, storedFile?.fileName || resume.fileName, storedFile?.type || (/\.docx$/i.test(resume.fileName || "") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf"));
     const total = [first, last, email, phone, telegram, about].filter(Boolean).length + (fileInput ? 1 : 0);
     const missing = [];
     if (!first) missing.push("имя");
     if (!last) missing.push("фамилия");
     if (!email) missing.push("email");
-    if (resume.contactPhone && !phone) missing.push("телефон");
-    if (resume.contactTelegram && !telegram) missing.push("Telegram");
     if (!about) missing.push("о себе");
-    if (fileInput && !attached) missing.push("файл резюме");
+    if (fileInput && !attached) missing.push(`файл резюме${message.fileError ? ` (${message.fileError})` : ""}`);
     const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : " Проверь данные и нажми «Отправить заявку»."}`;
     showPanel(messageText, !missing.length);
     return { message: messageText };

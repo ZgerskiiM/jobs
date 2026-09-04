@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "jobs.dev — быстрый отклик",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Заполняет формы отклика данными активного резюме из jobs.dev.",
   "permissions": [
     "activeTab",
@@ -11,6 +11,9 @@
   "browser_action": {
     "default_title": "Заполнить отклик из jobs.dev",
     "default_popup": "popup.html"
+  },
+  "background": {
+    "scripts": ["background.js"]
   },
   "applications": {
     "gecko": {
