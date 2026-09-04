@@ -139,12 +139,28 @@ async function ensureProfile(env, userId) {
 
 async function accountPayload(env, user, isNew = false) {
   const profile = await ensureProfile(env, user.id)
+  const resume = await refreshResumeAnalysis(env, profile)
   const applications = await env.DB.prepare('SELECT payload_json FROM applications WHERE user_id = ? ORDER BY updated_at DESC').bind(user.id).all()
   const pro = await env.DB.prepare(`SELECT id FROM subscriptions WHERE user_id = ? AND status = 'active' AND ends_at > ? LIMIT 1`).bind(user.id, now()).first()
   return {
     user: { id: user.id, name: user.name || user.telegram_username || user.email.split('@')[0], email: user.email.endsWith('@telegram.local') ? null : user.email, telegram: user.telegram_username ? `@${user.telegram_username}` : null, telegramPhotoUrl: user.telegram_photo_url || null },
-    onboarding: safeJson(profile.onboarding_json, null), settings: safeJson(profile.settings_json, DEFAULT_SETTINGS), resume: safeJson(profile.resume_json, null), coverLetter: profile.cover_letter || '',
+    onboarding: safeJson(profile.onboarding_json, null), settings: safeJson(profile.settings_json, DEFAULT_SETTINGS), resume, coverLetter: profile.cover_letter || '',
     savedJobIds: safeJson(profile.saved_job_ids_json, []), savedJobNotes: safeJson(profile.saved_job_notes_json, {}), applications: applications.results.map((item) => safeJson(item.payload_json, {})), isPro: Boolean(pro), isNew,
+  }
+}
+
+async function refreshResumeAnalysis(env, profile) {
+  const resume = safeJson(profile.resume_json, null)
+  if (!resume || resume.analysisVersion === RESUME_ANALYSIS_VERSION || !profile.resume_key || !env.MEDIA) return resume
+  try {
+    const object = await env.MEDIA.get(profile.resume_key)
+    if (!object) return resume
+    const analysis = await analyzeResume(profile.resume_file_name || resume.fileName || 'resume', new Uint8Array(await object.arrayBuffer()))
+    const updated = { ...resume, ...analysis }
+    await env.DB.prepare('UPDATE profiles SET resume_json = ?, updated_at = ? WHERE user_id = ?').bind(JSON.stringify(updated), now(), profile.user_id).run()
+    return updated
+  } catch {
+    return resume
   }
 }
 
