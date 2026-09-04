@@ -8,7 +8,7 @@ function scoringNormalizeText(value) {
     .toLocaleLowerCase('ru-RU')
 }
 
-const SCORING_BOUNDARY = 'A-Za-zА-Яа-яЁё0-9_+#.'
+const SCORING_BOUNDARY = 'A-Za-zА-Яа-яЁё0-9_+#'
 
 function scoringEscape(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s+')
@@ -175,6 +175,38 @@ async function scoringAnalyzeVacancy(vacancy, vacancyId) {
     concepts,
     negativeSignals: scoringDetectNegatives(title, description),
     vacancyDate: vacancy.posted_at || vacancy.first_seen_at || ''
+  }
+}
+
+function scoringCompactFeatures(features) {
+  return {
+    v: features.taxonomyVersion,
+    r: [features.role.primary, features.role.match, features.role.confidence],
+    s: [features.seniority.level, features.seniority.confidence],
+    e: features.minExperienceYears,
+    c: Object.entries(features.concepts).sort(([left], [right]) => left.localeCompare(right)).map(([concept, value]) => [concept, value.match, value.contextMultiplier, value.confidence, value.mentions]),
+    n: (features.negativeSignals || []).map((value) => [value.id, value.penalty, value.primaryRoleConflict, value.matchedText]),
+    d: features.vacancyDate || ''
+  }
+}
+
+function scoringInflateFeatures(compact, vacancyId) {
+  if (!compact || compact.v !== String(SCORING_CONFIG.meta?.version || '') || !Array.isArray(compact.c)) return null
+  const concepts = {}
+  for (const value of compact.c) {
+    if (!Array.isArray(value) || value.length < 5) continue
+    const concept = String(value[0] || '').toUpperCase()
+    concepts[concept] = { concept, match: Number(value[1]), contextMultiplier: Number(value[2]), confidence: Number(value[3]), mentions: Number(value[4]) }
+  }
+  return {
+    vacancyId,
+    taxonomyVersion: compact.v,
+    role: { primary: String(compact.r?.[0] || 'UNKNOWN'), match: Number(compact.r?.[1] || 0), confidence: Number(compact.r?.[2] || 0) },
+    seniority: { level: String(compact.s?.[0] || 'UNKNOWN'), confidence: Number(compact.s?.[1] || 0) },
+    minExperienceYears: compact.e === null || compact.e === undefined ? null : Number(compact.e),
+    concepts,
+    negativeSignals: (compact.n || []).filter(Array.isArray).map((value) => ({ id: String(value[0] || ''), penalty: Number(value[1] || 0), primaryRoleConflict: Boolean(value[2]), matchedText: String(value[3] || '') })),
+    vacancyDate: String(compact.d || '')
   }
 }
 

@@ -271,7 +271,8 @@ async function scoreVacancies(request, env, user) {
       id: String(item.id || ''), source_key: String(item.source_key || 'catalog'), title: String(item.title || '').slice(0, 300),
       description: String(item.description || '').slice(0, 20000), posted_at: String(item.posted_at || ''), first_seen_at: String(item.first_seen_at || '')
     }
-    const features = await scoringIndexedFeatures(env, vacancy)
+    const vacancyId = scoringVacancyId(vacancy)
+    const features = scoringInflateFeatures(item.features, vacancyId) || await scoringIndexedFeatures(env, vacancy)
     scores.push(scoringScore(candidate, features))
   }
   scores.sort((left, right) => right.score - left.score || right.hardMatchScore - left.hardMatchScore || left.vacancyId.localeCompare(right.vacancyId))

@@ -92,7 +92,7 @@ export default function Home() {
       setVacancyScores({});
       return () => { cancelled = true; };
     }
-    accountApi.scoreVacancies(pageJobs.map((job) => ({ id: job.id, title: job.title, description: job.description, posted_at: job.posted })))
+    accountApi.scoreVacancies(pageJobs.map((job) => ({ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures })))
       .then(({ scores }) => {
         if (!cancelled) setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
       })

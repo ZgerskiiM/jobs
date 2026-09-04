@@ -1,3 +1,13 @@
+export interface CompactVacancyFeatures {
+  v: string;
+  r: [string, number, number];
+  s: [string, number];
+  e: number | null;
+  c: Array<[string, number, number, number, number]>;
+  n: Array<[string, number, boolean, string]>;
+  d: string;
+}
+
 export interface Job {
   id: number;
   title: string;
@@ -17,6 +27,7 @@ export interface Job {
   matchedSkills?: string[];
   description: string;
   parsedSkills: string[];
+  scoringFeatures?: CompactVacancyFeatures;
 }
 
 export interface Company {

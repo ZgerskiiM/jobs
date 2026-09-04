@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Company, Job } from "../data";
+import type { Company, CompactVacancyFeatures, Job } from "../data";
 
 type SourceVacancy = {
   id: string | number;
@@ -13,6 +13,7 @@ type SourceVacancy = {
   first_seen_at?: string;
   source_key?: string;
   technologies?: string[];
+  scoring_features?: CompactVacancyFeatures;
 };
 
 type RegistryCompany = {
@@ -209,6 +210,7 @@ function toJobs(vacancies: SourceVacancy[]): Job[] {
       level: "Специалист",
       description: vacancy.description || "Описание вакансии доступно на сайте работодателя.",
       parsedSkills: technologies,
+      scoringFeatures: vacancy.scoring_features,
     };
   });
 }

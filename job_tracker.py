@@ -4,128 +4,173 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import html
 import json
 import os
 import re
 import sqlite3
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, asdict
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
-from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
+
+import httpx
+
+from jobtracker.models import Job, plain_text, text_value, utc_now
+from jobtracker.filters import matches_filters, source_filters
+from jobtracker.exports import detect_technologies, export_csv, export_site_data, show_stats
+from jobtracker import notifications
+from jobtracker.storage import connect_db, persist_source, record_event
+from jobtracker.adapters_standard import greenhouse_jobs as greenhouse_adapter, lever_jobs as lever_adapter
+from jobtracker.adapter_registry import build_registry
+from jobtracker.transport import DomainRequestLimiter, create_client, send_request
+from jobtracker.vacancy_scoring import (
+    DEFAULT_TAXONOMY_PATH,
+    VacancyFeatureRepository,
+    VacancyIndexingService,
+    TaxonomyConfigLoader,
+)
 
 
 USER_AGENT = "job-tracker-mvp/1.0 (+personal job research)"
 HH_USER_AGENT = "JobTracker/1.0 (YOUR_EMAIL@example.com)"
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+HTTP_REQUEST_LIMITER: DomainRequestLimiter | None = None
+HTTP_CLIENT: httpx.Client | None = None
+HH_ROLE_CACHE: dict[str, list[str]] = {}
+HH_ROLE_CACHE_LOCK = threading.Lock()
 
 
-def plain_text(value: str | None) -> str:
-    if not value:
-        return ""
-    value = html.unescape(value)
-    value = re.sub(r"<[^>]+>", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
+@contextmanager
+def configured_request_limiter(max_per_domain: int):
+    global HTTP_REQUEST_LIMITER
+    previous = HTTP_REQUEST_LIMITER
+    HTTP_REQUEST_LIMITER = DomainRequestLimiter(max_per_domain)
+    try:
+        yield
+    finally:
+        HTTP_REQUEST_LIMITER = previous
 
 
-def text_value(value: Any) -> str:
-    return "" if value is None else str(value)
+@contextmanager
+def configured_http_client(timeout: int, max_connections: int):
+    """Share one connection pool across all source and detail worker threads."""
+    global HTTP_CLIENT
+    previous = HTTP_CLIENT
+    with create_client(timeout, max_connections, USER_AGENT) as client:
+        HTTP_CLIENT = client
+        try:
+            yield
+        finally:
+            HTTP_CLIENT = previous
 
 
-@dataclass(frozen=True)
-class Job:
-    source_key: str
-    external_id: str
-    company: str
-    title: str
-    location: str
-    team: str
-    workplace_type: str
-    description: str
-    url: str
-    posted_at: str
-    source_updated_at: str
+def send_http_request(
+    method: str, url: str, timeout: int, retries: int,
+    headers: dict[str, str] | None = None, content: bytes | None = None,
+    client: httpx.Client | None = None,
+) -> httpx.Response:
+    """Compatibility wrapper around the shared transport layer."""
+    return send_request(
+        method, url, timeout, retries, headers, content, client or HTTP_CLIENT,
+        HTTP_REQUEST_LIMITER,
+    )
 
-    @property
-    def fingerprint(self) -> str:
-        tracked = {
-            "title": self.title,
-            "location": self.location,
-            "team": self.team,
-            "workplace_type": self.workplace_type,
-            "description": self.description,
-            "url": self.url,
-            "source_updated_at": self.source_updated_at,
-        }
-        encoded = json.dumps(tracked, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()
+
+class SyncAlreadyRunningError(RuntimeError):
+    pass
+
+
+class SyncLock:
+    """Cross-process advisory lock for one database synchronization."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.path = db_path.with_name(db_path.name + ".sync.lock")
+        self.handle: Any | None = None
+
+    def __enter__(self) -> "SyncLock":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = self.path.open("a+", encoding="utf-8")
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                self.handle.seek(0)
+                if not self.handle.read(1):
+                    self.handle.seek(0)
+                    self.handle.write("0")
+                    self.handle.flush()
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            self.handle.close()
+            self.handle = None
+            raise SyncAlreadyRunningError("Синхронизация уже выполняется в другом процессе.") from exc
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        if self.handle is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                self.handle.seek(0)
+                msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.handle.close()
+            self.handle = None
 
 
 def fetch_json(url: str, timeout: int, retries: int, headers: dict[str, str] | None = None) -> Any:
-    last_error: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            request_headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-            request_headers.update(headers or {})
-            request = Request(url, headers=request_headers)
-            with urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-            last_error = exc
-            if attempt < retries:
-                time.sleep(min(2**attempt, 4))
-    raise RuntimeError(f"Не удалось получить {url}: {last_error}")
+    request_headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    request_headers.update(headers or {})
+    response = send_http_request("GET", url, timeout, retries, request_headers)
+    try:
+        return response.json()
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Не удалось разобрать JSON от {url}: {exc}") from exc
 
 
 def post_json(
     url: str, payload: Any, timeout: int, retries: int,
     headers: dict[str, str] | None = None,
 ) -> Any:
-    last_error: Exception | None = None
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    for attempt in range(retries + 1):
-        try:
-            request_headers = {
-                "Accept": "application/json", "Content-Type": "application/json",
-                "User-Agent": USER_AGENT,
-            }
-            request_headers.update(headers or {})
-            request = Request(url, data=body, headers=request_headers, method="POST")
-            with urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-            last_error = exc
-            if attempt < retries:
-                time.sleep(min(2**attempt, 4))
-    raise RuntimeError(f"Не удалось получить {url}: {last_error}")
+    request_headers = {
+        "Accept": "application/json", "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+    request_headers.update(headers or {})
+    response = send_http_request("POST", url, timeout, retries, request_headers, body)
+    try:
+        return response.json()
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Не удалось разобрать JSON от {url}: {exc}") from exc
 
 
-def fetch_text(url: str, timeout: int, retries: int) -> tuple[str, str]:
-    last_error: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            request = Request(url, headers={"Accept": "text/html", "User-Agent": USER_AGENT})
-            with urlopen(request, timeout=timeout) as response:
-                charset = response.headers.get_content_charset() or "utf-8"
-                return response.read().decode(charset, "replace"), response.url
-        except (HTTPError, URLError, TimeoutError) as exc:
-            last_error = exc
-            if attempt < retries:
-                time.sleep(min(2**attempt, 4))
-    raise RuntimeError(f"Не удалось получить {url}: {last_error}")
+def fetch_text(
+    url: str, timeout: int, retries: int, headers: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    request_headers = {"Accept": "text/html", "User-Agent": USER_AGENT}
+    request_headers.update(headers or {})
+    response = send_http_request("GET", url, timeout, retries, request_headers)
+    return response.text, str(response.url)
 
 
 class LinkParser(HTMLParser):
@@ -149,6 +194,33 @@ class LinkParser(HTMLParser):
             self.links.append((self._href, plain_text(" ".join(self._text))))
             self._href = None
             self._text = []
+
+
+# Generic career pages often place navigation links alongside vacancy cards. Those
+# links can share the same URL prefix as a position, so their text is not a title.
+NON_JOB_HTML_LINK_TITLES = {
+    "вакансии", "ключевые продукты", "контакты", "согласие", "подробнее",
+    "отправить резюме", "как мы живем", "как мы живём", "отзывы сотрудников",
+    "стажировка",
+}
+
+
+def is_probable_html_job_title(title: str) -> bool:
+    """Return whether a generic HTML-link label can safely be shown as a vacancy."""
+    normalized = re.sub(r"\s+", " ", title).strip().casefold()
+    return len(normalized) >= 3 and normalized not in NON_JOB_HTML_LINK_TITLES
+
+
+def clean_html_job_title(source_key: str, title: str) -> str:
+    """Remove action labels accidentally appended to titles by career cards."""
+    if source_key in {"orionsoft-direct", "tmk-direct"}:
+        return re.sub(r"\s+подробнее\s*$", "", title, flags=re.IGNORECASE).strip()
+    if source_key == "reksoft-direct":
+        # На карточках Рексофта в anchor-текст попадают направление и фильтры вакансии.
+        title = re.sub(r"^\s*Промышленная автоматизация\s+", "", title, flags=re.IGNORECASE)
+        title = re.sub(r"\s+формат\s+.*$", "", title, flags=re.IGNORECASE)
+        return title.strip()
+    return title.strip()
 
 
 class FragmentTextParser(HTMLParser):
@@ -312,6 +384,28 @@ def detailed_sections(document: str) -> str:
     return "\n".join(sections)
 
 
+def generic_job_description(document: str, title: str) -> str:
+    """Extract the body of a vacancy page when a source has no structured markup."""
+    cleaned = re.sub(
+        r"<(?:script|style|noscript|header|nav|footer|aside|form)\b[^>]*>.*?</(?:script|style|noscript|header|nav|footer|aside|form)>",
+        "", document, flags=re.IGNORECASE | re.DOTALL,
+    )
+    candidates = [
+        balanced_element_body(cleaned, rf"<{tag}[^>]*>", tag=tag)
+        for tag in ("article", "main")
+    ]
+    candidates.append(cleaned)
+    for body in candidates:
+        text = fragment_text(body)
+        if title:
+            matches = list(re.finditer(re.escape(title), text, re.IGNORECASE))
+            if matches:
+                text = text[matches[-1].end():].strip()
+        if len(text) >= 120:
+            return text
+    return ""
+
+
 def enrich_direct_job(job: Job, timeout: int, retries: int) -> Job:
     document, _ = fetch_text(job.url, timeout, retries)
     host = urlparse(job.url).hostname or ""
@@ -327,6 +421,9 @@ def enrich_direct_job(job: Job, timeout: int, retries: int) -> Job:
         if isinstance(identifier, dict):
             team = text_value(identifier.get("name")) or team
         workplace_type = text_value(posting.get("employmentType")) or workplace_type
+
+    if not description:
+        description = generic_job_description(document, title)
 
     if host == "team.vk.company":
         title = first_text(document, r'<div[^>]+itemprop="title"[^>]*>(.*?)</div>') or title
@@ -383,6 +480,13 @@ def enrich_direct_job(job: Job, timeout: int, retries: int) -> Job:
                 location = json.loads(f'"{city.group(1)}"') or location
             except json.JSONDecodeError:
                 pass
+    elif host == "bft.ru":
+        title = first_text(
+            document, r'<h2[^>]+class=["\'][^"\']*vacanciesHeader-contnet__subtitle[^"\']*["\'][^>]*>(.*?)</h2>'
+        ) or title
+        description = fragment_text(balanced_element_body(
+            document, r'<div[^>]+class=["\'][^"\']*text-content[^"\']*["\'][^>]*>'
+        )) or description
     elif host == "vkusvill.ru":
         title = first_text(
             document,
@@ -641,6 +745,36 @@ def enrich_direct_job(job: Job, timeout: int, retries: int) -> Job:
         team = first_text(
             document, r'<div[^>]+class=["\'][^"\']*vacancy__tags[^"\']*["\'][^>]*>.*?<span[^>]+class=["\'][^"\']*search-term__text[^"\']*["\'][^>]*>(.*?)</span>',
         ) or team
+    elif host == "job.glowbyteconsulting.com":
+        page_title = first_text(document, r'<title[^>]*>(.*?)</title>')
+        page_title = re.sub(r"^GlowByte\s*[-—]\s*", "", page_title).strip()
+        title = page_title or first_text(document, r'<h1[^>]*>(.*?)</h1>') or title
+        without_code = re.sub(
+            r'<(?:script|style)\b[^>]*>.*?</(?:script|style)>', "", document,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        page_text = fragment_text(without_code)
+        start = page_text.casefold().find(title.casefold()) if title else -1
+        if start >= 0:
+            page_text = page_text[start + len(title):].strip()
+        end_markers = ("Присоединяйся к команде GlowByte", "ПОДПИСЫВАЙТЕСЬ")
+        end_positions = [page_text.find(marker) for marker in end_markers if marker in page_text]
+        if end_positions:
+            page_text = page_text[:min(end_positions)].strip()
+        description = page_text or description
+    elif host == "bellintegrator.ru":
+        title = first_text(document, r'<h1[^>]+class=["\'][^"\']*fs-1[^"\']*["\'][^>]*>(.*?)</h1>') or title
+        description = fragment_text(balanced_element_body(
+            document, r'<article[^>]+class=["\'][^"\']*node--type-vakansiya[^"\']*["\'][^>]*>'
+        )) or description
+    elif host == "rabota.grandline.ru":
+        title = first_text(document, r'<h1[^>]*>(.*?)</h1>') or title
+        description = fragment_text(balanced_element_body(
+            document, r'<section[^>]+id=["\']content["\'][^>]*>', tag="section",
+        )) or description
+        location = first_text(
+            document, r'<dt>\s*Город\s*</dt>\s*<dd[^>]*>(.*?)</dd>',
+        ) or location
 
     if not description:
         return job
@@ -1142,12 +1276,10 @@ def simbirsoft_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[
     jobs: dict[str, Job] = {}
     for page in range(1, max(2, int(source.get("max_pages", 5))) + 1):
         url = f"{api_url}?{urlencode({'page': page})}"
-        request = Request(url, headers={
+        document, _ = fetch_text(url, timeout, retries, {
             "Accept": "text/html", "User-Agent": USER_AGENT,
             "X-Requested-With": "XMLHttpRequest", "Referer": listing_url,
         })
-        with urlopen(request, timeout=timeout) as response:
-            document = response.read().decode(response.headers.get_content_charset() or "utf-8", "replace")
         page_jobs = 0
         for href, slug, title in re.findall(
             r'<a[^>]+class="[^"]*l-item[^"]*"[^>]+href="(/vacancies/([^"/]+)/)"[^>]*>'
@@ -1747,16 +1879,31 @@ def html_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     jobs: dict[str, Job] = {}
     for href, title in parser.links:
         absolute_url = urljoin(final_url, href)
+        if source.get("force_https") and absolute_url.startswith("http://"):
+            absolute_url = "https://" + absolute_url[len("http://"):]
         match = pattern.search(absolute_url)
         if not match or (not title and not source.get("allow_empty_titles")):
             continue
+        if title and not is_probable_html_job_title(title):
+            continue
+        location = ""
+        workplace_type = ""
+        if source["key"] == "digital-clouds-direct":
+            suffix = re.search(r"\s+(Гибрид|Офис|Удал[её]нн(?:о|ая))\s*,?\s*офис\s+([^|]+)$", title, re.IGNORECASE)
+            if suffix:
+                title = title[:suffix.start()].strip()
+                workplace_type = suffix.group(1).capitalize()
+                location = suffix.group(2).strip()
         external_id = match.groupdict().get("id") if match.groupdict() else None
         if not external_id:
             path = urlparse(absolute_url).path.rstrip("/")
             external_id = path.rsplit("/", 1)[-1] or hashlib.sha256(absolute_url.encode()).hexdigest()[:20]
+        if source["key"] == "korus-consulting-direct":
+            title = clean_korus_title(title)
+        title = clean_html_job_title(source["key"], title)
         jobs[external_id] = Job(
             source_key=source["key"], external_id=external_id, company=source["company"],
-            title=title or external_id, location="", team="", workplace_type="", description="",
+            title=title or external_id, location=location, team="", workplace_type=workplace_type, description="",
             url=absolute_url, posted_at="", source_updated_at="",
         )
     minimum = max(1, int(source.get("min_expected_jobs", 1)))
@@ -1766,7 +1913,7 @@ def html_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
             "возможна смена разметки"
         )
     result = list(jobs.values())
-    if source.get("fetch_details"):
+    if source.get("fetch_details", True):
         enriched: list[Job] = []
         workers = max(1, int(source.get("detail_workers", 1)))
 
@@ -1811,6 +1958,471 @@ def html_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     return result
 
 
+def magnit_tech_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    api = source.get("api_url", "https://magnit.tech/api/v1").rstrip("/")
+    per_page = max(1, int(source.get("per_page", 100)))
+    max_pages = max(1, int(source.get("max_pages", 10)))
+    summaries: dict[str, dict[str, Any]] = {}
+    for page in range(1, max_pages + 1):
+        payload = fetch_json(
+            f"{api}/vacancy?{urlencode({'page': page, 'per_page': per_page})}",
+            timeout, retries,
+        )
+        rows = payload.get("results") or []
+        for row in rows:
+            if row.get("id") is not None:
+                summaries[str(row["id"])] = row
+        meta = payload.get("meta") or {}
+        if not meta.get("has_more_pages") or not rows:
+            break
+    else:
+        raise RuntimeError(f"Магнит Тех превысил защитный лимит страниц ({max_pages})")
+
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(summaries) < minimum:
+        raise RuntimeError(
+            f"Магнит Тех вернул {len(summaries)} вакансий, меньше порога {minimum}"
+        )
+
+    base_url = source.get("url", "https://magnit.tech").rstrip("/")
+
+    def load_detail(item: dict[str, Any]) -> Job:
+        external_id = str(item["id"])
+        payload = fetch_json(f"{api}/vacancy/{external_id}", timeout, retries)
+        detail = payload.get("results") or item
+        description_parts: list[str] = []
+        for label, key in (
+            ("О вакансии", "description"),
+            ("О продукте", "about_product"),
+            ("Задачи", "tasks"),
+            ("Требования", "skills"),
+            ("Будет плюсом", "extra_skills"),
+            ("Мы предлагаем", "offer"),
+        ):
+            value = fragment_text(text_value(detail.get(key)))
+            if value:
+                description_parts.append(f"{label}\n{value}")
+        technologies = ", ".join(
+            text_value(value.get("name"))
+            for value in detail.get("technologies") or []
+            if value.get("name")
+        )
+        if technologies:
+            description_parts.append(f"Технологии\n{technologies}")
+        direction = text_value((detail.get("direction") or {}).get("name"))
+        speciality = text_value((detail.get("speciality") or {}).get("name"))
+        team = ", ".join(dict.fromkeys(value for value in (direction, speciality) if value))
+        workplace_type = ", ".join(dict.fromkeys(
+            text_value(value.get("name"))
+            for value in detail.get("work_formats") or []
+            if value.get("name")
+        ))
+        return Job(
+            source_key=source["key"], external_id=external_id, company=source["company"],
+            title=text_value(detail.get("title")) or text_value(item.get("title")),
+            location=text_value(detail.get("location")) or text_value(item.get("location")),
+            team=team, workplace_type=workplace_type,
+            description="\n".join(description_parts),
+            url=f"{base_url}/vacancies/{external_id}",
+            posted_at="", source_updated_at="",
+        )
+
+    result: list[Job] = []
+    with ThreadPoolExecutor(max_workers=max(1, int(source.get("detail_workers", 8)))) as executor:
+        futures = {executor.submit(load_detail, item): item for item in summaries.values()}
+        for future in as_completed(futures):
+            item = futures[future]
+            try:
+                result.append(future.result())
+            except Exception as exc:
+                print(
+                    f"ПРЕДУПРЕЖДЕНИЕ Магнит Тех {item.get('id')}: детали не загружены: {exc}",
+                    file=sys.stderr,
+                )
+    if len(result) < minimum:
+        raise RuntimeError(
+            f"После загрузки карточек Магнит Тех осталось {len(result)} вакансий"
+        )
+    return result
+
+
+def psb_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    api = source.get("api_url", "https://job.psbank.ru/api/v1/content").rstrip("/")
+    per_page = max(1, min(100, int(source.get("per_page", 100))))
+    max_pages = max(1, int(source.get("max_pages", 10)))
+    summaries: dict[str, dict[str, Any]] = {}
+    for page in range(1, max_pages + 1):
+        payload = fetch_json(
+            f"{api}/vacancies?{urlencode({'page': page, 'per_page': per_page})}",
+            timeout, retries,
+        )
+        rows = payload.get("data") or []
+        total_count = int(payload.get("total_count") or len(rows))
+        for row in rows:
+            if row.get("id") is not None and text_value(row.get("type")).casefold() == "it":
+                summaries[str(row["id"])] = row
+        if not rows or page * per_page >= total_count:
+            break
+    else:
+        raise RuntimeError(f"ПСБ превысил защитный лимит страниц ({max_pages})")
+
+    minimum = max(1, int(source.get("min_expected_jobs", 10)))
+    if len(summaries) < minimum:
+        raise RuntimeError(f"ПСБ вернул {len(summaries)} IT-вакансий, меньше порога {minimum}")
+
+    listing_url = source.get("url", "https://job.psbank.ru/vacancies/it-specialists").rstrip("/")
+
+    def load_detail(item: dict[str, Any]) -> Job:
+        external_id = str(item["id"])
+        detail = fetch_json(f"{api}/vacancies/{external_id}", timeout, retries)
+        description_parts: list[str] = []
+        for label, key in (
+            ("Требования", "req"),
+            ("Задачи", "duty"),
+            ("Условия", "cond"),
+        ):
+            value = fragment_text(text_value(detail.get(key) or item.get(key)))
+            if value:
+                description_parts.append(f"{label}\n{value}")
+        salary = text_value(detail.get("salary") or item.get("salary"))
+        if salary and salary != "0":
+            description_parts.append(f"Зарплата\n{salary}")
+        return Job(
+            source_key=source["key"], external_id=external_id, company=source["company"],
+            title=text_value(detail.get("title") or item.get("title")),
+            location=text_value(detail.get("locationName")),
+            team=text_value(detail.get("profGroupName") or item.get("profGroupName")),
+            workplace_type=text_value(detail.get("workTypeName") or item.get("workTypeName")),
+            description="\n".join(description_parts),
+            url=f"{listing_url}/{external_id}", posted_at="",
+            source_updated_at=text_value(detail.get("update_date") or item.get("update_date")),
+        )
+
+    result: list[Job] = []
+    workers = max(1, int(source.get("detail_workers", 8)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(load_detail, item): item for item in summaries.values()}
+        for future in as_completed(futures):
+            item = futures[future]
+            try:
+                result.append(future.result())
+            except Exception as exc:
+                print(
+                    f"ПРЕДУПРЕЖДЕНИЕ ПСБ {item.get('id')}: детали не загружены: {exc}",
+                    file=sys.stderr,
+                )
+    if len(result) < minimum:
+        raise RuntimeError(f"После загрузки карточек ПСБ осталось {len(result)} IT-вакансий")
+    return result
+
+
+def lanit_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    payload = fetch_json(
+        source.get("api_url", "https://job.lanit.ru/_vti_bin/Lanit.Job.Redesign/WebService.svc/GetVacancyForWidget"),
+        timeout, retries,
+    )
+    minimum = max(1, int(source.get("min_expected_jobs", 10)))
+    jobs: list[Job] = []
+    for item in payload:
+        if not item.get("Id") or not item.get("IsPublished", True):
+            continue
+        description = "\n".join(
+            f"{label}\n{fragment_text(text_value(item.get(key)))}"
+            for label, key in (("О вакансии", "ActivityDescription"), ("Задачи", "JobResponsibilities"),
+                               ("Требования", "Requirements"), ("Условия", "SocialPackage"))
+            if fragment_text(text_value(item.get(key)))
+        )
+        jobs.append(Job(
+            source_key=source["key"], external_id=str(item["Id"]), company=source["company"],
+            title=text_value(item.get("Title")), location=text_value(item.get("City")),
+            team=", ".join(value for value in (text_value(item.get("Department")), text_value(item.get("Division"))) if value),
+            workplace_type="", description=description,
+            url=text_value(item.get("Url")) or f"https://job.lanit.ru/Pages/vacancy.aspx?ItemId={item['Id']}",
+            posted_at="", source_updated_at="",
+        ))
+    if len(jobs) < minimum:
+        raise RuntimeError(f"ЛАНИТ вернул {len(jobs)} вакансий, меньше порога {minimum}")
+    return jobs
+
+
+def one_c_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    base = source.get("url", "https://1c.ru/rus/firm1c/vacan/search")
+    directions = source.get("directions", list(range(1, 16)))
+    jobs: dict[str, Job] = {}
+    pattern = re.compile(r"/vacan/vacancy/(?P<id>\d+)", re.IGNORECASE)
+    for direction in directions:
+        body, final_url = fetch_text(f"{base}?{urlencode({'direction': direction})}", timeout, retries)
+        parser = LinkParser()
+        parser.feed(body)
+        for href, title in parser.links:
+            url = urljoin(final_url, href)
+            match = pattern.search(url)
+            if match:
+                external_id = match.group("id")
+                jobs[external_id] = Job(
+                    source["key"], external_id, source["company"],
+                    clean_one_c_title(title) or external_id, "", "", "", "", url, "", "",
+                )
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(jobs) < minimum:
+        raise RuntimeError(f"1С вернул {len(jobs)} вакансий, меньше порога {minimum}")
+    # В официальной выдаче 1С уже есть название и подробный текст карточки;
+    # отдельные страницы используют устаревшую разметку без извлекаемого текста.
+    return [Job(**{**job.__dict__, "description": job.title}) for job in jobs.values()]
+
+
+def clean_one_c_title(value: str) -> str:
+    """The 1C listing nests a card description inside its vacancy link."""
+    value = re.sub(r"\s+", " ", value).strip()
+    duplicate_product = re.search(
+        r"(?P<product>1[СC]:[^\s]+)\s+(?P=product)\s*[-–]", value, re.IGNORECASE,
+    )
+    if duplicate_product:
+        return (value[:duplicate_product.start()] + duplicate_product.group("product")).strip()
+    narrative_starts = re.compile(
+        r"\s+(?=(?:В отдел|В команду|Чем предстоит|Обязанности:|Мы (?:разрабатываем|ищем|работаем|постоянно)|"
+        r"Мы [—-]|Фирма [«\"]?1С|Помогите |Команда разработки|Работы по|Учебный центр|"
+        r"Ищем сотрудника|Наша цель|"
+        r"1С:[^ ]+(?: [^ ]+){0,2} помогает))",
+        re.IGNORECASE,
+    )
+    return narrative_starts.split(value, maxsplit=1)[0].strip()
+
+
+def clean_korus_title(value: str) -> str:
+    """Keep only the role from KORUS catalogue cards, excluding company and department labels."""
+    value = re.sub(r"\s+(?:Офис|Удал[её]нно|Гибрид)(?:,\s*(?:Офис|Удал[её]нно|Гибрид))*$", "", value).strip()
+    role_start = re.compile(
+        r"(?:Ведущий|Руководитель|Функциональный|Старший|Младший|Консультант|Разработчик|"
+        r"Менеджер|Технический|Бизнес-аналитик|Дежурный|Специалист|Директор|Коммерческий)\b",
+        re.IGNORECASE,
+    )
+    if value.casefold().startswith(("департамент ", "компания ", "sales community ")):
+        match = role_start.search(value)
+        if match:
+            value = value[match.start():]
+    return value
+
+
+def samolet_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    """Load the public vacancy feed embedded in the official Samolet career site."""
+    api_url = source.get(
+        "api_url", "https://career.samolet.ru/api/integrations/skillaz/vacancies/"
+    )
+    payload = fetch_json(f"{api_url}?{urlencode({'limit': 100})}", timeout, retries)
+    rows = payload.get("results") or []
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(rows) < minimum:
+        raise RuntimeError(f"Самолёт вернул {len(rows)} вакансий, меньше порога {minimum}")
+
+    jobs: list[Job] = []
+    for item in rows:
+        external_id = text_value(item.get("uuid") or item.get("id"))
+        title = text_value(item.get("name"))
+        if not external_id or not title:
+            continue
+        description_parts = [
+            fragment_text(text_value(item.get(key)))
+            for key in ("description", "responsibilities", "requirements", "conditions", "whySamolet")
+            if fragment_text(text_value(item.get(key)))
+        ]
+        jobs.append(Job(
+            source_key=source["key"], external_id=external_id, company=source["company"],
+            title=title,
+            location=text_value((item.get("region") or {}).get("name")),
+            team=text_value((item.get("specialization") or {}).get("name")),
+            workplace_type=text_value((item.get("workplaceType") or {}).get("name")),
+            description="\n".join(description_parts),
+            url=text_value(item.get("externalUrl")) or f"https://career.samolet.ru/vakansii/view/{external_id}/",
+            posted_at=text_value(item.get("publishedAt") or item.get("createdAt")),
+            source_updated_at=text_value(item.get("updatedAt")),
+        ))
+    if len(jobs) < minimum:
+        raise RuntimeError(f"Самолёт вернул только {len(jobs)} корректных вакансий")
+    return jobs
+
+
+def rwb_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    """Load the public vacancy feed used by the official RWB career site."""
+    base = source.get("api_url", "https://career.rwb.ru/crm-api/api/v1/pub/vacancies").rstrip("/")
+    limit = max(1, min(100, int(source.get("per_page", 100))))
+    max_pages = max(1, int(source.get("max_pages", 10)))
+    summaries: dict[str, dict[str, Any]] = {}
+    total = None
+    offset = 0
+    for page in range(max_pages):
+        payload = fetch_json(f"{base}?{urlencode({'limit': limit, 'offset': offset})}", timeout, retries)
+        data = payload.get("data") or {}
+        rows = data.get("items") or []
+        result_range = data.get("range") or {}
+        total = int(result_range.get("count") or len(rows))
+        for item in rows:
+            if item.get("id") is not None:
+                summaries[str(item["id"])] = item
+        if not rows or len(summaries) >= total:
+            break
+        # API may return fewer rows than the advertised limit (currently 50 vs 100).
+        offset += len(rows)
+    else:
+        raise RuntimeError(f"RWB превысил защитный лимит страниц ({max_pages})")
+
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(summaries) < minimum:
+        raise RuntimeError(f"RWB вернул {len(summaries)} вакансий, меньше порога {minimum}")
+
+    def load_detail(item: dict[str, Any]) -> Job:
+        external_id = str(item["id"])
+        detail = (fetch_json(f"{base}/{external_id}", timeout, retries).get("data") or item)
+        description_parts = [fragment_text(text_value(detail.get("description")))]
+        for label, key in (("Задачи", "duties_arr"), ("Требования", "requirements_arr"), ("Условия", "conditions_arr")):
+            values = [text_value(value) for value in detail.get(key) or [] if text_value(value)]
+            if values:
+                description_parts.append(f"{label}\n" + "\n".join(values))
+        workplace = ", ".join(
+            text_value(value.get("title")) for value in detail.get("employment_types_list") or item.get("employment_types") or []
+            if text_value(value.get("title"))
+        )
+        return Job(
+            source_key=source["key"], external_id=external_id, company=source["company"],
+            title=text_value(detail.get("name") or item.get("name")),
+            location=text_value(detail.get("office_location_city_title") or item.get("city_title")),
+            team=text_value(detail.get("direction_name") or item.get("direction_title")),
+            workplace_type=workplace, description="\n".join(filter(None, description_parts)),
+            url=f"https://career.rwb.ru/vacancies/{external_id}", posted_at="", source_updated_at="",
+        )
+
+    result: list[Job] = []
+    with ThreadPoolExecutor(max_workers=max(1, int(source.get("detail_workers", 8)))) as executor:
+        futures = {executor.submit(load_detail, item): item for item in summaries.values()}
+        for future in as_completed(futures):
+            try:
+                result.append(future.result())
+            except Exception as exc:
+                print(f"ПРЕДУПРЕЖДЕНИЕ RWB: детали не загружены: {exc}", file=sys.stderr)
+    if len(result) < minimum:
+        raise RuntimeError(f"После загрузки карточек RWB осталось {len(result)} вакансий")
+    return result
+
+
+def rshb_digital_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    """Load IT roles exposed by the official RSHB.Digital vacancy API."""
+    base = source.get("api_url", "https://rshbdigital.ru/api/v1/owb-ms-plt-app/vacancies").rstrip("/")
+    field_ids = source.get("field_ids") or [150, 155, 156, 113, 114, 116, 96, 10, 160, 165, 121, 124, 126, 73, 104, 148, 107]
+    size = max(1, min(100, int(source.get("per_page", 100))))
+    max_pages = max(1, int(source.get("max_pages", 10)))
+    jobs: list[Job] = []
+    total_pages = 1
+    for page in range(max_pages):
+        query = urlencode({
+            "city": "", "sort": "date", "companies": "", "fields": ",".join(map(str, field_ids)),
+            "employments": "", "experiences": "", "size": size, "page": page,
+        })
+        payload = fetch_json(f"{base}?{query}", timeout, retries)
+        total_pages = int(payload.get("totalPages") or 1)
+        for item in payload.get("content") or []:
+            external_id = text_value(item.get("id"))
+            if not external_id:
+                continue
+            detail = fetch_json(f"{base}/{external_id}", timeout, retries)
+            description = fragment_text(text_value(detail.get("descriptionHtml") or detail.get("description")))
+            jobs.append(Job(
+                source_key=source["key"], external_id=external_id, company=source["company"],
+                title=text_value(item.get("title")), location=text_value(item.get("city")),
+                team=text_value(item.get("company")), workplace_type="", description=description,
+                url=text_value(item.get("url")) or "https://rshbdigital.ru/vacancies",
+                posted_at=text_value(item.get("publishDate")), source_updated_at="",
+            ))
+        if page + 1 >= total_pages:
+            break
+    else:
+        raise RuntimeError(f"РСХБ.цифра превысил защитный лимит страниц ({max_pages})")
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(jobs) < minimum:
+        raise RuntimeError(f"РСХБ.цифра вернул {len(jobs)} IT-вакансий, меньше порога {minimum}")
+    return jobs
+
+
+def ertelecom_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    """Load the official ER-Telecom career API, including full vacancy text."""
+    api = source.get("api_url", "https://job.ertelecom.ru/api/vacancy").rstrip("/")
+    page_url = f"{api}/list/"
+    jobs: list[Job] = []
+    seen: set[str] = set()
+    max_pages = max(1, int(source.get("max_pages", 20)))
+    for _ in range(max_pages):
+        payload = fetch_json(page_url, timeout, retries)
+        for item in payload.get("results") or []:
+            external_id = text_value(item.get("id"))
+            if not external_id or external_id in seen:
+                continue
+            seen.add(external_id)
+            detail = fetch_json(f"{api}/{external_id}/", timeout, retries)
+            cities = [text_value(city.get("name")) for city in detail.get("city") or []]
+            scopes = [text_value(scope.get("name")) for scope in detail.get("scope_activity") or []]
+            employment = [text_value(value.get("name")) for value in detail.get("employment") or []]
+            jobs.append(Job(
+                source_key=source["key"], external_id=external_id, company=source["company"],
+                title=text_value(detail.get("name")), location=", ".join(filter(None, cities)),
+                team=", ".join(filter(None, scopes)), workplace_type=", ".join(filter(None, employment)),
+                description=fragment_text(text_value(detail.get("content"))),
+                url=f"https://job.ertelecom.ru/vacancies/vacancy{external_id}",
+                posted_at="", source_updated_at=text_value(detail.get("date_update")),
+            ))
+        next_url = text_value(payload.get("next"))
+        if not next_url:
+            break
+        page_url = next_url
+    else:
+        raise RuntimeError(f"ЭР-Телеком превысил защитный лимит страниц ({max_pages})")
+    minimum = max(1, int(source.get("min_expected_jobs", 20)))
+    if len(jobs) < minimum:
+        raise RuntimeError(f"ЭР-Телеком вернул {len(jobs)} вакансий, меньше порога {minimum}")
+    return jobs
+
+
+def aston_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    """Load every vacancy embedded by the official ASTON career catalogue."""
+    listing_url = source.get("url", "https://career.astondevs.ru/vacancy").rstrip("/")
+    document, _ = fetch_text(listing_url, timeout, retries)
+    ids = sorted(set(re.findall(r"\b500\d{6}\b", document)))
+    minimum = max(1, int(source.get("min_expected_jobs", 50)))
+    if len(ids) < minimum:
+        raise RuntimeError(f"ASTON вернул {len(ids)} идентификаторов, меньше порога {minimum}")
+
+    def load_detail(external_id: str) -> Job:
+        url = f"{listing_url}/{external_id}"
+        page, _ = fetch_text(url, timeout, retries)
+        page_title = first_text(page, r"<title[^>]*>(.*?)</title>")
+        title = re.split(r"\s+[—-]\s+", page_title, maxsplit=1)[0].strip()
+        cleaned = re.sub(r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>", "", page, flags=re.IGNORECASE | re.DOTALL)
+        text = fragment_text(cleaned)
+        start = text.find(title) if title else -1
+        if start >= 0:
+            text = text[start + len(title):].strip()
+        end_positions = [text.find(marker) for marker in ("Рекомендовать на вакансию", "Горячие вакансии") if marker in text]
+        if end_positions:
+            text = text[:min(end_positions)].strip()
+        if not title or len(text) < 80:
+            raise RuntimeError(f"неполная карточка {external_id}")
+        return Job(
+            source_key=source["key"], external_id=external_id, company=source["company"],
+            title=title, location="Россия", team="", workplace_type="",
+            description=text, url=url, posted_at="", source_updated_at="",
+        )
+
+    jobs: list[Job] = []
+    with ThreadPoolExecutor(max_workers=max(1, int(source.get("detail_workers", 8)))) as executor:
+        futures = {executor.submit(load_detail, external_id): external_id for external_id in ids}
+        for future in as_completed(futures):
+            try:
+                jobs.append(future.result())
+            except Exception as exc:
+                print(f"ПРЕДУПРЕЖДЕНИЕ ASTON {futures[future]}: {exc}", file=sys.stderr)
+    if len(jobs) < minimum:
+        raise RuntimeError(f"После загрузки карточек ASTON осталось {len(jobs)} вакансий")
+    return jobs
+
+
 def vkusvill_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     listing_url = source.get("url", "https://vkusvill.ru/job/office/")
     api_url = source.get("api_url", "https://vkusvill.ru/ajax/job/hh_list_filter.php")
@@ -1820,22 +2432,18 @@ def vkusvill_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Jo
         "user_agent",
         "Mozilla/5.0 (compatible; job-tracker-mvp/1.0; personal job research)",
     )
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    session = HTTP_CLIENT
+    owns_session = session is None
+    if session is None:
+        session = httpx.Client(timeout=httpx.Timeout(timeout), follow_redirects=True)
 
-    def open_request(request: Request) -> bytes:
-        last_error: Exception | None = None
-        for attempt in range(retries + 1):
-            try:
-                with opener.open(request, timeout=timeout) as response:
-                    return response.read()
-            except (HTTPError, URLError, TimeoutError) as exc:
-                last_error = exc
-                if attempt < retries:
-                    time.sleep(min(2**attempt, 4))
-        raise RuntimeError(f"Не удалось получить {request.full_url}: {last_error}")
+    def open_request(
+        method: str, url: str, headers: dict[str, str], content: bytes | None = None,
+    ) -> bytes:
+        assert session is not None
+        return send_http_request(method, url, timeout, retries, headers, content, client=session).content
 
-    listing_request = Request(listing_url, headers={"User-Agent": user_agent})
-    listing = open_request(listing_request).decode("utf-8", "replace")
+    listing = open_request("GET", listing_url, {"User-Agent": user_agent}).decode("utf-8", "replace")
     sessid_match = re.search(
         r'<input[^>]+id=["\']sessid["\'][^>]+value=["\']([^"\']+)',
         listing, re.IGNORECASE,
@@ -1855,20 +2463,18 @@ def vkusvill_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Jo
             "action": "filterVacancies",
             "sessid": sessid,
         }).encode("utf-8")
-        request = Request(
-            api_url,
-            data=form,
-            headers={
+        try:
+            payload = json.loads(open_request(
+                "POST", api_url,
+                {
                 "Accept": "application/json",
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "Referer": listing_url,
                 "User-Agent": user_agent,
                 "X-Requested-With": "XMLHttpRequest",
             },
-            method="POST",
-        )
-        try:
-            payload = json.loads(open_request(request).decode("utf-8"))
+                form,
+            ).decode("utf-8"))
         except json.JSONDecodeError as exc:
             raise RuntimeError("ВкусВилл вернул некорректный JSON списка вакансий") from exc
         if payload.get("success") != "Y":
@@ -1921,10 +2527,16 @@ def vkusvill_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Jo
             if not detailed.description:
                 raise RuntimeError(f"ВкусВилл не отдал описание вакансии {detailed.external_id}")
             result.append(detailed)
+    if owns_session:
+        session.close()
     return result
 
 
 def greenhouse_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    return greenhouse_adapter(source, timeout, retries, fetch_json)
+
+
+def greenhouse_jobs_legacy(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     token = source["token"]
     query = urlencode({"content": "true"})
     url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?{query}"
@@ -1949,6 +2561,10 @@ def greenhouse_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[
 
 
 def lever_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
+    return lever_adapter(source, timeout, retries, fetch_json)
+
+
+def lever_jobs_legacy(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     site = source["site"]
     region = source.get("region", "global")
     host = "api.eu.lever.co" if region == "eu" else "api.lever.co"
@@ -1991,15 +2607,22 @@ def lever_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
 
 
 def hh_role_ids(category_name: str, timeout: int, retries: int, user_agent: str) -> list[str]:
-    payload = fetch_json(
-        "https://api.hh.ru/professional_roles", timeout, retries,
-        {"HH-User-Agent": user_agent, "User-Agent": user_agent},
-    )
-    for category in payload.get("categories", []):
-        if text_value(category.get("name")).casefold() == category_name.casefold():
-            return [text_value(role.get("id")) for role in category.get("roles", []) if role.get("id")]
-    available = ", ".join(text_value(c.get("name")) for c in payload.get("categories", []))
-    raise RuntimeError(f"Категория hh.ru «{category_name}» не найдена. Доступны: {available}")
+    cache_key = category_name.casefold()
+    with HH_ROLE_CACHE_LOCK:
+        cached = HH_ROLE_CACHE.get(cache_key)
+        if cached is not None:
+            return list(cached)
+        payload = fetch_json(
+            "https://api.hh.ru/professional_roles", timeout, retries,
+            {"HH-User-Agent": user_agent, "User-Agent": user_agent},
+        )
+        for category in payload.get("categories", []):
+            if text_value(category.get("name")).casefold() == cache_key:
+                roles = [text_value(role.get("id")) for role in category.get("roles", []) if role.get("id")]
+                HH_ROLE_CACHE[cache_key] = roles
+                return list(roles)
+        available = ", ".join(text_value(c.get("name")) for c in payload.get("categories", []))
+        raise RuntimeError(f"Категория hh.ru «{category_name}» не найдена. Доступны: {available}")
 
 
 def hh_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
@@ -2117,140 +2740,146 @@ def hh_jobs(source: dict[str, Any], timeout: int, retries: int) -> list[Job]:
     return jobs
 
 
-def matches_filters(job: Job, filters: dict[str, Any]) -> bool:
-    title_words = [str(v).casefold() for v in filters.get("title_keywords", [])]
-    locations = [str(v).casefold() for v in filters.get("locations", [])]
-    title_ok = not title_words or any(word in job.title.casefold() for word in title_words)
-    location_ok = not locations or any(word in job.location.casefold() for word in locations)
-    return title_ok and location_ok
+SOURCE_ADAPTERS: dict[str, Any] = build_registry({
+    "greenhouse": greenhouse_jobs,
+    "lever": lever_jobs,
+    "hh": hh_jobs,
+    "html": html_jobs,
+    "vkusvill": vkusvill_jobs,
+    "twogis": twogis_jobs,
+    "dodo": dodo_jobs,
+    "selectel": selectel_jobs,
+    "x5_tech": x5_tech_jobs,
+    "cloud_ru": cloud_ru_jobs,
+    "yandex": yandex_jobs,
+    "jet": jet_jobs,
+    "sibur": sibur_jobs,
+    "cft": cft_jobs,
+    "itone": itone_jobs,
+    "sberdevices": sberdevices_jobs,
+    "infotecs": infotecs_jobs,
+    "nornickel": nornickel_jobs,
+    "croc": croc_jobs,
+    "mts_bank": mts_bank_jobs,
+    "nlmk_it": nlmk_it_jobs,
+    "astra": astra_jobs,
+    "simbirsoft": simbirsoft_jobs,
+    "lemana_tech": lemana_tech_jobs,
+    "sber": sber_jobs,
+    "gazprom_neft": gazprom_neft_jobs,
+    "lamoda": lamoda_jobs,
+    "tbank": tbank_jobs,
+    "alfa_bank": alfa_bank_jobs,
+    "magnit_tech": magnit_tech_jobs,
+    "psb": psb_jobs,
+    "lanit": lanit_jobs,
+    "one_c": one_c_jobs,
+    "samolet": samolet_jobs,
+    "rwb": rwb_jobs,
+    "rshb_digital": rshb_digital_jobs,
+    "aston": aston_jobs,
+    "ertelecom": ertelecom_jobs,
+})
 
 
-def connect_db(path: Path) -> sqlite3.Connection:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path)
-    db.row_factory = sqlite3.Row
-    db.executescript("""
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS jobs (
-            source_key TEXT NOT NULL,
-            external_id TEXT NOT NULL,
-            company TEXT NOT NULL,
-            title TEXT NOT NULL,
-            location TEXT NOT NULL,
-            team TEXT NOT NULL,
-            workplace_type TEXT NOT NULL,
-            description TEXT NOT NULL,
-            url TEXT NOT NULL,
-            posted_at TEXT NOT NULL,
-            source_updated_at TEXT NOT NULL,
-            fingerprint TEXT NOT NULL,
-            first_seen_at TEXT NOT NULL,
-            last_seen_at TEXT NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1,
-            missing_runs INTEGER NOT NULL DEFAULT 0,
-            closed_at TEXT,
-            PRIMARY KEY (source_key, external_id)
-        );
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_key TEXT NOT NULL,
-            external_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            happened_at TEXT NOT NULL,
-            details TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS runs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_key TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT NOT NULL,
-            status TEXT NOT NULL,
-            jobs_received INTEGER NOT NULL DEFAULT 0,
-            error TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS notifier_state (
-            name TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-    """)
-    return db
+def fetch_source_jobs(
+    source: dict[str, Any], config: dict[str, Any], timeout: int, retries: int,
+) -> list[Job]:
+    """Fetch one source without touching the database; safe to run in a worker thread."""
+    adapter = SOURCE_ADAPTERS.get(source["type"])
+    if adapter is None:
+        raise ValueError(f"Неизвестный тип источника: {source['type']}")
+    # Resolve by name so tests and local overrides can replace an adapter dynamically.
+    adapter = globals().get(adapter.__name__, adapter)
+    adapter_source = dict(source)
+    if source["type"] == "hh" and config.get("hh_user_agent"):
+        adapter_source.setdefault("user_agent", config["hh_user_agent"])
+    return adapter(adapter_source, timeout, retries)
 
 
-def record_event(db: sqlite3.Connection, job: Job, event_type: str, now: str) -> None:
-    db.execute(
-        "INSERT INTO events(source_key, external_id, event_type, happened_at) VALUES (?, ?, ?, ?)",
-        (job.source_key, job.external_id, event_type, now),
-    )
+def is_authoritative_source(source: dict[str, Any]) -> bool:
+    """Return whether a complete source can safely close missing vacancies."""
+    return bool(source.get("authoritative", source["type"] != "html"))
 
 
-def persist_source(
+def mark_stale_jobs(
     db: sqlite3.Connection,
-    jobs: Iterable[Job],
-    source_key: str,
-    close_after: int,
+    sources: Iterable[dict[str, Any]],
+    stale_after_days: int,
     now: str,
-    authoritative: bool = True,
-) -> dict[str, int]:
-    jobs = list(jobs)
-    seen_ids = {job.external_id for job in jobs}
-    counts = {"new": 0, "updated": 0, "reopened": 0, "closed": 0, "active": len(jobs)}
-    for job in jobs:
-        old = db.execute(
-            "SELECT fingerprint, active FROM jobs WHERE source_key=? AND external_id=?",
-            (source_key, job.external_id),
-        ).fetchone()
-        values = asdict(job)
-        if old is None:
-            db.execute("""
-                INSERT INTO jobs(source_key, external_id, company, title, location, team,
-                    workplace_type, description, url, posted_at, source_updated_at, fingerprint,
-                    first_seen_at, last_seen_at, active, missing_runs, closed_at)
-                VALUES (:source_key, :external_id, :company, :title, :location, :team,
-                    :workplace_type, :description, :url, :posted_at, :source_updated_at, :fingerprint,
-                    :now, :now, 1, 0, NULL)
-            """, values | {"fingerprint": job.fingerprint, "now": now})
-            record_event(db, job, "new", now)
-            counts["new"] += 1
-        else:
-            event = None
-            if not old["active"]:
-                event = "reopened"
-                counts["reopened"] += 1
-            elif old["fingerprint"] != job.fingerprint:
-                event = "updated"
-                counts["updated"] += 1
-            db.execute("""
-                UPDATE jobs SET company=:company, title=:title, location=:location, team=:team,
-                    workplace_type=:workplace_type, description=:description, url=:url,
-                    posted_at=:posted_at, source_updated_at=:source_updated_at,
-                    fingerprint=:fingerprint, last_seen_at=:now, active=1, missing_runs=0, closed_at=NULL
-                WHERE source_key=:source_key AND external_id=:external_id
-            """, values | {"fingerprint": job.fingerprint, "now": now})
-            if event:
-                record_event(db, job, event, now)
-
-    active_rows = db.execute(
-        "SELECT external_id FROM jobs WHERE source_key=? AND active=1", (source_key,)
-    ).fetchall() if authoritative else []
-    missing_ids = [row["external_id"] for row in active_rows if row["external_id"] not in seen_ids]
-    for external_id in missing_ids:
+) -> int:
+    """Hide long-unseen jobs from non-authoritative sources without closing them."""
+    cutoff = datetime.fromisoformat(now).timestamp() - stale_after_days * 24 * 60 * 60
+    cutoff_at = datetime.fromtimestamp(cutoff, timezone.utc).isoformat()
+    stale_sources = [source["key"] for source in sources if not is_authoritative_source(source)]
+    if not stale_sources:
+        return 0
+    placeholders = ", ".join("?" for _ in stale_sources)
+    rows = db.execute(f"""
+        SELECT source_key, external_id, company, title
+        FROM jobs
+        WHERE active=1 AND stale=0 AND last_seen_at < ?
+          AND source_key IN ({placeholders})
+    """, (cutoff_at, *stale_sources)).fetchall()
+    for row in rows:
         db.execute(
-            "UPDATE jobs SET missing_runs=missing_runs+1 WHERE source_key=? AND external_id=?",
-            (source_key, external_id),
+            "UPDATE jobs SET stale=1, stale_at=? WHERE source_key=? AND external_id=?",
+            (now, row["source_key"], row["external_id"]),
         )
-        row = db.execute(
-            "SELECT missing_runs, company, title FROM jobs WHERE source_key=? AND external_id=?",
-            (source_key, external_id),
-        ).fetchone()
-        if row["missing_runs"] >= close_after:
-            db.execute(
-                "UPDATE jobs SET active=0, closed_at=? WHERE source_key=? AND external_id=?",
-                (now, source_key, external_id),
-            )
-            record_event(db, Job(source_key, external_id, row["company"], row["title"], "", "", "", "", "", "", ""), "closed", now)
-            counts["closed"] += 1
-    return counts
+        record_event(
+            db,
+            Job(row["source_key"], row["external_id"], row["company"], row["title"], "", "", "", "", "", "", ""),
+            "stale",
+            now,
+        )
+    return len(rows)
+
+
+def prune_excluded_jobs(db_path: Path, config_path: Path) -> int:
+    """Immediately remove active jobs that no longer meet the feed quality filters."""
+    config = load_config(config_path)
+    filters_by_source = {
+        source["key"]: source_filters(config.get("filters", {}), source)
+        for source in config.get("sources", [])
+    }
+    db = connect_db(db_path)
+    rows = db.execute("SELECT * FROM jobs WHERE active=1").fetchall()
+    now = utc_now()
+    removed = 0
+    for row in rows:
+        filters = filters_by_source.get(row["source_key"])
+        source = next((item for item in config.get("sources", []) if item["key"] == row["source_key"]), None)
+        should_apply_html_guard = bool(source and source.get("type") == "html")
+        if not filters or not (
+            filters.get("exclude_title_keywords") or filters.get("exclude_title_prefixes")
+            or filters.get("exclude_team_keywords") or should_apply_html_guard
+        ):
+            continue
+        job = Job(
+            source_key=row["source_key"], external_id=row["external_id"],
+            company=row["company"], title=row["title"], location=row["location"],
+            team=row["team"], workplace_type=row["workplace_type"],
+            description=row["description"], url=row["url"], posted_at=row["posted_at"],
+            source_updated_at=row["source_updated_at"],
+        )
+        passes_stop_words = matches_filters(job, {
+            "exclude_title_keywords": filters.get("exclude_title_keywords", []),
+            "exclude_title_prefixes": filters.get("exclude_title_prefixes", []),
+            "exclude_team_keywords": filters.get("exclude_team_keywords", []),
+        })
+        if (not should_apply_html_guard or is_probable_html_job_title(job.title)) and passes_stop_words:
+            continue
+        db.execute(
+            "UPDATE jobs SET active=0, stale=0, stale_at=NULL, missing_runs=0, closed_at=? "
+            "WHERE source_key=? AND external_id=?",
+            (now, job.source_key, job.external_id),
+        )
+        record_event(db, job, "filtered", now)
+        removed += 1
+    db.commit()
+    db.close()
+    print(f"Исключено из активной выдачи: {removed}")
+    return removed
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -2268,263 +2897,120 @@ def load_config(path: Path) -> dict[str, Any]:
     return config
 
 
-def run_sync(config_path: Path, db_path: Path) -> int:
+def reindex_vacancies(
+    db_path: Path, taxonomy_path: Path = DEFAULT_TAXONOMY_PATH,
+    force: bool = False,
+) -> int:
+    """Index active vacancies whose text or taxonomy version has changed."""
+    taxonomy = TaxonomyConfigLoader.load(taxonomy_path)
+    db = connect_db(db_path)
+    try:
+        service = VacancyIndexingService(taxonomy, VacancyFeatureRepository(db))
+        indexed = service.reindex_outdated(force=force)
+        db.commit()
+    finally:
+        db.close()
+    print(f"Индекс вакансий: обработано новых/изменённых: {indexed}")
+    return indexed
+
+
+def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = None) -> int:
     config = load_config(config_path)
     db = connect_db(db_path)
     timeout = int(config.get("http", {}).get("timeout_seconds", 20))
     retries = int(config.get("http", {}).get("retries", 2))
+    source_workers = max(1, min(16, int(config.get("http", {}).get("source_workers", 6))))
+    per_domain_workers = max(1, min(8, int(config.get("http", {}).get("per_domain_workers", 2))))
     close_after = max(1, int(config.get("close_after_missing_runs", 2)))
+    stale_after_days = max(1, int(config.get("stale_after_days", 7)))
     filters = config.get("filters", {})
     failures = 0
-    enabled = [s for s in config.get("sources", []) if s.get("enabled", True)]
+    enabled = [
+        s for s in config.get("sources", [])
+        if s.get("enabled", True) and (only_keys is None or s["key"] in only_keys)
+    ]
     if not enabled:
         print("Нет включённых источников. Отредактируйте config.json.")
+        db.close()
         return 0
-    for source in enabled:
+
+    def fetch_one(source: dict[str, Any]) -> tuple[str, list[Job] | None, Exception | None]:
         started = utc_now()
         try:
-            if source["type"] == "greenhouse":
-                fetched = greenhouse_jobs(source, timeout, retries)
-            elif source["type"] == "lever":
-                fetched = lever_jobs(source, timeout, retries)
-            elif source["type"] == "hh":
-                hh_source = dict(source)
-                if config.get("hh_user_agent"):
-                    hh_source.setdefault("user_agent", config["hh_user_agent"])
-                fetched = hh_jobs(hh_source, timeout, retries)
-            elif source["type"] == "html":
-                fetched = html_jobs(source, timeout, retries)
-            elif source["type"] == "vkusvill":
-                fetched = vkusvill_jobs(source, timeout, retries)
-            elif source["type"] == "twogis":
-                fetched = twogis_jobs(source, timeout, retries)
-            elif source["type"] == "dodo":
-                fetched = dodo_jobs(source, timeout, retries)
-            elif source["type"] == "selectel":
-                fetched = selectel_jobs(source, timeout, retries)
-            elif source["type"] == "x5_tech":
-                fetched = x5_tech_jobs(source, timeout, retries)
-            elif source["type"] == "cloud_ru":
-                fetched = cloud_ru_jobs(source, timeout, retries)
-            elif source["type"] == "yandex":
-                fetched = yandex_jobs(source, timeout, retries)
-            elif source["type"] == "jet":
-                fetched = jet_jobs(source, timeout, retries)
-            elif source["type"] == "sibur":
-                fetched = sibur_jobs(source, timeout, retries)
-            elif source["type"] == "cft":
-                fetched = cft_jobs(source, timeout, retries)
-            elif source["type"] == "itone":
-                fetched = itone_jobs(source, timeout, retries)
-            elif source["type"] == "sberdevices":
-                fetched = sberdevices_jobs(source, timeout, retries)
-            elif source["type"] == "infotecs":
-                fetched = infotecs_jobs(source, timeout, retries)
-            elif source["type"] == "nornickel":
-                fetched = nornickel_jobs(source, timeout, retries)
-            elif source["type"] == "croc":
-                fetched = croc_jobs(source, timeout, retries)
-            elif source["type"] == "mts_bank":
-                fetched = mts_bank_jobs(source, timeout, retries)
-            elif source["type"] == "nlmk_it":
-                fetched = nlmk_it_jobs(source, timeout, retries)
-            elif source["type"] == "astra":
-                fetched = astra_jobs(source, timeout, retries)
-            elif source["type"] == "simbirsoft":
-                fetched = simbirsoft_jobs(source, timeout, retries)
-            elif source["type"] == "lemana_tech":
-                fetched = lemana_tech_jobs(source, timeout, retries)
-            elif source["type"] == "sber":
-                fetched = sber_jobs(source, timeout, retries)
-            elif source["type"] == "gazprom_neft":
-                fetched = gazprom_neft_jobs(source, timeout, retries)
-            elif source["type"] == "lamoda":
-                fetched = lamoda_jobs(source, timeout, retries)
-            elif source["type"] == "tbank":
-                fetched = tbank_jobs(source, timeout, retries)
-            elif source["type"] == "alfa_bank":
-                fetched = alfa_bank_jobs(source, timeout, retries)
-            else:
-                raise ValueError(f"Неизвестный тип источника: {source['type']}")
-            jobs = [job for job in fetched if matches_filters(job, filters)]
-            now = utc_now()
-            authoritative = bool(source.get("authoritative", source["type"] != "html"))
-            source_close_after = max(1, int(source.get("close_after_missing_runs", close_after)))
-            counts = persist_source(db, jobs, source["key"], source_close_after, now, authoritative)
-            db.execute(
-                "INSERT INTO runs(source_key, started_at, finished_at, status, jobs_received) VALUES (?, ?, ?, 'ok', ?)",
-                (source["key"], started, now, len(fetched)),
-            )
-            db.commit()
-            print(f"{source['company']}: получено {len(fetched)}, подходит {len(jobs)}, "
-                  f"новых {counts['new']}, изменено {counts['updated']}, "
-                  f"переоткрыто {counts['reopened']}, закрыто {counts['closed']}")
+            return started, fetch_source_jobs(source, config, timeout, retries), None
         except Exception as exc:
-            failures += 1
-            now = utc_now()
-            db.execute(
-                "INSERT INTO runs(source_key, started_at, finished_at, status, error) VALUES (?, ?, ?, 'error', ?)",
-                (source["key"], started, now, str(exc)),
-            )
-            db.commit()
-            print(f"ОШИБКА {source['company']}: {exc}", file=sys.stderr)
+            return started, None, exc
+
+    pool_connections = min(64, max(8, source_workers * per_domain_workers * 2))
+    with configured_request_limiter(per_domain_workers), configured_http_client(timeout, pool_connections):
+        with ThreadPoolExecutor(max_workers=min(source_workers, len(enabled))) as executor:
+            futures = {executor.submit(fetch_one, source): source for source in enabled}
+            for future in as_completed(futures):
+                source = futures[future]
+                started, fetched, fetch_error = future.result()
+                try:
+                    if fetch_error is not None:
+                        raise fetch_error
+                    assert fetched is not None
+                    filters_for_source = source_filters(filters, source)
+                    jobs = [job for job in fetched if matches_filters(job, filters_for_source)]
+                    now = utc_now()
+                    authoritative = is_authoritative_source(source)
+                    source_close_after = max(1, int(source.get("close_after_missing_runs", close_after)))
+                    with db:
+                        counts = persist_source(db, jobs, source["key"], source_close_after, now, authoritative)
+                        db.execute(
+                            "INSERT INTO runs(source_key, started_at, finished_at, status, jobs_received) VALUES (?, ?, ?, 'ok', ?)",
+                            (source["key"], started, now, len(fetched)),
+                        )
+                    print(f"{source['company']}: получено {len(fetched)}, подходит {len(jobs)}, "
+                          f"новых {counts['new']}, изменено {counts['updated']}, "
+                          f"переоткрыто {counts['reopened']}, восстановлено {counts['restored']}, "
+                          f"закрыто {counts['closed']}")
+                except Exception as exc:
+                    failures += 1
+                    now = utc_now()
+                    with db:
+                        db.execute(
+                            "INSERT INTO runs(source_key, started_at, finished_at, status, error) VALUES (?, ?, ?, 'error', ?)",
+                            (source["key"], started, now, str(exc)),
+                        )
+                    print(f"ОШИБКА {source['company']}: {exc}", file=sys.stderr)
+    now = utc_now()
+    with db:
+        stale_count = mark_stale_jobs(db, config.get("sources", []), stale_after_days, now)
     db.close()
+    if stale_count:
+        print(f"Помечено устаревшими: {stale_count} (не подтверждались более {stale_after_days} дн.)")
     return 1 if failures else 0
 
 
-def export_csv(db_path: Path, output_path: Path, include_closed: bool) -> None:
-    db = connect_db(db_path)
-    where = "" if include_closed else "WHERE active=1"
-    rows = db.execute(f"""
-        SELECT company, title, location, team, workplace_type, url, posted_at,
-               first_seen_at, last_seen_at, active, closed_at, source_key
-        FROM jobs {where} ORDER BY active DESC, company, title
-    """).fetchall()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(rows[0].keys() if rows else [
-            "company", "title", "location", "team", "workplace_type", "url",
-            "posted_at", "first_seen_at", "last_seen_at", "active", "closed_at", "source_key"
-        ])
-        writer.writerows(tuple(row) for row in rows)
-    db.close()
-    print(f"Экспортировано вакансий: {len(rows)} -> {output_path}")
-
-
-TECHNOLOGY_PATTERNS: tuple[tuple[str, str], ...] = (
-    ("Java", r"(?<![\w])java(?!script|\w)"),
-    ("Kotlin", r"\bkotlin\b"),
-    ("Python", r"\bpython\b"),
-    ("Go", r"\bgolang\b|\bgo[- ](?:developer|engineer|разработчик)\b"),
-    ("JavaScript", r"\bjavascript\b|\bjs\b"),
-    ("TypeScript", r"\btypescript\b"),
-    ("C# / .NET", r"(?<!\w)c#(?!\w)|\.net\b|\bdotnet\b"),
-    ("C / C++", r"(?<!\w)c\+\+(?!\w)|\bcpp\b|\bс\+\+\b"),
-    ("PHP", r"\bphp\b"),
-    ("Ruby", r"\bruby\b"),
-    ("Scala", r"\bscala\b"),
-    ("Rust", r"\brust\b"),
-    ("SQL", r"\bsql\b|postgres(?:ql)?|clickhouse"),
-    ("Data / ML", r"\bmachine learning\b|\bdata science\b|\bml[- /]|\bllm\b|\bai[- /]|машинн\w+ обучен"),
-    ("DevOps / SRE", r"\bdevops\b|\bsre\b|kubernetes|\bk8s\b|terraform"),
-    ("QA", r"\bqa\b|тестиров\w+|quality assurance"),
-)
-
-
-def detect_technologies(*values: str) -> list[str]:
-    text = " ".join(value for value in values if value)
-    return [
-        name for name, pattern in TECHNOLOGY_PATTERNS
-        if re.search(pattern, text, re.IGNORECASE)
-    ]
-
-
-def export_site_data(db_path: Path, output_path: Path) -> None:
-    """Выгрузить активные вакансии в безопасный для локального лендинга JS-файл."""
-    db = connect_db(db_path)
-    rows = db.execute("""
-        SELECT external_id AS id, company, title, location, team, workplace_type,
-               description, url, posted_at, first_seen_at, source_key
-        FROM jobs WHERE active=1
-        ORDER BY first_seen_at DESC, company, title
-    """).fetchall()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    data = []
-    for row in rows:
-        item = dict(row)
-        item["technologies"] = detect_technologies(
-            item.get("title", ""), item.get("team", ""), item.get("description", "")
-        )
-        data.append(item)
-    meta = {
-        "updated_at": utc_now(),
-        "count": len(data),
-    }
-    payload = (
-        "window.VACANCIES_META = "
-        + json.dumps(meta, ensure_ascii=False, indent=2)
-        + ";\nwindow.VACANCIES = "
-        + json.dumps(data, ensure_ascii=False, indent=2)
-        + ";\n"
-    )
-    output_path.write_text(payload, encoding="utf-8")
-    db.close()
-    print(f"Данные для сайта: {len(rows)} вакансий -> {output_path}")
-
-
-def show_stats(db_path: Path) -> None:
-    db = connect_db(db_path)
-    rows = db.execute("""
-        SELECT company, COUNT(*) total, SUM(active) active,
-               SUM(CASE WHEN active=0 THEN 1 ELSE 0 END) closed
-        FROM jobs GROUP BY company ORDER BY company
-    """).fetchall()
-    if not rows:
-        print("База пока пуста.")
-    else:
-        print(f"{'Компания':30} {'Всего':>8} {'Активно':>8} {'Закрыто':>8}")
-        for row in rows:
-            print(f"{row['company'][:30]:30} {row['total']:8} {row['active']:8} {row['closed']:8}")
-    db.close()
+def run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = None) -> int:
+    """Synchronize sources while preventing competing processes from changing one database."""
+    try:
+        with SyncLock(db_path):
+            return _run_sync(config_path, db_path, only_keys)
+    except SyncAlreadyRunningError as exc:
+        print(exc, file=sys.stderr)
+        return 3
 
 
 def initialize_telegram_cursor(db_path: Path, force: bool = False) -> None:
-    """Start Telegram delivery after the current event, avoiding historical spam."""
-    db = connect_db(db_path)
-    existing = db.execute(
-        "SELECT value FROM notifier_state WHERE name='telegram_event_cursor'"
-    ).fetchone()
-    if existing and not force:
-        print(f"Telegram уже инициализирован (курсор событий: {existing['value']}).")
-        db.close()
-        return
-    last_event_id = int(db.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()[0])
-    now = utc_now()
-    db.execute(
-        """INSERT INTO notifier_state(name, value, updated_at) VALUES ('telegram_event_cursor', ?, ?)
-           ON CONFLICT(name) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
-        (str(last_event_id), now),
-    )
-    db.commit()
-    db.close()
-    print(
-        f"Telegram-уведомления начнутся со следующей новой вакансии "
-        f"(текущий курсор: {last_event_id})."
-    )
+    notifications.initialize_cursor(db_path, force)
 
 
 def telegram_api_send(token: str, chat_id: str, message: str, timeout: int = 30) -> None:
-    endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }, ensure_ascii=False).encode("utf-8")
-    request = Request(
-        endpoint, data=payload, method="POST",
-        headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": USER_AGENT},
-    )
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", "replace")[:500]
-        raise RuntimeError(f"Telegram API вернул HTTP {exc.code}: {body}") from None
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"Telegram API недоступен: {exc}") from None
-    if not result.get("ok"):
-        raise RuntimeError(f"Telegram отклонил сообщение: {text_value(result.get('description'))}")
+    notifications.send_api(token, chat_id, message, send_http_request, USER_AGENT, timeout)
 
 
 def print_console_message(message: str) -> None:
-    """Print Telegram HTML safely even in a legacy Windows console."""
-    encoding = sys.stdout.encoding or "utf-8"
-    print(message.encode(encoding, "replace").decode(encoding))
+    notifications.print_message(message)
 
 
 def matches_notification_filter(job: sqlite3.Row, settings: dict[str, Any]) -> bool:
+    return notifications.matches_filter(job, settings)
+
+    # Legacy implementation kept temporarily below during the adapter refactor.
     notification_filter = settings.get("filter") or {}
     technologies = detect_technologies(job["title"], job["team"], job["description"])
     selected_technologies = {
@@ -2553,6 +3039,12 @@ def send_telegram_notifications(
     db_path: Path, token: str, chat_id: str,
     settings: dict[str, Any] | None = None, dry_run: bool = False,
 ) -> int:
+    return notifications.send_new(
+        db_path, token, chat_id, settings or {}, dry_run,
+        telegram_api_send, print_console_message,
+    )
+
+    # Legacy implementation kept temporarily below during the adapter refactor.
     settings = settings or {}
     db = connect_db(db_path)
     state = db.execute(
@@ -2625,17 +3117,25 @@ def send_telegram_notifications(
 def send_telegram_digest(
     db_path: Path, token: str, chat_id: str,
     settings: dict[str, Any] | None = None, limit: int = 10,
-    dry_run: bool = False,
+    offset: int = 0, dry_run: bool = False,
 ) -> int:
+    return notifications.send_digest(
+        db_path, token, chat_id, settings or {}, limit, offset, dry_run,
+        telegram_api_send, print_console_message,
+    )
+
+    # Legacy implementation kept temporarily below during the adapter refactor.
     """Send a fresh selection of active vacancies matching the notification filter."""
     settings = settings or {}
     db = connect_db(db_path)
     rows = db.execute("""
         SELECT company, title, location, team, workplace_type, description, url
-        FROM jobs WHERE active=1
+        FROM jobs WHERE active=1 AND stale=0
         ORDER BY first_seen_at DESC, company, title
     """).fetchall()
-    selected = [row for row in rows if matches_notification_filter(row, settings)][:max(1, limit)]
+    matching = [row for row in rows if matches_notification_filter(row, settings)]
+    offset = max(0, offset)
+    selected = matching[offset:offset + max(1, limit)]
     db.close()
     if not selected:
         print("Telegram-подборка: подходящих активных вакансий не найдено.")
@@ -2675,11 +3175,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sync = sub.add_parser("sync", help="загрузить и обновить вакансии")
     sync.add_argument("--config", type=Path, default=Path("config.json"))
+    sync.add_argument("--only", nargs="+", help="обновить только указанные ключи источников")
     export = sub.add_parser("export", help="выгрузить вакансии в CSV")
     export.add_argument("--output", type=Path, default=Path("data/jobs.csv"))
-    export.add_argument("--all", action="store_true", help="включить закрытые")
-    site_data = sub.add_parser("site-data", help="выгрузить активные вакансии для лендинга")
-    site_data.add_argument("--output", type=Path, default=Path("site/vacancies.js"))
+    export.add_argument("--all", action="store_true", help="включить закрытые и устаревшие")
+    site_data = sub.add_parser("site-data", help="выгрузить активные вакансии с индексом релевантности")
+    site_data.add_argument("--output", type=Path, default=Path("data/vacancies.js"))
+    site_data.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY_PATH)
+    reindex = sub.add_parser("reindex", help="построить/обновить индекс релевантности вакансий")
+    reindex.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY_PATH)
+    reindex.add_argument("--force", action="store_true", help="переиндексировать все активные вакансии")
+    prune = sub.add_parser(
+        "prune-excluded", help="сразу убрать из выдачи вакансии, не прошедшие фильтры качества",
+    )
+    prune.add_argument("--config", type=Path, default=Path("config.json"))
     sub.add_parser("stats", help="показать статистику")
     telegram_init = sub.add_parser(
         "telegram-init", help="включить уведомления без отправки старых вакансий",
@@ -2696,6 +3205,7 @@ def main(argv: list[str] | None = None) -> int:
         "telegram-digest", help="отправить подборку активных вакансий по фильтру",
     )
     telegram_digest.add_argument("--limit", type=int, default=10)
+    telegram_digest.add_argument("--offset", type=int, default=0)
     telegram_digest.add_argument("--dry-run", action="store_true")
     telegram_digest.add_argument(
         "--settings", type=Path, help="JSON с chat_id и фильтром уведомлений",
@@ -2703,12 +3213,18 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("telegram-test", help="отправить тестовое сообщение в Telegram")
     args = parser.parse_args(argv)
     if args.command == "sync":
-        return run_sync(args.config, args.db)
+        return run_sync(args.config, args.db, set(args.only) if args.only else None)
     if args.command == "export":
         export_csv(args.db, args.output, args.all)
         return 0
     if args.command == "site-data":
-        export_site_data(args.db, args.output)
+        export_site_data(args.db, args.output, args.taxonomy)
+        return 0
+    if args.command == "reindex":
+        reindex_vacancies(args.db, args.taxonomy, args.force)
+        return 0
+    if args.command == "prune-excluded":
+        prune_excluded_jobs(args.db, args.config)
         return 0
     if args.command == "telegram-init":
         initialize_telegram_cursor(args.db, args.force)
@@ -2738,7 +3254,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "telegram-digest":
             send_telegram_digest(
                 args.db, token, chat_id, settings,
-                limit=max(1, int(args.limit)), dry_run=dry_run,
+                limit=max(1, int(args.limit)), offset=max(0, int(args.offset)),
+                dry_run=dry_run,
             )
         else:
             send_telegram_notifications(args.db, token, chat_id, settings, dry_run)

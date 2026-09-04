@@ -74,7 +74,7 @@ export default function JobDetail() {
       setVacancyScore(null);
       return () => { cancelled = true; };
     }
-    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted }])
+    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures }])
       .then(({ scores }) => { if (!cancelled) setVacancyScore(scores[0] ?? null); })
       .catch(() => { if (!cancelled) setVacancyScore(null); });
     return () => { cancelled = true; };
