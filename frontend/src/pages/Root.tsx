@@ -1,5 +1,5 @@
 import { Outlet, NavLink, Link } from "react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import AuthModal from "../components/AuthModal";
 import ImportStep from "../components/ImportStep";
@@ -14,6 +14,13 @@ const NAV_LINKS = [
 export default function Root() {
   const { user, isPro, showAuthModal, showImportStep, showOnboarding, openAuthModal, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user && new URLSearchParams(window.location.search).get("extension_login") === "1") {
+      openAuthModal();
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+    }
+  }, [user, openAuthModal]);
 
   return (
     <div className="min-h-full bg-[#07080e] text-[#e8eaf0] font-sans grid-bg">

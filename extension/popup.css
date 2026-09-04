@@ -34,6 +34,11 @@ body::before {
 h1 { margin: 0 0 5px; font: 500 21px/1.2 "Courier New", monospace; }
 .muted, .meta, .result, .profile-link { color: var(--muted); font-size: 11px; }
 .muted { margin: 0 0 18px; }
+.auth-panel { padding: 14px; border: 1px solid rgba(0,212,255,.2); border-radius: 3px; background: rgba(0,212,255,.04); }
+.auth-copy { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.secondary-button { width: 100%; min-height: 40px; margin-top: 8px; border: 1px solid rgba(58,64,79,.7); border-radius: 3px; background: transparent; color: var(--muted); cursor: pointer; font: 11px "Courier New", monospace; }
+.secondary-button:hover { color: var(--text); border-color: var(--green); }
+.secondary-button:focus { outline: 2px solid var(--green); outline-offset: 2px; }
 .meta { min-height: 16px; margin: 6px 0 16px; color: var(--muted-2); font-family: "Courier New", monospace; }
 .resume-select { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid rgba(58,64,79,.7); border-radius: 3px; background: var(--surface); color: var(--text); font: 12px "Courier New", monospace; }
 .resume-select:focus, .primary-button:focus, .profile-link:focus { outline: 2px solid var(--green); outline-offset: 2px; }

@@ -2,6 +2,10 @@ const api = globalThis.browser;
 const API_ORIGIN = "https://jobs-dev.zgerskiim.chatgpt.site";
 
 const pageStatus = document.getElementById("page-status");
+const authPanel = document.getElementById("auth-panel");
+const resumePanel = document.getElementById("resume-panel");
+const loginButton = document.getElementById("login-button");
+const checkAuthButton = document.getElementById("check-auth-button");
 const resumeSelect = document.getElementById("resume-select");
 const resumeMeta = document.getElementById("resume-meta");
 const fillButton = document.getElementById("fill-button");
@@ -50,10 +54,38 @@ function updateMeta() {
 }
 
 async function fetchAccount() {
-  const response = await fetch(`${API_ORIGIN}/api/auth/me/`, { credentials: "include" });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.message || "Войди в jobs.dev в этом браузере");
-  return body;
+  const response = await api.runtime.sendMessage({ type: "get-account" });
+  if (!response?.ok) throw new Error(response?.error || "Войди в jobs.dev в этом браузере");
+  return response.account;
+}
+
+function showAuthState(error = "") {
+  authPanel.hidden = false;
+  resumePanel.hidden = true;
+  pageStatus.textContent = error || "Войди в jobs.dev, чтобы использовать резюме";
+  pageStatus.className = "muted";
+}
+
+function showAccountState(nextAccount) {
+  account = nextAccount;
+  authPanel.hidden = true;
+  resumePanel.hidden = false;
+  pageStatus.textContent = "вкладка готова — найду поля формы автоматически";
+  pageStatus.className = "muted";
+  renderResumes();
+}
+
+async function checkAuthorization() {
+  checkAuthButton.disabled = true;
+  checkAuthButton.textContent = "проверяем вход...";
+  try {
+    showAccountState(await fetchAccount());
+  } catch (error) {
+    showAuthState(error instanceof Error ? error.message : "Войди в jobs.dev в этом браузере");
+  } finally {
+    checkAuthButton.disabled = false;
+    checkAuthButton.textContent = "я уже вошёл — проверить";
+  }
 }
 
 async function fillCurrentPage() {
@@ -81,6 +113,8 @@ async function fillCurrentPage() {
 
 resumeSelect.addEventListener("change", updateMeta);
 fillButton.addEventListener("click", () => void fillCurrentPage());
+loginButton.addEventListener("click", () => void api.tabs.create({ url: `${API_ORIGIN}/?extension_login=1` }));
+checkAuthButton.addEventListener("click", () => void checkAuthorization());
 
 async function init() {
   try {
@@ -90,13 +124,17 @@ async function init() {
       pageStatus.textContent = "Открой обычную веб-страницу с формой отклика";
       throw new Error("На этой вкладке нельзя заполнить форму.");
     }
-    pageStatus.textContent = "вкладка готова — найду поля формы автоматически";
-    account = await fetchAccount();
-    renderResumes();
+    showAccountState(await fetchAccount());
   } catch (error) {
-    pageStatus.textContent = error instanceof Error ? error.message : "Не удалось загрузить профиль";
-    pageStatus.className = "muted error";
-    fillButton.disabled = true;
+    if (error instanceof Error && /войд|авторизац|требуется вход/i.test(error.message)) {
+      showAuthState(error.message);
+    } else {
+      pageStatus.textContent = error instanceof Error ? error.message : "Не удалось загрузить профиль";
+      pageStatus.className = "muted error";
+      fillButton.disabled = true;
+      authPanel.hidden = true;
+      resumePanel.hidden = false;
+    }
   }
 }
 

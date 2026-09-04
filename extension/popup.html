@@ -17,17 +17,26 @@
         <h1>Заполнить форму</h1>
         <p id="page-status" class="muted">расширение заполнит форму на текущей вкладке</p>
 
-        <label class="field-label" for="resume-select">активное резюме</label>
-        <select id="resume-select" class="resume-select" disabled>
-          <option>загружаем профиль...</option>
-        </select>
-        <p id="resume-meta" class="meta"></p>
+        <section id="auth-panel" class="auth-panel" hidden>
+          <p class="eyebrow">// нужен вход</p>
+          <p class="auth-copy">Расширение берёт резюме и контакты из твоего профиля jobs.dev. Войди через Telegram — это займёт минуту.</p>
+          <button id="login-button" class="primary-button" type="button">войти через Telegram ↗</button>
+          <button id="check-auth-button" class="secondary-button" type="button">я уже вошёл — проверить</button>
+        </section>
 
-        <button id="fill-button" class="primary-button" type="button" disabled>
-          заполнить текущую форму →
-        </button>
-        <a class="profile-link" href="https://jobs-dev.zgerskiim.chatgpt.site/profile" target="_blank" rel="noreferrer">открыть профиль jobs.dev ↗</a>
-        <p id="result" class="result" role="status" aria-live="polite"></p>
+        <section id="resume-panel">
+          <label class="field-label" for="resume-select">активное резюме</label>
+          <select id="resume-select" class="resume-select" disabled>
+            <option>загружаем профиль...</option>
+          </select>
+          <p id="resume-meta" class="meta"></p>
+
+          <button id="fill-button" class="primary-button" type="button" disabled>
+            заполнить текущую форму →
+          </button>
+          <a class="profile-link" href="https://jobs-dev.zgerskiim.chatgpt.site/profile" target="_blank" rel="noreferrer">открыть профиль jobs.dev ↗</a>
+          <p id="result" class="result" role="status" aria-live="polite"></p>
+        </section>
       </section>
     </main>
     <script src="popup.js"></script>
