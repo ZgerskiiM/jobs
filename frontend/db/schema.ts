@@ -74,4 +74,5 @@ export const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)`,
   `CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(user_id, status, ends_at)`,
+  `CREATE TABLE IF NOT EXISTS hh_cache (cache_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, expires_at TEXT NOT NULL)`,
 ]

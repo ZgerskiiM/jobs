@@ -9,6 +9,7 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)`,
   `CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(user_id, status, ends_at)`,
+  `CREATE TABLE IF NOT EXISTS hh_cache (cache_key TEXT PRIMARY KEY, payload_json TEXT NOT NULL, expires_at TEXT NOT NULL)`,
 ]
 const DEFAULT_SETTINGS = {
   notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false },
@@ -305,18 +306,18 @@ async function hhVacancies(request, env) {
   query.set('page', String(Math.min(4, Math.max(0, Number(incoming.searchParams.get('page') || 0)))))
   query.set('per_page', String(Math.min(100, Math.max(1, Number(incoming.searchParams.get('per_page') || 100)))))
   query.set('order_by', incoming.searchParams.get('order_by') || 'publication_time')
-  const cacheKey = new Request(`${incoming.origin}/api/vacancies/hh/?${query.toString()}`)
-  const cached = await caches.default.match(cacheKey)
-  if (cached) return cached
+  const cacheKey = query.toString()
+  const cached = await env.DB.prepare('SELECT payload_json FROM hh_cache WHERE cache_key = ? AND expires_at > ?').bind(cacheKey, now()).first()
+  if (cached) return json(safeJson(cached.payload_json, { source: 'hh', vacancies: [], meta: { updated_at: now() } }))
   const userAgent = env.HH_USER_AGENT || 'jobs.dev/1.0 (support@jobs.dev)'
   const headers = { Accept: 'application/json', 'HH-User-Agent': userAgent, 'User-Agent': userAgent }
   if (env.HH_API_TOKEN) headers.Authorization = `Bearer ${env.HH_API_TOKEN}`
   const response = await fetch(`https://api.hh.ru/vacancies?${query.toString()}`, { headers })
   if (!response.ok) return json({ message: `HH.ru вернул ошибку ${response.status}` }, response.status === 429 ? 429 : 502)
   const payload = await response.json()
-  const result = json({ source: 'hh', vacancies: (payload.items || []).map(mapHhVacancy), meta: { found: payload.found || 0, page: payload.page || 0, pages: payload.pages || 0, updated_at: now() } })
-  await caches.default.put(cacheKey, result.clone())
-  return result
+  const result = { source: 'hh', vacancies: (payload.items || []).map(mapHhVacancy), meta: { found: payload.found || 0, page: payload.page || 0, pages: payload.pages || 0, updated_at: now() } }
+  await env.DB.prepare('INSERT INTO hh_cache (cache_key, payload_json, expires_at) VALUES (?, ?, ?) ON CONFLICT(cache_key) DO UPDATE SET payload_json = excluded.payload_json, expires_at = excluded.expires_at').bind(cacheKey, JSON.stringify(result), new Date(Date.now() + 5 * 60 * 1000).toISOString()).run()
+  return json(result)
 }
 
 async function routeApi(request, env) {
