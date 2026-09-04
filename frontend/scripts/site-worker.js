@@ -313,7 +313,14 @@ async function hhVacancies(request, env) {
   const headers = { Accept: 'application/json', 'HH-User-Agent': userAgent, 'User-Agent': userAgent }
   if (env.HH_API_TOKEN) headers.Authorization = `Bearer ${env.HH_API_TOKEN}`
   const response = await fetch(`https://api.hh.ru/vacancies?${query.toString()}`, { headers })
-  if (!response.ok) return json({ message: `HH.ru вернул ошибку ${response.status}` }, response.status === 429 ? 429 : 502)
+  if (!response.ok) {
+    const message = response.status === 403
+      ? 'HH.ru отклонил запрос (403). Для production нужен OAuth access token в секрете HH_API_TOKEN.'
+      : response.status === 429
+        ? 'HH.ru временно ограничил частоту запросов. Повторите позже.'
+        : `HH.ru вернул ошибку ${response.status}`
+    return json({ source: 'hh', vacancies: [], error: message, meta: { status: response.status, updated_at: now() } }, response.status === 429 ? 429 : 502)
+  }
   const payload = await response.json()
   const result = { source: 'hh', vacancies: (payload.items || []).map(mapHhVacancy), meta: { found: payload.found || 0, page: payload.page || 0, pages: payload.pages || 0, updated_at: now() } }
   await env.DB.prepare('INSERT INTO hh_cache (cache_key, payload_json, expires_at) VALUES (?, ?, ?) ON CONFLICT(cache_key) DO UPDATE SET payload_json = excluded.payload_json, expires_at = excluded.expires_at').bind(cacheKey, JSON.stringify(result), new Date(Date.now() + 5 * 60 * 1000).toISOString()).run()

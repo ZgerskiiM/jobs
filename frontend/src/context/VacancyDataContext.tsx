@@ -26,6 +26,7 @@ type VacancyData = {
   companies: Company[];
   loading: boolean;
   error: string | null;
+  hhError: string | null;
   updatedAt: string | null;
 };
 
@@ -277,21 +278,24 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
 }
 
 export function VacancyDataProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<VacancyData>({ jobs: [], companies: [], loading: true, error: null, updatedAt: null });
+  const [state, setState] = useState<VacancyData>({ jobs: [], companies: [], loading: true, error: null, hhError: null, updatedAt: null });
 
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
       fetch(`${import.meta.env.BASE_URL}api/vacancies.json`, { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Не удалось загрузить каталог вакансий"))),
-      fetch(`/api/vacancies/hh/?text=разработчик&area=1&per_page=100`, { signal: controller.signal }).then((response) => response.ok ? response.json() : { vacancies: [] }).catch(() => ({ vacancies: [] })),
+      fetch(`/api/vacancies/hh/?text=разработчик&area=1&per_page=100`, { signal: controller.signal }).then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        return response.ok ? payload : { vacancies: [], error: payload.message || `HH.ru вернул ошибку ${response.status}` };
+      }).catch(() => ({ vacancies: [], error: "Не удалось связаться с HH.ru" })),
     ])
-      .then(([catalog, hh]: [{ vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }, { vacancies?: SourceVacancy[]; meta?: { updated_at?: string } }]) => {
+      .then(([catalog, hh]: [{ vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }, { vacancies?: SourceVacancy[]; error?: string; meta?: { updated_at?: string } }]) => {
         const vacancies = [...(catalog.vacancies || []), ...(hh.vacancies || [])];
         const jobs = toJobs(vacancies);
-        setState({ jobs, companies: toCompanies(jobs, vacancies, catalog.companies || []), loading: false, error: null, updatedAt: hh.meta?.updated_at || catalog.meta?.updated_at || null });
+        setState({ jobs, companies: toCompanies(jobs, vacancies, catalog.companies || []), loading: false, error: null, hhError: hh.error || null, updatedAt: hh.meta?.updated_at || catalog.meta?.updated_at || null });
       })
       .catch((error: Error) => {
-        if (error.name !== "AbortError") setState({ jobs: [], companies: [], loading: false, error: error.message, updatedAt: null });
+        if (error.name !== "AbortError") setState({ jobs: [], companies: [], loading: false, error: error.message, hhError: null, updatedAt: null });
       });
     return () => controller.abort();
   }, []);

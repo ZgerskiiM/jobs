@@ -37,7 +37,7 @@ function TagBadge({ tag }: { tag: string }) {
 }
 
 export default function Home() {
-  const { jobs, companies, loading, error, updatedAt } = useVacancyData();
+  const { jobs, companies, loading, error, hhError, updatedAt } = useVacancyData();
   const [activeCategory, setActiveCategory] = useState("Все");
   const [activeTechs, setActiveTechs] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -528,7 +528,7 @@ export default function Home() {
       {applyJob && (
         <QuickApplyModal job={applyJob} onClose={() => setApplyJob(null)} />
       )}
-      {(loading || error || updatedAt) && <div className="max-w-7xl mx-auto px-6 pb-8 font-mono text-xs text-[#5a6070]">{loading ? "Загружаем актуальные вакансии…" : error ? `Не удалось загрузить данные: ${error}` : `Данные обновлены: ${new Date(updatedAt!).toLocaleString("ru")}`}</div>}
+      {(loading || error || hhError || updatedAt) && <div role={error || hhError ? "alert" : "status"} className={`max-w-7xl mx-auto px-6 pb-8 font-mono text-xs ${error || hhError ? "text-[#ff3e78]" : "text-[#5a6070]"}`}>{loading ? "Загружаем актуальные вакансии…" : error ? `Не удалось загрузить данные: ${error}` : hhError ? `Источник HH.ru: ${hhError}` : `Данные обновлены: ${new Date(updatedAt!).toLocaleString("ru")}`}</div>}
     </>
   );
 }
