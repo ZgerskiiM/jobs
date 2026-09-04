@@ -208,8 +208,13 @@ async function resumeFile(request, env, user) {
   if (!env.MEDIA) return json({ message: 'Хранилище резюме недоступно' }, 503)
   const requestedId = new URL(request.url).searchParams.get('id')
   const profile = await ensureProfile(env, user.id)
-  const state = await refreshResumeAnalysis(env, profile)
-  const target = state.resumes.find((record) => record.id === (requestedId || state.active?.id))
+  await refreshResumeAnalysis(env, profile)
+  const refreshedProfile = await ensureProfile(env, user.id)
+  const stored = safeJson(refreshedProfile.resume_json, null)
+  const legacy = stored && Array.isArray(stored.resumes) ? null : stored
+  const records = Array.isArray(stored?.resumes) ? stored.resumes : legacy ? [{ id: 'legacy', ...legacy, fileKey: refreshedProfile.resume_key || null }] : []
+  const activeId = stored?.activeId || records.find((record) => record.isActive)?.id || records[0]?.id || null
+  const target = records.find((record) => record.id === (requestedId || activeId))
   if (!target?.fileKey) return json({ message: 'Файл для этого резюме недоступен' }, 404)
   const object = await env.MEDIA.get(target.fileKey)
   if (!object) return json({ message: 'Файл резюме не найден' }, 404)
