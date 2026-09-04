@@ -230,10 +230,22 @@ function scoringResolveMatch(required, features, excluded) {
   let best = null
   for (const item of related) {
     const concept = String(item.concept || '').toUpperCase()
-    const coefficient = Number(item.match || 0)
+    const coefficient = Number(item.match ?? SCORING_CONFIG.scoring?.defaultSemanticMatch?.RELATED_MEDIUM ?? 0)
     if (features.concepts[concept] && (!best || coefficient > best.coefficient)) best = { coefficient, concept }
   }
   return best ? { semantic: best.coefficient, found: best.concept, relation: best.coefficient } : { semantic: 0, found: null, relation: null }
+}
+
+function scoringEffectiveMatch(semantic, extracted) {
+  const boost = SCORING_CONFIG.scoring?.frequencyBoost || {}
+  let frequencyMultiplier = 1
+  if (boost.enabled && Number(extracted.mentions || 0) >= Number(boost.minMentionsForBoost || 2)) {
+    const minimum = Number(boost.minMentionsForBoost || 2)
+    const maximum = Math.max(minimum, Number(boost.maxMentionsCounted || minimum))
+    const progress = (Math.min(Number(extracted.mentions || 0), maximum) - minimum + 1) / (maximum - minimum + 1)
+    frequencyMultiplier += Number(boost.maxBoost || 0) * progress
+  }
+  return Math.min(1, semantic * Number(extracted.contextMultiplier || 1) * Number(extracted.confidence || 1) * frequencyMultiplier)
 }
 
 function scoringGateResults(profile, features) {
@@ -287,6 +299,30 @@ function scoringSeniority(candidate, vacancy) {
   return { candidate, vacancy, coefficient: Number(values[String(distance)] ?? values[String(Math.max(...Object.keys(values).map(Number)))] ?? 0) }
 }
 
+function scoringVacancyRequirementCoverage(profile, features) {
+  const candidateConcepts = new Set((profile.requirements || []).map((item) => String(item.concept || '').toUpperCase()))
+  for (const concept of profile.excludedConcepts || []) candidateConcepts.delete(String(concept).toUpperCase())
+  let total = 0
+  let covered = 0
+  for (const [concept, extracted] of Object.entries(features.concepts || {})) {
+    const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === concept)
+    const weight = Number(config?.weight || 0) * Number(extracted.contextMultiplier || 0)
+    if (weight <= 0) continue
+    total += weight
+    let support = candidateConcepts.has(concept) ? 1 : 0
+    if (!support) {
+      support = [...candidateConcepts].some((candidate) => concept.startsWith(`${candidate}_`) && /_\d+$/.test(concept)) ? 1 : 0
+    }
+    if (!support) {
+      support = Math.max(0, ...(config?.related || [])
+        .filter((item) => candidateConcepts.has(String(item.concept || '').toUpperCase()))
+        .map((item) => Number(item.match ?? SCORING_CONFIG.scoring?.defaultSemanticMatch?.RELATED_MEDIUM ?? 0)))
+    }
+    covered += weight * support
+  }
+  return total ? covered / total : 1
+}
+
 function scoringSummary(level, gates) {
   if (gates.length) return `Низкая релевантность: ${gates.map((gate) => gate.reason).join('; ')}`
   const profileCode = String(SCORING_CONFIG.meta?.profile || '').toUpperCase()
@@ -318,7 +354,7 @@ function scoringScore(profile, features) {
     let effective = 0
     if (resolved.found) {
       const extracted = features.concepts[resolved.found]
-      effective = resolved.semantic * Number(extracted.contextMultiplier || 1) * Number(extracted.confidence || 1)
+      effective = scoringEffectiveMatch(resolved.semantic, extracted)
       if (resolved.relation === null) matched.push({ required: concept, found: resolved.found, coefficient: Number(effective.toFixed(4)) })
       else partialMatches.push({ required: concept, found: resolved.found, coefficient: Number(resolved.relation.toFixed(4)) })
     }
@@ -336,9 +372,17 @@ function scoringScore(profile, features) {
   const weights = SCORING_CONFIG.scoring?.categoryWeights || {}
   const activeWeight = Object.keys(categoryScores).reduce((sum, category) => sum + Number(weights[category] || 0), 0)
   const raw = activeWeight ? Object.entries(categoryScores).reduce((sum, [category, value]) => sum + Number(weights[category] || 0) / activeWeight * value, 0) : 0
+  const experienceMatch = scoringExperience(profile.experienceYears ?? null, features.minExperienceYears ?? null)
+  const seniorityMatch = scoringSeniority(profile.targetSeniority || 'UNKNOWN', features.seniority?.level || 'UNKNOWN')
+  const vacancyRequirementCoverage = scoringVacancyRequirementCoverage(profile, features)
+  const componentWeights = SCORING_CONFIG.scoring?.componentWeights || {}
+  const combined = Number(componentWeights.candidateSkillFit || 0) * raw
+    + Number(componentWeights.vacancyRequirementCoverage || 0) * vacancyRequirementCoverage
+    + Number(componentWeights.experience || 0) * experienceMatch.coefficient
+    + Number(componentWeights.seniority || 0) * seniorityMatch.coefficient
   const negativeSignals = features.negativeSignals || []
   const gatesApplied = scoringGateResults(profile, features)
-  let score = raw * 100 - negativeSignals.reduce((sum, signal) => sum + Number(signal.penalty || 0), 0)
+  let score = combined * 100 - negativeSignals.reduce((sum, signal) => sum + Number(signal.penalty || 0), 0)
   if (gatesApplied.length) score = Math.min(score, ...gatesApplied.map((gate) => gate.maxScore))
   score = Math.max(0, Math.min(100, score))
   const band = (SCORING_CONFIG.outputBands || []).find((item) => score >= Number(item.min) && score <= Number(item.max)) || SCORING_CONFIG.outputBands?.at(-1) || { code: 'WEAK_MATCH', labelRu: 'Слабое совпадение' }
@@ -348,14 +392,15 @@ function scoringScore(profile, features) {
     level: band.code,
     label: band.labelRu,
     hardMatchScore: hardTotal ? Number((hardMatched / hardTotal * 100).toFixed(2)) : 100,
+    vacancyRequirementCoverage: Number((vacancyRequirementCoverage * 100).toFixed(2)),
     categoryScores: Object.fromEntries(Object.entries(categoryScores).map(([key, value]) => [key, Number((value * 100).toFixed(2))])),
     matched,
     partialMatches,
     missingImportant,
     negativeSignals,
     gatesApplied,
-    experienceMatch: scoringExperience(profile.experienceYears ?? null, features.minExperienceYears ?? null),
-    seniorityMatch: scoringSeniority(profile.targetSeniority || 'UNKNOWN', features.seniority?.level || 'UNKNOWN'),
+    experienceMatch,
+    seniorityMatch,
     summary: scoringSummary(band.code, gatesApplied)
   }
 }

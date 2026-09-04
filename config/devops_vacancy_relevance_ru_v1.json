@@ -50,7 +50,13 @@
       "minMentionsForBoost": 2,
       "maxMentionsCounted": 4
     },
-    "finalFormula": "clamp(applyGates(rawCategoryScore * 100 - penalties), 0, 100)"
+    "componentWeights": {
+      "candidateSkillFit": 0.5,
+      "vacancyRequirementCoverage": 0.3,
+      "experience": 0.12,
+      "seniority": 0.08
+    },
+    "finalFormula": "clamp(applyGates((candidateSkillFit * 0.50 + vacancyRequirementCoverage * 0.30 + experience * 0.12 + seniority * 0.08) * 100 - penalties), 0, 100)"
   },
   "contextModifiers": [
     {

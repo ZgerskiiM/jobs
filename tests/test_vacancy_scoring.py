@@ -104,6 +104,28 @@ class VacancyScoringTests(unittest.TestCase):
         self.assertEqual(self.scorer.score(profile(("JAVA", "MUST_HAVE"), years=4), vacancy).experience_match.coefficient, 0.8)
         self.assertEqual(self.scorer.score(profile(("JAVA", "MUST_HAVE"), years=5), vacancy).experience_match.coefficient, 1.0)
 
+    def test_experience_seniority_and_vacancy_requirements_change_final_score(self):
+        candidate = profile(("JAVA", "MUST_HAVE"), ("SPRING_BOOT", "STRONG_PREFERENCE"), years=0)
+        lead = self.extractor.analyze(make_job(
+            "Lead Java Backend Developer",
+            "Java and Spring Boot required. At least 10 years of commercial development experience.",
+        ))
+        qualified = self.scorer.score(
+            profile(("JAVA", "MUST_HAVE"), ("SPRING_BOOT", "STRONG_PREFERENCE"), years=10), lead,
+        )
+        underqualified = self.scorer.score(candidate, lead)
+        self.assertLess(underqualified.score, qualified.score - 5)
+        self.assertAlmostEqual(underqualified.vacancy_requirement_coverage, 1.0)
+        self.assertEqual(underqualified.experience_match.coefficient, 0.2)
+
+        kafka_required = self.extractor.analyze(make_job(
+            "Senior Java Backend Developer",
+            "Java, Spring Boot and Kafka required.",
+        ))
+        result = self.scorer.score(profile(("JAVA", "MUST_HAVE"), ("SPRING_BOOT", "STRONG_PREFERENCE")), kafka_required)
+        self.assertLess(result.vacancy_requirement_coverage, 1.0)
+        self.assertLess(result.score, 95)
+
     def test_hard_match_and_category_renormalization(self):
         features = self.extractor.analyze(make_job("Senior Java Backend Developer", "Java, Kafka."))
         result = self.scorer.score(profile(("JAVA", "MUST_HAVE"), ("SPRING_BOOT", "MUST_HAVE"), ("KAFKA", "NICE_TO_HAVE")), features)

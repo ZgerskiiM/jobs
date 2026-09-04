@@ -37,7 +37,7 @@ export interface AccountPayload {
 }
 
 export interface VacancyScore {
-  vacancyId: string; score: number; level: string; label: string; summary: string; hardMatchScore: number;
+  vacancyId: string; score: number; level: string; label: string; summary: string; hardMatchScore: number; vacancyRequirementCoverage: number;
   matched: Array<{ required: string; found: string; coefficient: number }>;
   partialMatches: Array<{ required: string; found: string; coefficient: number }>;
   missingImportant: string[]; negativeSignals: Array<{ id: string; penalty: number; primaryRoleConflict: boolean; matchedText: string }>;

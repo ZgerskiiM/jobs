@@ -83,6 +83,7 @@ class TaxonomyConfig:
     importance_weights: Mapping[str, float]
     default_semantic_match: Mapping[str, float]
     frequency_boost: Mapping[str, Any]
+    component_weights: Mapping[str, float]
     context_modifiers: tuple[ContextModifier, ...]
     experience_parsing: Mapping[str, Any]
     seniority_levels: Mapping[str, int]
@@ -101,13 +102,14 @@ class TaxonomyConfig:
         concepts_raw = raw.get("taxonomy") or []
         if isinstance(concepts_raw, Mapping):
             concepts_raw = concepts_raw.get("concepts") or []
+        related_match_default = float((scoring.get("defaultSemanticMatch") or {}).get("RELATED_MEDIUM", 0))
         concepts: dict[str, ConceptConfig] = {}
         for item in concepts_raw:
             concept = str(item.get("concept", "")).strip().upper()
             if concept in concepts:
                 raise ValueError(f"Concept IDs must be unique: {concept}")
             related = {
-                str(entry.get("concept", "")).strip().upper(): float(entry.get("match", 0))
+                str(entry.get("concept", "")).strip().upper(): float(entry.get("match", related_match_default))
                 for entry in item.get("related", [])
             }
             concepts[concept] = ConceptConfig(
@@ -139,6 +141,7 @@ class TaxonomyConfig:
             importance_weights={str(k): float(v) for k, v in (scoring.get("importanceWeights") or {}).items()},
             default_semantic_match={str(k): float(v) for k, v in (scoring.get("defaultSemanticMatch") or {}).items()},
             frequency_boost=dict(scoring.get("frequencyBoost") or {}),
+            component_weights={str(k): float(v) for k, v in (scoring.get("componentWeights") or {}).items()},
             context_modifiers=modifiers,
             experience_parsing=dict(raw.get("experienceParsing") or {}),
             seniority_levels={str(k): int(v) for k, v in (seniority.get("levels") or {}).items()},
@@ -188,6 +191,10 @@ def validate_taxonomy(config: TaxonomyConfig) -> None:
         raise ValueError("Category weights must approximately sum to 1.0")
     if any(weight <= 0 for weight in config.category_weights.values()):
         raise ValueError("Category weights must be positive")
+    if not config.component_weights or not 0.98 <= sum(config.component_weights.values()) <= 1.02:
+        raise ValueError("Scoring component weights must approximately sum to 1.0")
+    if any(weight < 0 for weight in config.component_weights.values()):
+        raise ValueError("Scoring component weights cannot be negative")
     if len(config.concepts) != len(set(config.concepts)):
         raise ValueError("Concept IDs must be unique")
     for concept in config.concepts.values():
@@ -403,6 +410,7 @@ class ScoringResult:
     score: float
     level: str
     hard_match_score: float
+    vacancy_requirement_coverage: float
     category_scores: Mapping[str, float]
     matched: tuple[RequirementMatch, ...]
     partial_matches: tuple[PartialMatch, ...]
@@ -419,6 +427,7 @@ class ScoringResult:
             "score": round(self.score, 2),
             "level": self.level,
             "hardMatchScore": round(self.hard_match_score, 2),
+            "vacancyRequirementCoverage": round(self.vacancy_requirement_coverage * 100, 2),
             "categoryScores": {key: round(value * 100, 2) for key, value in self.category_scores.items()},
             "matched": [asdict(value) for value in self.matched],
             "partialMatches": [asdict(value) for value in self.partial_matches],
@@ -705,7 +714,7 @@ class VacancyScorer:
             effective = 0.0
             if found:
                 extracted = vacancy.concepts[found]
-                effective = semantic * extracted.context_multiplier * extracted.confidence
+                effective = self._effective_match(semantic, extracted)
                 if relation is None:
                     matched.append(RequirementMatch(concept, found, round(effective, 4)))
                 else:
@@ -726,18 +735,27 @@ class VacancyScorer:
             sum(self.config.category_weights.get(category, 0) / active_weight_sum * value for category, value in category_scores.items())
             if active_weight_sum else 0.0
         )
+        experience = self._experience_match(profile.experience_years, vacancy.min_experience_years)
+        seniority = self._seniority_match(profile.target_seniority, vacancy.seniority.level)
+        vacancy_requirement_coverage = self._vacancy_requirement_coverage(profile, vacancy)
+        component_weights = self.config.component_weights
+        combined_score = (
+            component_weights.get("candidateSkillFit", 0) * raw_score
+            + component_weights.get("vacancyRequirementCoverage", 0) * vacancy_requirement_coverage
+            + component_weights.get("experience", 0) * experience.coefficient
+            + component_weights.get("seniority", 0) * seniority.coefficient
+        )
         penalties = sum(signal.penalty for signal in vacancy.negative_signals)
-        gated_score = raw_score * 100 - penalties
+        gated_score = combined_score * 100 - penalties
         gates = tuple(self._evaluate_gates(profile, vacancy))
         if gates:
             gated_score = min(gated_score, min(gate.max_score for gate in gates))
         final_score = max(0.0, min(100.0, gated_score))
         band = next((band for band in self.config.output_bands if band.minimum <= final_score <= band.maximum), self.config.output_bands[-1])
-        experience = self._experience_match(profile.experience_years, vacancy.min_experience_years)
-        seniority = self._seniority_match(profile.target_seniority, vacancy.seniority.level)
         return ScoringResult(
             vacancy_id=vacancy.vacancy_id, score=final_score, level=band.code,
             hard_match_score=(hard_matched / hard_total * 100 if hard_total else 100.0),
+            vacancy_requirement_coverage=vacancy_requirement_coverage,
             category_scores=category_scores, matched=tuple(matched), partial_matches=tuple(partial),
             missing_important=tuple(missing), negative_signals=vacancy.negative_signals,
             gates_applied=gates, experience_match=experience, seniority_match=seniority,
@@ -756,6 +774,49 @@ class VacancyScorer:
         if best is None:
             return 0.0, None, None
         return best[0], best[1], best[0]
+
+    def _effective_match(self, semantic: float, extracted: ExtractedConcept) -> float:
+        boost = self.config.frequency_boost
+        frequency_multiplier = 1.0
+        if boost.get("enabled") and extracted.mentions >= int(boost.get("minMentionsForBoost", 2)):
+            minimum = int(boost.get("minMentionsForBoost", 2))
+            maximum = max(minimum, int(boost.get("maxMentionsCounted", minimum)))
+            progress = (min(extracted.mentions, maximum) - minimum + 1) / (maximum - minimum + 1)
+            frequency_multiplier += float(boost.get("maxBoost", 0)) * progress
+        return min(1.0, semantic * extracted.context_multiplier * extracted.confidence * frequency_multiplier)
+
+    def _vacancy_requirement_coverage(self, profile: CandidateProfile, vacancy: VacancyFeatures) -> float:
+        """Measure how much of the vacancy's stated stack is present in the profile.
+
+        Context multipliers turn preferred and deprecated technologies into a
+        proportionally smaller part of the denominator. This prevents a sparse
+        candidate profile from receiving a perfect match simply because every
+        listed skill was found in the vacancy.
+        """
+        candidate_concepts = {requirement.concept.upper() for requirement in profile.requirements}
+        candidate_concepts.difference_update(profile.excluded_concepts)
+        total = 0.0
+        covered = 0.0
+        for concept, extracted in vacancy.concepts.items():
+            concept_weight = self.config.concepts.get(concept, ConceptConfig(concept, "", 0, ())).weight
+            weight = concept_weight * extracted.context_multiplier
+            if weight <= 0:
+                continue
+            total += weight
+            covered += weight * self._candidate_supports(concept, candidate_concepts)
+        return covered / total if total else 1.0
+
+    def _candidate_supports(self, vacancy_concept: str, candidate_concepts: set[str]) -> float:
+        if vacancy_concept in candidate_concepts:
+            return 1.0
+        if any(
+            vacancy_concept.startswith(candidate + "_")
+            and vacancy_concept.rsplit("_", 1)[-1].isdigit()
+            for candidate in candidate_concepts
+        ):
+            return 1.0
+        related = self.config.concepts[vacancy_concept].related
+        return max((coefficient for concept, coefficient in related.items() if concept in candidate_concepts), default=0.0)
 
     def _evaluate_gates(self, profile: CandidateProfile, vacancy: VacancyFeatures) -> list[GateResult]:
         concepts = vacancy.concepts
