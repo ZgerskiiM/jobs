@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>jobs.dev</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <span class="prompt">&gt;</span>
+        <span class="brand">jobs<span>.dev</span></span>
+      </header>
+      <section class="popup-content">
+        <p class="eyebrow">// быстрый отклик</p>
+        <h1>Заполнить форму</h1>
+        <p id="page-status" class="muted">проверяем текущую страницу...</p>
+
+        <label class="field-label" for="resume-select">активное резюме</label>
+        <select id="resume-select" class="resume-select" disabled>
+          <option>загружаем профиль...</option>
+        </select>
+        <p id="resume-meta" class="meta"></p>
+
+        <button id="fill-button" class="primary-button" type="button" disabled>
+          заполнить форму →
+        </button>
+        <a class="profile-link" href="https://jobs-dev.zgerskiim.chatgpt.site/profile" target="_blank" rel="noreferrer">открыть профиль jobs.dev ↗</a>
+        <p id="result" class="result" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
