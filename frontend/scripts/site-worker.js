@@ -259,23 +259,26 @@ async function scoringIndexedFeatures(env, vacancy) {
 
 async function scoreVacancies(request, env, user) {
   const data = await body(request)
-  const items = Array.isArray(data.items) ? data.items.slice(0, 40) : []
+  const items = Array.isArray(data.items) ? data.items.slice(0, 4000) : []
   if (!items.length) return json({ message: 'Не переданы вакансии для оценки' }, 400)
   const profile = await ensureProfile(env, user.id)
   const account = { resume: (await refreshResumeAnalysis(env, profile)).active, onboarding: safeJson(profile.onboarding_json, null) }
   const candidate = scoringCandidateProfile(account)
   const scores = []
   for (const item of items) {
-    if (!item || !String(item.title || '').trim()) continue
+    if (!item) continue
     const vacancy = {
       id: String(item.id || ''), source_key: String(item.source_key || 'catalog'), title: String(item.title || '').slice(0, 300),
       description: String(item.description || '').slice(0, 20000), posted_at: String(item.posted_at || ''), first_seen_at: String(item.first_seen_at || '')
     }
     const vacancyId = scoringVacancyId(vacancy)
-    const features = scoringInflateFeatures(item.features, vacancyId) || await scoringIndexedFeatures(env, vacancy)
-    scores.push(scoringScore(candidate, features))
+    const preparedFeatures = scoringInflateFeatures(item.features, vacancyId)
+    if (!preparedFeatures && !vacancy.title.trim()) continue
+    const features = preparedFeatures || await scoringIndexedFeatures(env, vacancy)
+    const score = scoringScore(candidate, features)
+    scores.push(data.compact ? { vacancyId: score.vacancyId, score: score.score, level: score.level, label: score.label } : score)
   }
-  scores.sort((left, right) => right.score - left.score || right.hardMatchScore - left.hardMatchScore || left.vacancyId.localeCompare(right.vacancyId))
+  scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId))
   return json({ taxonomyVersion: String(SCORING_CONFIG.meta?.version || ''), profile: candidate, scores })
 }
 

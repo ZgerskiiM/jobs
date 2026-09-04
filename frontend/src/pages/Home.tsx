@@ -6,7 +6,7 @@ import { useVacancyData } from "../context/VacancyDataContext";
 import CompanyJobsPanel from "../components/CompanyJobsPanel";
 import { useAuth } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
-import { accountApi, type VacancyScore } from "../api";
+import { accountApi, type VacancyScoreSummary } from "../api";
 
 const TRENDS = [
   { label: "AI / ML Engineer", delta: "+34%", count: "2,841", hot: true },
@@ -27,6 +27,13 @@ const STATS = [
 ];
 
 const VACANCIES_PER_PAGE = 15;
+const MATCH_THRESHOLDS = [
+  { value: 0, label: "любое" },
+  { value: 40, label: "40%+" },
+  { value: 55, label: "55%+" },
+  { value: 70, label: "70%+" },
+  { value: 80, label: "80%+" },
+];
 
 function LogoBadge({ logo, logoUrl, color, size = "md" }: { logo: string; logoUrl?: string; color: string; size?: "sm" | "md" | "lg" }) {
   const sizes = { sm: "w-8 h-8 text-xs", md: "w-10 h-10 text-sm", lg: "w-14 h-14 text-lg" };
@@ -50,7 +57,9 @@ export default function Home() {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [applyJob, setApplyJob] = useState<Job | null>(null);
   const { user, resume, onboarding, openAuthModal, isJobSaved, toggleSavedJob } = useAuth();
-  const [vacancyScores, setVacancyScores] = useState<Record<string, VacancyScore>>({});
+  const [vacancyScores, setVacancyScores] = useState<Record<string, VacancyScoreSummary>>({});
+  const [matchThreshold, setMatchThreshold] = useState(0);
+  const [scoringLoading, setScoringLoading] = useState(false);
 
   const toggleTech = (tech: string) => {
     setActiveTechs((prev) =>
@@ -72,7 +81,9 @@ export default function Home() {
     const matchRemote = !remoteOnly || j.location.toLowerCase().includes("remote");
     const matchTechs =
       activeTechs.length === 0 || activeTechs.every((t) => j.tags.includes(t) || j.parsedSkills.includes(t));
-    return matchCat && matchCompany && matchSearch && matchRemote && matchTechs;
+    const score = vacancyScores[`catalog:${j.id}`]?.score;
+    const matchScore = matchThreshold === 0 || !user || !resume || scoringLoading || (score !== undefined && score >= matchThreshold);
+    return matchCat && matchCompany && matchSearch && matchRemote && matchTechs && matchScore;
   });
   const totalPages = Math.max(1, Math.ceil(filtered.length / VACANCIES_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
@@ -84,21 +95,32 @@ export default function Home() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, activeCategory, activeCompany, activeTechs, remoteOnly]);
+  }, [search, activeCategory, activeCompany, activeTechs, remoteOnly, matchThreshold]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!user || !resume || pageJobs.length === 0) {
+    if (!user || !resume || jobs.length === 0) {
       setVacancyScores({});
+      setScoringLoading(false);
+      setMatchThreshold(0);
       return () => { cancelled = true; };
     }
-    accountApi.scoreVacancies(pageJobs.map((job) => ({ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures })))
+    setScoringLoading(true);
+    accountApi.scoreVacancyIndex(jobs.map((job) => job.scoringFeatures
+      ? { id: job.id, features: job.scoringFeatures }
+      : { id: job.id, title: job.title, description: job.description, posted_at: job.posted }))
       .then(({ scores }) => {
         if (!cancelled) setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
       })
-      .catch(() => { if (!cancelled) setVacancyScores({}); });
+      .catch(() => {
+        if (!cancelled) {
+          setVacancyScores({});
+          setMatchThreshold(0);
+        }
+      })
+      .finally(() => { if (!cancelled) setScoringLoading(false); });
     return () => { cancelled = true; };
-  }, [user?.id, resume?.id, jobs.length, currentPage, search, activeCategory, activeCompany, remoteOnly, activeTechs.join(",")]);
+  }, [user?.id, resume?.id, jobs]);
 
   const roleLabels: Record<string, string> = {
     backend: "Backend", frontend: "Frontend", aiml: "AI/ML",
@@ -316,6 +338,40 @@ export default function Home() {
                 {c}
               </button>
             ))}
+          </div>
+
+          {/* resume match row */}
+          <div className="mt-3 pt-3 border-t border-[rgba(58,64,79,0.3)]">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest shrink-0">соответствие:</span>
+              {MATCH_THRESHOLDS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={matchThreshold === option.value}
+                  disabled={option.value > 0 && (!user || !resume)}
+                  onClick={() => setMatchThreshold(option.value)}
+                  className={`font-mono text-[10px] min-h-9 px-3 rounded-sm border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    matchThreshold === option.value
+                      ? "bg-[rgba(51,255,119,0.15)] border-[rgba(51,255,119,0.4)] text-[#33ff77]"
+                      : "border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              {scoringLoading && <span className="font-mono text-[10px] text-[#5a6070]">считаем соответствие…</span>}
+              {!user && (
+                <button type="button" onClick={openAuthModal} className="font-mono text-[10px] text-[#33ff77] hover:underline ml-1">
+                  войти для фильтра →
+                </button>
+              )}
+              {user && !resume && (
+                <Link to="/profile" className="font-mono text-[10px] text-[#33ff77] hover:underline ml-1">
+                  загрузить резюме →
+                </Link>
+              )}
+            </div>
           </div>
 
           {/* tech stack row */}

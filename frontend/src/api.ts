@@ -45,6 +45,9 @@ export interface VacancyScore {
   seniorityMatch: { candidate: string; vacancy: string; coefficient: number };
 }
 
+export type VacancyScoreSummary = Pick<VacancyScore, "vacancyId" | "score" | "level" | "label">;
+export type VacancyScoreInput = { id: number | string; source_key?: string; title?: string; description?: string; posted_at?: string; features?: CompactVacancyFeatures };
+
 const API_ORIGIN = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 let csrfReady = false;
 
@@ -108,6 +111,8 @@ export const accountApi = {
     request<Application>("/api/applications/", { method: "POST", body: JSON.stringify(application) }),
   patchApplication: (id: number, patch: Partial<Application>) =>
     request<Application>(`/api/applications/${id}/`, { method: "PATCH", body: JSON.stringify(patch) }),
-  scoreVacancies: (items: Array<{ id: number | string; source_key?: string; title: string; description: string; posted_at?: string; features?: CompactVacancyFeatures }>) =>
+  scoreVacancies: (items: VacancyScoreInput[]) =>
     request<{ taxonomyVersion: string; profile: unknown; scores: VacancyScore[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items }) }),
+  scoreVacancyIndex: (items: VacancyScoreInput[]) =>
+    request<{ taxonomyVersion: string; profile: unknown; scores: VacancyScoreSummary[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items, compact: true }) }),
 };
