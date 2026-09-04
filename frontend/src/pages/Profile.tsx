@@ -1,47 +1,9 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, Link } from "react-router";
-import { useAuth, OnboardingData, UserSettings, ResumeSkill } from "../context/AuthContext";
+import { useAuth, OnboardingData, UserSettings, ResumeSkill, type ResumeData } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
 import { type Job } from "../data";
 import { useVacancyData } from "../context/VacancyDataContext";
-
-interface ResumeData {
-  fileName: string;
-  uploadedAt: string;
-  experience: string;
-  position: string;
-  skills: ResumeSkill[];
-}
-
-const PARSED_RESUME: ResumeData = {
-  fileName: "resume_2024.pdf",
-  uploadedAt: "1 сент 2024",
-  experience: "6 лет",
-  position: "Senior Backend Engineer",
-  skills: [
-    { name: "Go", category: "Языки", confirmed: true },
-    { name: "Python", category: "Языки", confirmed: true },
-    { name: "Rust", category: "Языки", confirmed: true },
-    { name: "TypeScript", category: "Языки", confirmed: true },
-    { name: "Kubernetes", category: "Инфраструктура", confirmed: true },
-    { name: "Terraform", category: "Инфраструктура", confirmed: true },
-    { name: "Docker", category: "Инфраструктура", confirmed: true },
-    { name: "Prometheus", category: "Инфраструктура", confirmed: true },
-    { name: "Ansible", category: "Инфраструктура", confirmed: false },
-    { name: "PostgreSQL", category: "Базы данных", confirmed: true },
-    { name: "Redis", category: "Базы данных", confirmed: true },
-    { name: "ClickHouse", category: "Базы данных", confirmed: true },
-    { name: "MongoDB", category: "Базы данных", confirmed: false },
-    { name: "gRPC", category: "Протоколы и фреймворки", confirmed: true },
-    { name: "Kafka", category: "Протоколы и фреймворки", confirmed: true },
-    { name: "REST API", category: "Протоколы и фреймворки", confirmed: true },
-    { name: "GraphQL", category: "Протоколы и фреймворки", confirmed: false },
-    { name: "System Design", category: "Практики", confirmed: true },
-    { name: "CI/CD", category: "Практики", confirmed: true },
-    { name: "Code Review", category: "Практики", confirmed: true },
-    { name: "Technical Leadership", category: "Практики", confirmed: true },
-  ],
-};
 
 // Jobs that match confirmed skills
 const MATCHED_JOBS = [
@@ -127,7 +89,7 @@ function SavedBadge() {
 
 export default function Profile() {
   const { jobs } = useVacancyData();
-  const { user, isLoading, onboarding, settings, completeOnboarding, updateSettings, updateName, logout, changePassword, deleteAccount, resume, resumeSkills, setResumeSkills, uploadResume, clearResume, coverLetter, setCoverLetter, savedJobIds, toggleSavedJob, isPro } = useAuth();
+  const { user, isLoading, onboarding, settings, completeOnboarding, updateSettings, updateName, logout, changePassword, deleteAccount, resume, resumeSkills, setResumeSkills, uploadResume, coverLetter, setCoverLetter, savedJobIds, toggleSavedJob, isPro } = useAuth();
   const [tab, setTab] = useState<Tab>("preferences");
   const [applyJob, setApplyJob] = useState<Job | null>(null);
   const [clDraft, setClDraft] = useState(coverLetter);
@@ -137,17 +99,44 @@ export default function Profile() {
   const [resumeData, setResumeData] = useState<ResumeData | null>(resume);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeDragOver, setResumeDragOver] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   const [showMatches, setShowMatches] = useState(false);
   const resumeFileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setResumeData(resume);
+  }, [resume]);
+
+  const openResumePicker = () => resumeFileRef.current?.click();
+
   const handleResumeFile = async (file: File) => {
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (!extension || !["pdf", "docx"].includes(extension)) {
+      setResumeError("Поддерживаются только файлы PDF и DOCX");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setResumeError("Файл больше 8 МБ");
+      return;
+    }
+
+    setResumeError(null);
     setResumeUploading(true);
     try {
       const data = await uploadResume(file);
       setResumeData(data);
+      setShowMatches(false);
+    } catch (requestError) {
+      setResumeError(requestError instanceof Error ? requestError.message : "Не удалось проанализировать резюме");
     } finally {
       setResumeUploading(false);
     }
+  };
+
+  const handleResumeInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (file) void handleResumeFile(file);
   };
 
   const toggleSkill = (name: string) => {
@@ -410,18 +399,34 @@ export default function Profile() {
       {/* ── RESUME ── */}
       {tab === "resume" && (
         <div>
+          <input ref={resumeFileRef} id="resume-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeInputChange} />
+          {resumeError && (
+            <div role="alert" className="mb-5 border border-[rgba(255,62,120,0.35)] bg-[rgba(255,62,120,0.08)] rounded-sm px-4 py-3 flex items-start justify-between gap-4">
+              <div>
+                <div className="font-mono text-xs text-[#ff3e78] mb-1">не удалось загрузить резюме</div>
+                <div className="font-sans text-xs text-[#e8eaf0]">{resumeError}</div>
+              </div>
+              <button type="button" onClick={openResumePicker} className="font-mono text-xs text-[#ff3e78] hover:text-white transition-colors shrink-0 min-h-11 px-2">
+                попробовать снова
+              </button>
+            </div>
+          )}
           {/* Empty state */}
           {!resumeData && !resumeUploading && (
             <div>
               <p className="font-sans text-sm text-[#5a6070] mb-6">
                 Загрузи резюме — извлечём навыки и найдём вакансии с максимальным совпадением
               </p>
-              <div
-                className={`border-2 border-dashed rounded-sm transition-all cursor-pointer ${resumeDragOver ? "border-[rgba(51,255,119,0.5)] bg-[rgba(51,255,119,0.05)]" : "border-[rgba(51,255,119,0.2)] hover:border-[rgba(51,255,119,0.4)] hover:bg-[rgba(51,255,119,0.02)]"}`}
-                onClick={() => resumeFileRef.current?.click()}
+              <button
+                type="button"
+                aria-label="Загрузить резюме в формате PDF или DOCX"
+                aria-describedby="resume-upload-hint"
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openResumePicker(); } }}
+                className={`w-full p-0 text-left bg-transparent border-2 border-dashed rounded-sm transition-all cursor-pointer focus-visible:outline-1 focus-visible:outline-[#33ff77] ${resumeDragOver ? "border-[rgba(51,255,119,0.5)] bg-[rgba(51,255,119,0.05)]" : "border-[rgba(51,255,119,0.2)] hover:border-[rgba(51,255,119,0.4)] hover:bg-[rgba(51,255,119,0.02)]"}`}
+                onClick={openResumePicker}
                 onDragOver={(e) => { e.preventDefault(); setResumeDragOver(true); }}
                 onDragLeave={() => setResumeDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setResumeDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleResumeFile(f); }}
+                onDrop={(e) => { e.preventDefault(); setResumeDragOver(false); const f = e.dataTransfer.files[0]; if (f) void handleResumeFile(f); }}
               >
                 <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
                   <div className="w-12 h-12 flex items-center justify-center rounded-sm bg-[rgba(51,255,119,0.08)] border border-[rgba(51,255,119,0.2)] mb-4">
@@ -430,22 +435,21 @@ export default function Profile() {
                     </svg>
                   </div>
                   <div className="font-sans text-sm text-white font-medium mb-1">Перетащи файл или нажми для выбора</div>
-                  <div className="font-mono text-xs text-[#5a6070]">PDF или DOCX · до 10 МБ</div>
+                  <div id="resume-upload-hint" className="font-mono text-xs text-[#5a6070]">PDF или DOCX · до 8 МБ</div>
                 </div>
-              </div>
-              <input ref={resumeFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); }} />
+              </button>
             </div>
           )}
 
           {/* Uploading */}
           {resumeUploading && (
-            <div className="border border-[rgba(51,255,119,0.12)] bg-[#0e1018] rounded-sm p-10 text-center">
+            <div role="status" aria-live="polite" aria-busy="true" className="border border-[rgba(51,255,119,0.12)] bg-[#0e1018] rounded-sm p-10 text-center">
               <div className="font-mono text-sm text-white mb-1">Анализируем резюме...</div>
               <div className="font-sans text-xs text-[#5a6070] mb-6">извлекаем навыки, определяем грейд и специализации</div>
               <div className="h-1 bg-[#1a1d28] rounded-full max-w-xs mx-auto overflow-hidden">
-                <div className="h-full bg-[#33ff77] rounded-full" style={{ animation: "parseBar 2.4s ease-out forwards" }} />
+                <div className="resume-parse-bar h-full bg-[#33ff77] rounded-full" style={{ animation: "parseBar 2.4s ease-out forwards" }} />
               </div>
-              <style>{`@keyframes parseBar { from { width: 0% } to { width: 100% } }`}</style>
+              <style>{`@keyframes parseBar { from { width: 0% } to { width: 100% } } @media (prefers-reduced-motion: reduce) { .resume-parse-bar { animation-duration: 0.01ms !important; } }`}</style>
             </div>
           )}
 
@@ -461,24 +465,25 @@ export default function Profile() {
                     </svg>
                   </div>
                   <div>
-                    <div className="font-sans text-sm text-white font-medium">{resumeData.position}</div>
-                    <div className="font-mono text-xs text-[#5a6070]">{resumeData.fileName} · {resumeData.uploadedAt} · {resumeData.experience} опыта</div>
+                    <div className="font-sans text-sm text-white font-medium">{resumeData.position || "Резюме загружено"}</div>
+                    <div className="font-mono text-xs text-[#5a6070]">
+                      {[resumeData.fileName, resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`].filter(Boolean).join(" · ")}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { void clearResume(); setResumeData(null); setShowMatches(false); }}
-                    className="font-mono text-xs text-[#3a404f] hover:text-[#5a6070] transition-colors"
+                    onClick={openResumePicker}
+                    className="font-mono text-xs text-[#3a404f] hover:text-[#5a6070] transition-colors min-h-11 px-2"
                   >
                     заменить
                   </button>
                   <button
-                    onClick={() => resumeFileRef.current?.click()}
-                    className="font-mono text-xs px-3 py-1.5 border border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)] rounded-sm transition-all"
+                    onClick={openResumePicker}
+                    className="font-mono text-xs px-3 py-1.5 min-h-11 border border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)] rounded-sm transition-all"
                   >
                     загрузить другое
                   </button>
-                  <input ref={resumeFileRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); }} />
                 </div>
               </div>
 

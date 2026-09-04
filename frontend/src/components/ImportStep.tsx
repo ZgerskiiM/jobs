@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useAuth, OnboardingData } from "../context/AuthContext";
+import { useAuth, OnboardingData, type ResumeData } from "../context/AuthContext";
 
 type Method = "choose" | "hh-connecting" | "hh-select" | "resume-uploading" | "resume-review";
 
@@ -42,16 +42,6 @@ const HH_RESUMES = [
     },
   },
 ];
-
-// Simulated resume parse result
-const RESUME_PARSE_RESULT: ParsedData = {
-  roles: ["backend", "devops"],
-  levels: ["senior", "lead"],
-  formats: ["remote"],
-  skills: ["Rust", "Go", "Linux", "Kubernetes", "PostgreSQL", "Terraform"],
-  experience: "7 лет",
-  source: "resume",
-};
 
 const ROLE_LABELS: Record<string, string> = {
   backend: "Backend", frontend: "Frontend", aiml: "AI / ML",
@@ -181,11 +171,12 @@ function ReviewCard({ data, onConfirm, onBack }: { data: ParsedData; onConfirm: 
 }
 
 export default function ImportStep() {
-  const { user, finishImport } = useAuth();
+  const { user, finishImport, uploadResume } = useAuth();
   const [method, setMethod] = useState<Method>("choose");
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
   const [selectedHHResume, setSelectedHHResume] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -201,21 +192,43 @@ export default function ImportStep() {
     setMethod("resume-review");
   };
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     if (!file) return;
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (!extension || !["pdf", "docx"].includes(extension)) {
+      setUploadError("Поддерживаются только файлы PDF и DOCX");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setUploadError("Файл больше 8 МБ");
+      return;
+    }
+
+    setUploadError(null);
     setFileName(file.name);
     setMethod("resume-uploading");
-    setTimeout(() => {
-      setParsedData(RESUME_PARSE_RESULT);
+    try {
+      const resume: ResumeData = await uploadResume(file);
+      setParsedData({
+        roles: [],
+        levels: [],
+        formats: [],
+        skills: resume.skills.map((skill) => skill.name),
+        experience: resume.experience || "не определён",
+        source: "resume",
+      });
       setMethod("resume-review");
-    }, 2200);
+    } catch (requestError) {
+      setUploadError(requestError instanceof Error ? requestError.message : "Не удалось проанализировать резюме");
+      setMethod("choose");
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (file) void handleFile(file);
   };
 
   return (
@@ -238,6 +251,11 @@ export default function ImportStep() {
         {/* CHOOSE */}
         {method === "choose" && (
           <div className="space-y-3">
+            {uploadError && (
+              <div role="alert" className="border border-[rgba(255,62,120,0.35)] bg-[rgba(255,62,120,0.08)] rounded-sm px-4 py-3 font-sans text-xs text-[#e8eaf0]">
+                <span className="font-mono text-[#ff3e78]">ошибка: </span>{uploadError}
+              </div>
+            )}
             {/* HH.ru */}
             <button
               onClick={connectHH}
@@ -276,16 +294,16 @@ export default function ImportStep() {
                 <div className="text-left flex-1">
                   <div className="font-sans text-sm text-white font-medium">Загрузить резюме</div>
                   <div className="font-mono text-[10px] text-[#5a6070] mt-0.5">
-                    PDF или DOCX · перетащи или нажми · распознаем автоматически
+                    PDF или DOCX · до 8 МБ · распознаем автоматически
                   </div>
                 </div>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) void handleFile(f); }}
               />
             </div>
 

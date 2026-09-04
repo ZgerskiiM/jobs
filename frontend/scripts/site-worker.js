@@ -232,6 +232,231 @@ async function savedJobs(request, env, user) {
   return json({ savedJobIds, savedJobNotes: notes })
 }
 
+const RESUME_ANALYSIS_VERSION = 3
+const RESUME_SKILLS = [
+  ['Python', 'Языки', ['python', 'питон']], ['JavaScript', 'Языки', ['javascript', 'js']], ['TypeScript', 'Языки', ['typescript', 'ts']],
+  ['Go', 'Языки', ['go', 'golang', 'го']], ['Rust', 'Языки', ['rust']], ['Java', 'Языки', ['java']], ['Kotlin', 'Языки', ['kotlin']],
+  ['C#', 'Языки', ['c#', 'c sharp']], ['C++', 'Языки', ['c++', 'cpp']], ['PHP', 'Языки', ['php']], ['Ruby', 'Языки', ['ruby']], ['SQL', 'Языки', ['sql']],
+  ['Bash', 'Языки', ['bash', 'shell']], ['React', 'Фреймворки', ['react', 'react.js', 'reactjs']], ['Vue', 'Фреймворки', ['vue', 'vue.js', 'vuejs']],
+  ['Angular', 'Фреймворки', ['angular']], ['Next.js', 'Фреймворки', ['next.js', 'nextjs']], ['Node.js', 'Фреймворки', ['node.js', 'nodejs']],
+  ['Django', 'Фреймворки', ['django']], ['FastAPI', 'Фреймворки', ['fastapi']], ['Spring', 'Фреймворки', ['spring']], ['Spring Boot', 'Фреймворки', ['spring boot']],
+  ['Spring Security', 'Фреймворки', ['spring security']], ['Spring Data JPA', 'Фреймворки', ['spring data jpa']], ['Hibernate', 'Фреймворки', ['hibernate']],
+  ['Docker', 'Инфраструктура', ['docker']], ['Kubernetes', 'Инфраструктура', ['kubernetes', 'k8s']], ['Terraform', 'Инфраструктура', ['terraform']],
+  ['Ansible', 'Инфраструктура', ['ansible']], ['Helm', 'Инфраструктура', ['helm']], ['AWS', 'Инфраструктура', ['aws', 'amazon web services']],
+  ['Azure', 'Инфраструктура', ['azure']], ['GCP', 'Инфраструктура', ['gcp', 'google cloud']], ['Linux', 'Инфраструктура', ['linux']], ['Nginx', 'Инфраструктура', ['nginx']],
+  ['GitHub Actions', 'Инфраструктура', ['github actions']], ['GitLab CI', 'Инфраструктура', ['gitlab ci']], ['Prometheus', 'Инфраструктура', ['prometheus']], ['Grafana', 'Инфраструктура', ['grafana']],
+  ['PostgreSQL', 'Базы данных', ['postgresql', 'postgres', 'постгрес']], ['MySQL', 'Базы данных', ['mysql']], ['MongoDB', 'Базы данных', ['mongodb', 'mongo']],
+  ['Redis', 'Базы данных', ['redis']], ['ClickHouse', 'Базы данных', ['clickhouse']], ['Elasticsearch', 'Базы данных', ['elasticsearch', 'elastic search']],
+  ['REST API', 'Протоколы и фреймворки', ['rest api', 'restful', 'rest']], ['GraphQL', 'Протоколы и фреймворки', ['graphql']], ['gRPC', 'Протоколы и фреймворки', ['grpc']],
+  ['Kafka', 'Протоколы и фреймворки', ['kafka', 'apache kafka']], ['RabbitMQ', 'Протоколы и фреймворки', ['rabbitmq']], ['OpenAPI', 'Протоколы и фреймворки', ['openapi', 'swagger']],
+  ['OAuth', 'Протоколы и фреймворки', ['oauth']], ['CI/CD', 'Практики', ['ci/cd', 'cicd', 'continuous integration']], ['Git', 'Практики', ['git']],
+  ['System Design', 'Практики', ['system design', 'системный дизайн']], ['Microservices', 'Практики', ['microservices', 'микросервисы']], ['Code Review', 'Практики', ['code review', 'код-ревью']],
+  ['Agile', 'Практики', ['agile']], ['Scrum', 'Практики', ['scrum']], ['JUnit', 'Практики', ['junit']], ['Mockito', 'Практики', ['mockito']],
+  ['Testcontainers', 'Практики', ['testcontainers']], ['Maven', 'Практики', ['maven']], ['Gradle', 'Практики', ['gradle']], ['Jenkins', 'Практики', ['jenkins']],
+  ['Liquibase', 'Практики', ['liquibase']], ['ELK', 'Практики', ['elk']], ['SOLID', 'Практики', ['solid']], ['Selenium', 'Практики', ['selenium']], ['Playwright', 'Практики', ['playwright']],
+]
+const RESUME_POSITION_RE = /developer|engineer|разработчик|инженер|аналитик|analyst|designer|дизайнер|manager|менеджер|devops|sre|qa|тестировщик|data scientist|machine learning/i
+
+function hexNumber(bytes, offset, length) {
+  let value = 0
+  for (let index = 0; index < length; index += 1) value += bytes[offset + index] * 2 ** (8 * index)
+  return value
+}
+
+async function inflate(bytes, format = 'deflate-raw') {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+async function docxEntry(bytes, wantedName) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const decoder = new TextDecoder()
+  for (let end = bytes.length - 22; end >= 0; end -= 1) {
+    if (hexNumber(bytes, end, 4) !== 0x06054b50) continue
+    const centralOffset = view.getUint32(end + 16, true)
+    const centralSize = view.getUint32(end + 12, true)
+    let offset = centralOffset
+    const centralEnd = centralOffset + centralSize
+    while (offset < centralEnd && hexNumber(bytes, offset, 4) === 0x02014b50) {
+      const method = view.getUint16(offset + 10, true)
+      const compressedSize = view.getUint32(offset + 20, true)
+      const nameLength = view.getUint16(offset + 28, true)
+      const extraLength = view.getUint16(offset + 30, true)
+      const commentLength = view.getUint16(offset + 32, true)
+      const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength))
+      const localOffset = view.getUint32(offset + 42, true)
+      if (name === wantedName) {
+        const localNameLength = view.getUint16(localOffset + 26, true)
+        const localExtraLength = view.getUint16(localOffset + 28, true)
+        const compressed = bytes.slice(localOffset + 30 + localNameLength + localExtraLength, localOffset + 30 + localNameLength + localExtraLength + compressedSize)
+        if (method === 0) return compressed
+        if (method === 8) return inflate(compressed)
+        throw new Error('Неподдерживаемое сжатие DOCX')
+      }
+      offset += 46 + nameLength + extraLength + commentLength
+    }
+    break
+  }
+  throw new Error('В DOCX не найден текст документа')
+}
+
+function decodeXml(value) {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+}
+
+async function extractDocxText(bytes) {
+  const xml = new TextDecoder().decode(await docxEntry(bytes, 'word/document.xml'))
+  const paragraphs = []
+  const paragraphRe = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/gi
+  let paragraph
+  while ((paragraph = paragraphRe.exec(xml))) {
+    const parts = []
+    const textRe = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi
+    let text
+    while ((text = textRe.exec(paragraph[1]))) parts.push(decodeXml(text[1]))
+    if (parts.length) paragraphs.push(parts.join(''))
+  }
+  return paragraphs.join('\n')
+}
+
+function parseCMap(value) {
+  const codeLength = Number((value.match(/begincodespacerange\s*<([0-9a-f]+)>/i) || [0, '00'])[1].length / 2)
+  const map = new Map()
+  const chars = value.match(/beginbfchar([\s\S]*?)endbfchar/i)?.[1] || ''
+  for (const match of chars.matchAll(/<([0-9a-f]+)>\s*<([0-9a-f]+)>/gi)) map.set(parseInt(match[1], 16), String.fromCodePoint(parseInt(match[2], 16)))
+  const ranges = value.match(/beginbfrange([\s\S]*?)endbfrange/i)?.[1] || ''
+  for (const match of ranges.matchAll(/<([0-9a-f]+)>\s+<([0-9a-f]+)>\s+<([0-9a-f]+)>/gi)) {
+    const start = parseInt(match[1], 16); const finish = parseInt(match[2], 16); const target = parseInt(match[3], 16)
+    for (let code = start; code <= finish; code += 1) map.set(code, String.fromCodePoint(target + code - start))
+  }
+  return { codeLength, map }
+}
+
+function decodeMapped(bytes, cmap) {
+  if (!cmap) return new TextDecoder('latin1').decode(bytes)
+  let result = ''
+  for (let index = 0; index < bytes.length; index += cmap.codeLength) {
+    let code = 0
+    for (let part = 0; part < cmap.codeLength && index + part < bytes.length; part += 1) code = (code << 8) | bytes[index + part]
+    result += cmap.map.get(code) ?? (code < 128 ? String.fromCharCode(code) : '')
+  }
+  return result
+}
+
+function pdfLiteral(value, start) {
+  let index = start + 1; let depth = 1; const bytes = []
+  while (index < value.length && depth) {
+    const char = value[index]
+    if (char === '\\') {
+      const next = value[index + 1]
+      if (/[0-7]/.test(next || '')) {
+        const octal = value.slice(index + 1).match(/^[0-7]{1,3}/)?.[0] || ''
+        bytes.push(parseInt(octal, 8)); index += octal.length + 1; continue
+      }
+      bytes.push({ n: 10, r: 13, t: 9, b: 8, f: 12 }[next] ?? next?.charCodeAt(0) ?? 0); index += 2; continue
+    }
+    if (char === '(') { depth += 1; bytes.push(char.charCodeAt(0)); index += 1; continue }
+    if (char === ')') { depth -= 1; if (depth) bytes.push(char.charCodeAt(0)); index += 1; continue }
+    bytes.push(char.charCodeAt(0)); index += 1
+  }
+  return { bytes: new Uint8Array(bytes), end: index }
+}
+
+function pdfHex(value, start) {
+  const end = value.indexOf('>', start + 1)
+  const hex = (end < 0 ? value.slice(start + 1) : value.slice(start + 1, end)).replace(/\s/g, '')
+  const bytes = new Uint8Array(Math.ceil(hex.length / 2))
+  for (let index = 0; index < hex.length; index += 2) bytes[index / 2] = parseInt(hex.slice(index, index + 2).padEnd(2, '0'), 16)
+  return { bytes, end: end < 0 ? value.length : end + 1 }
+}
+
+function pdfContentText(value, fonts) {
+  let font = ''; let result = ''; let index = 0
+  const append = (bytes) => { result += decodeMapped(bytes, fonts[font]) + ' ' }
+  while (index < value.length) {
+    const fontMatch = value.slice(index).match(/^\/([^\s]+)\s+[\d.-]+\s+Tf\b/)
+    if (fontMatch) { font = fontMatch[1]; index += fontMatch[0].length; continue }
+    if (value[index] === '(') {
+      const token = pdfLiteral(value, index); let next = token.end
+      while (/\s/.test(value[next] || '')) next += 1
+      if (/^(?:Tj|TJ|'|")\b/.test(value.slice(next))) append(token.bytes)
+      index = token.end; continue
+    }
+    if (value[index] === '<' && value[index + 1] !== '<') {
+      const token = pdfHex(value, index); let next = token.end
+      while (/\s/.test(value[next] || '')) next += 1
+      if (/^(?:Tj|TJ|'|")\b/.test(value.slice(next))) append(token.bytes)
+      index = token.end; continue
+    }
+    if (value[index] === '[') {
+      const close = value.indexOf(']', index + 1); const array = close < 0 ? value.slice(index + 1) : value.slice(index + 1, close); let part = 0
+      while (part < array.length) {
+        if (array[part] === '(') { const token = pdfLiteral(array, part); append(token.bytes); part = token.end }
+        else if (array[part] === '<' && array[part + 1] !== '<') { const token = pdfHex(array, part); append(token.bytes); part = token.end }
+        else part += 1
+      }
+      index = close < 0 ? value.length : close + 1; continue
+    }
+    index += 1
+  }
+  return result
+}
+
+async function extractPdfText(bytes) {
+  if (new TextDecoder('latin1').decode(bytes.slice(0, 5)) !== '%PDF-') throw new Error('Файл не похож на PDF')
+  const source = new TextDecoder('latin1').decode(bytes); const objects = new Map(); const objectRe = /(\d+)\s+(\d+)\s+obj\b/g; let match
+  while ((match = objectRe.exec(source))) { const end = source.indexOf('endobj', objectRe.lastIndex); if (end < 0) continue; objects.set(Number(match[1]), { body: source.slice(objectRe.lastIndex, end), start: match.index, end }); objectRe.lastIndex = end + 6 }
+  const streams = new Map(); const streamRe = /stream\r?\n/g
+  while ((match = streamRe.exec(source))) {
+    const end = source.indexOf('endstream', streamRe.lastIndex); if (end < 0) continue
+    const owner = [...objects.entries()].find(([, object]) => match.index > object.start && match.index < object.end)?.[0]
+    if (owner === undefined) continue
+    let data = bytes.slice(streamRe.lastIndex, end); while (data.at(-1) === 10 || data.at(-1) === 13) data = data.slice(0, -1)
+    const dictionary = objects.get(owner)?.body || ''
+    if (dictionary.includes('/FlateDecode')) {
+      try { data = await inflate(data, 'deflate') } catch { streamRe.lastIndex = end + 10; continue }
+    }
+    streams.set(owner, data); streamRe.lastIndex = end + 10
+  }
+  const cmapByFont = new Map(); const fontRe = /\/ToUnicode\s+(\d+)\s+\d+\s+R/g
+  for (const [fontId, object] of objects) { const cmapRef = fontRe.exec(object.body)?.[1]; if (cmapRef && streams.has(Number(cmapRef))) cmapByFont.set(fontId, parseCMap(new TextDecoder('latin1').decode(streams.get(Number(cmapRef))))) }
+  const fonts = {}; const resourceRe = /\/Font\s*<<([\s\S]*?)>>/g
+  for (const object of objects.values()) { let resources; while ((resources = resourceRe.exec(object.body))) for (const font of resources[1].matchAll(/\/([\w.-]+)\s+(\d+)\s+\d+\s+R/g)) if (cmapByFont.has(Number(font[2]))) fonts[font[1]] = cmapByFont.get(Number(font[2])) }
+  return [...streams.entries()].filter(([id]) => !cmapByFont.has(id)).map(([, data]) => pdfContentText(new TextDecoder('latin1').decode(data), fonts)).join('\n')
+}
+
+function normalizedResumeText(text) {
+  return text.replace(/(?<=\w)-\s*\n\s*(?=\w)/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function resumeSkills(text) {
+  const normalized = normalizedResumeText(text).toLowerCase()
+  return RESUME_SKILLS.filter(([, , aliases]) => aliases.some((alias) => {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s+')
+    return new RegExp(`(?<![\\p{L}\\p{N}_+#.])${escaped}(?![\\p{L}\\p{N}_+#.])`, 'iu').test(normalized)
+  })).map(([name, category]) => ({ name, category, confirmed: true }))
+}
+
+function resumePosition(text) {
+  const normalized = normalizedResumeText(text)
+  const match = normalized.match(/(?:[A-Za-z0-9+#./-]+\s+){0,3}(?:developer|engineer|analyst|designer|manager|devops|sre|qa|data scientist|machine learning)\b/i)
+    || normalized.match(/(?:[А-Яа-яЁё0-9+#./-]+\s+){0,3}(?:разработчик|инженер|аналитик|дизайнер|менеджер|тестировщик)\b/i)
+  return match?.[0].trim() || ''
+}
+
+function resumeExperience(text) {
+  const normalized = normalizedResumeText(text)
+  const match = normalized.match(/(?:опыт|experience)[^.!?]{0,100}?(\d{1,2}(?:[.,]\d+)?)\s*(лет|года|год|years?|yrs?)(?=$|[^\p{L}\p{N}_])/iu)
+  if (!match) return ''
+  return `${match[1].replace(',', '.')} ${/years?|yrs?/i.test(match[2]) ? 'лет' : match[2]}`
+}
+
+async function analyzeResume(fileName, bytes) {
+  const lowerName = fileName.toLowerCase(); const text = lowerName.endsWith('.pdf') ? await extractPdfText(bytes) : lowerName.endsWith('.docx') ? await extractDocxText(bytes) : ''
+  if (!text.trim()) throw new Error('Не удалось извлечь текст. Если это скан, сохраните резюме с текстовым слоем')
+  return { analysisVersion: RESUME_ANALYSIS_VERSION, experience: resumeExperience(text), position: resumePosition(text), skills: resumeSkills(text) }
+}
+
 async function resume(request, env, user) {
   const profile = await ensureProfile(env, user.id)
   if (request.method === 'DELETE') {
@@ -252,13 +477,13 @@ async function resume(request, env, user) {
   if (!file || typeof file.arrayBuffer !== 'function') return json({ message: 'Файл резюме не получен' }, 400)
   if (file.size > 8 * 1024 * 1024) return json({ message: 'Файл больше 8 МБ' }, 413)
   const fileName = String(file.name || 'resume')
+  if (!/\.(pdf|docx)$/i.test(fileName)) return json({ message: 'Поддерживаются только файлы PDF и DOCX' }, 400)
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let analysis
+  try { analysis = await analyzeResume(fileName, bytes) } catch (error) { return json({ message: error instanceof Error ? error.message : 'Не удалось проанализировать резюме' }, 400) }
   const key = `resumes/${user.id}/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-  if (env.MEDIA) await env.MEDIA.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || 'application/octet-stream' } })
-  const text = fileName.toLowerCase().endsWith('.txt') ? new TextDecoder().decode(await file.arrayBuffer()) : fileName
-  const knownSkills = [['Go', 'Языки'], ['Python', 'Языки'], ['Rust', 'Языки'], ['TypeScript', 'Языки'], ['Java', 'Языки'], ['Kubernetes', 'Инфраструктура'], ['Terraform', 'Инфраструктура'], ['Docker', 'Инфраструктура'], ['PostgreSQL', 'Базы данных'], ['Redis', 'Базы данных'], ['Kafka', 'Протоколы и фреймворки'], ['gRPC', 'Протоколы и фреймворки'], ['CI/CD', 'Практики']]
-  const lowered = text.toLowerCase()
-  const skills = knownSkills.filter(([name]) => lowered.includes(name.toLowerCase())).map(([name, category]) => ({ name, category, confirmed: true }))
-  const resumeData = { fileName, uploadedAt: now().slice(0, 10), experience: '', position: '', skills }
+  if (env.MEDIA) await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: file.type || 'application/octet-stream' } })
+  const resumeData = { fileName, uploadedAt: now().slice(0, 10), ...analysis }
   if (profile.resume_key && env.MEDIA) await env.MEDIA.delete(profile.resume_key)
   await env.DB.prepare('UPDATE profiles SET resume_json = ?, resume_key = ?, resume_file_name = ?, updated_at = ? WHERE user_id = ?').bind(JSON.stringify(resumeData), key, fileName, now(), user.id).run()
   return json({ resume: resumeData })
