@@ -69,6 +69,7 @@ async function fillCurrentPage() {
   setResult("получаем файл резюме...");
   try {
     const fileBytes = await fetchResumeFile(resume);
+    await api.tabs.executeScript(activeTab.id, { file: "content-script.js" });
     const response = await api.tabs.sendMessage(activeTab.id, {
       type: "fill-resume",
       resume,
@@ -89,12 +90,12 @@ fillButton.addEventListener("click", () => void fillCurrentPage());
 async function init() {
   try {
     [activeTab] = await api.tabs.query({ active: true, currentWindow: true });
-    const isAston = /^https:\/\/career\.astondevs\.ru\/vacancy\//i.test(activeTab?.url || "");
-    if (!isAston) {
-      pageStatus.textContent = "Открой вакансию на career.astondevs.ru";
-      throw new Error("Расширение сейчас работает с формами ASTON.");
+    const isWebPage = /^https?:\/\//i.test(activeTab?.url || "");
+    if (!isWebPage) {
+      pageStatus.textContent = "Открой обычную веб-страницу с формой отклика";
+      throw new Error("На этой вкладке нельзя заполнить форму.");
     }
-    pageStatus.textContent = "страница ASTON найдена";
+    pageStatus.textContent = "вкладка готова — найду поля формы автоматически";
     account = await fetchAccount();
     renderResumes();
   } catch (error) {

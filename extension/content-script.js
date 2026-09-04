@@ -1,8 +1,13 @@
 (() => {
-  const firstNamePattern = /имя|first\s*name/i;
-  const lastNamePattern = /фамилия|last\s*name|surname/i;
-  const emailPattern = /e-?mail|почта/i;
-  const aboutPattern = /о\s*себе|сопровод|about|cover/i;
+  if (globalThis.__jobsDevAutofillLoaded) return;
+  globalThis.__jobsDevAutofillLoaded = true;
+
+  const firstNamePattern = /имя|first\s*name|given[-_\s]*name/i;
+  const lastNamePattern = /фамилия|last\s*name|surname|family[-_\s]*name/i;
+  const emailPattern = /e[-_\s]*mail|почта|email/i;
+  const phonePattern = /телефон|phone|mobile|мобильн/i;
+  const telegramPattern = /telegram|телеграм|tg|username/i;
+  const aboutPattern = /о\s*себе|сопровод|about|cover|message|комментар/i;
 
   function visibleControls() {
     return [...document.querySelectorAll("input, textarea, [contenteditable='true']")].filter((element) => {
@@ -11,8 +16,8 @@
     });
   }
 
-  function controlNearLabel(pattern) {
-    for (const label of document.querySelectorAll("label")) {
+  function controlNearLabel(pattern, root = document) {
+    for (const label of root.querySelectorAll("label")) {
       if (!pattern.test(label.textContent || "")) continue;
       if (label.control) return label.control;
       const nested = label.querySelector("input, textarea, [contenteditable='true']");
@@ -23,8 +28,13 @@
     return null;
   }
 
-  function controlByAttributes(pattern) {
-    return visibleControls().find((element) => pattern.test([element.name, element.id, element.placeholder, element.getAttribute("aria-label")].filter(Boolean).join(" "))) || null;
+  function controlByAttributes(pattern, root = document) {
+    return [...root.querySelectorAll("input, textarea, [contenteditable='true']")].find((element) => pattern.test([element.name, element.id, element.placeholder, element.getAttribute("aria-label"), element.autocomplete].filter(Boolean).join(" "))) || null;
+  }
+
+  function formRoot() {
+    const forms = [...document.querySelectorAll("form")];
+    return forms.find((form) => form.querySelector("input[type='file']")) || forms.find((form) => form.querySelector("input[type='email'], textarea")) || document;
   }
 
   function setValue(element, value) {
@@ -79,19 +89,25 @@
     if (message?.type !== "fill-resume") return undefined;
     const resume = message.resume || {};
     const name = splitName(resume.fullName);
-    const controls = visibleControls();
-    const first = controlNearLabel(firstNamePattern) || controlByAttributes(firstNamePattern) || controls.filter((element) => element.tagName === "INPUT" && (!element.type || element.type === "text"))[0];
-    const last = controlNearLabel(lastNamePattern) || controlByAttributes(lastNamePattern) || controls.filter((element) => element.tagName === "INPUT" && (!element.type || element.type === "text"))[1];
-    const email = controlNearLabel(emailPattern) || controlByAttributes(emailPattern) || controls.find((element) => element.type === "email");
-    const about = controlNearLabel(aboutPattern) || controlByAttributes(aboutPattern) || controls.find((element) => element.tagName === "TEXTAREA" || element.isContentEditable);
-    const fileInput = document.querySelector("input[type='file']");
-    const filled = [setValue(first, name.firstName), setValue(last, name.lastName), setValue(email, resume.contactEmail), setValue(about, message.coverLetter)].filter(Boolean).length;
+    const root = formRoot();
+    const controls = visibleControls().filter((element) => root === document || root.contains(element));
+    const textInputs = controls.filter((element) => element.tagName === "INPUT" && (!element.type || element.type === "text"));
+    const first = controlNearLabel(firstNamePattern, root) || controlByAttributes(firstNamePattern, root) || textInputs[0];
+    const last = controlNearLabel(lastNamePattern, root) || controlByAttributes(lastNamePattern, root) || textInputs[1];
+    const email = controlNearLabel(emailPattern, root) || controlByAttributes(emailPattern, root) || controls.find((element) => element.type === "email");
+    const phone = controlNearLabel(phonePattern, root) || controlByAttributes(phonePattern, root) || controls.find((element) => element.type === "tel");
+    const telegram = controlNearLabel(telegramPattern, root) || controlByAttributes(telegramPattern, root);
+    const about = controlNearLabel(aboutPattern, root) || controlByAttributes(aboutPattern, root) || controls.find((element) => element.tagName === "TEXTAREA" || element.isContentEditable);
+    const fileInput = root.querySelector("input[type='file']") || document.querySelector("input[type='file']");
+    const filled = [setValue(first, name.firstName), setValue(last, name.lastName), setValue(email, resume.contactEmail), setValue(phone, resume.contactPhone), setValue(telegram, resume.contactTelegram), setValue(about, message.coverLetter)].filter(Boolean).length;
     const attached = attachFile(fileInput, message.fileBytes, resume.fileName, /\.docx$/i.test(resume.fileName || "") ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf");
-    const total = [first, last, email, about].filter(Boolean).length + (fileInput ? 1 : 0);
+    const total = [first, last, email, phone, telegram, about].filter(Boolean).length + (fileInput ? 1 : 0);
     const missing = [];
     if (!first) missing.push("имя");
     if (!last) missing.push("фамилия");
     if (!email) missing.push("email");
+    if (resume.contactPhone && !phone) missing.push("телефон");
+    if (resume.contactTelegram && !telegram) missing.push("Telegram");
     if (!about) missing.push("о себе");
     if (fileInput && !attached) missing.push("файл резюме");
     const messageText = `Заполнено полей: ${filled + (attached ? 1 : 0)} из ${total}.${missing.length ? ` Не найдено: ${missing.join(", ")}.` : " Проверь данные и нажми «Отправить заявку»."}`;
