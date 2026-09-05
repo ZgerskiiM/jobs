@@ -1,5 +1,4 @@
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 from html import unescape
@@ -23,6 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Application, AuditLog, Profile, User
+from .resume_parser import analyze_resume
 from .serializers import EmailAuthSerializer, ProfilePatchSerializer, SavedJobSerializer
 from .services import account_payload, get_profile, login_from_telegram, telegram_payload_is_valid
 
@@ -225,24 +225,6 @@ class SavedJobsView(APIView):
         return Response({"savedJobIds": profile.saved_job_ids, "savedJobNotes": profile.saved_job_notes})
 
 
-def resume_text(data: bytes, suffix: str) -> str:
-    if suffix == ".pdf":
-        try:
-            from pypdf import PdfReader
-
-            return "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
-        except Exception:
-            return ""
-    if suffix == ".docx":
-        try:
-            from docx import Document
-
-            return "\n".join(paragraph.text for paragraph in Document(BytesIO(data)).paragraphs)
-        except Exception:
-            return ""
-    return data.decode("utf-8-sig", errors="replace")
-
-
 class ResumeView(APIView):
     def patch(self, request):
         profile = get_profile(request.user)
@@ -260,21 +242,19 @@ class ResumeView(APIView):
         if upload is None:
             return error("Файл резюме не получен")
         if upload.size > 8 * 1024 * 1024:
-            return error("Файл больше 8 МБ", 413)
+            return error("Файл больше 8 МБ", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         data = upload.read()
-        text = resume_text(data, Path(upload.name).suffix.lower())
+        filename = Path(upload.name).name
+        try:
+            analysis = analyze_resume(data, filename)
+        except ValueError as exc:
+            return error(str(exc))
         now = timezone.localtime().strftime("%d %b %Y").lstrip("0")
-        known_skills = [
-            ("Go", "Языки"), ("Python", "Языки"), ("Rust", "Языки"), ("TypeScript", "Языки"),
-            ("Java", "Языки"), ("Kubernetes", "Инфраструктура"), ("Terraform", "Инфраструктура"),
-            ("Docker", "Инфраструктура"), ("PostgreSQL", "Базы данных"), ("Redis", "Базы данных"),
-            ("Kafka", "Протоколы и фреймворки"), ("gRPC", "Протоколы и фреймворки"), ("CI/CD", "Практики"),
-        ]
-        lowered = text.casefold()
-        skills = [{"name": name, "category": category, "confirmed": True} for name, category in known_skills if name.casefold() in lowered]
-        resume = {"fileName": upload.name, "uploadedAt": now, "experience": "", "position": "", "skills": skills}
+        resume = {"fileName": filename, "uploadedAt": now, **analysis}
         profile = get_profile(request.user)
-        profile.resume_file.save(upload.name, ContentFile(data), save=False)
+        if profile.resume_file:
+            profile.resume_file.delete(save=False)
+        profile.resume_file.save(filename, ContentFile(data), save=False)
         profile.resume = resume
         profile.save()
         return Response({"resume": resume})

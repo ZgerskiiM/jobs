@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh jobs.dev vacancy catalog
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/jobs-dev
+ExecStart=/bin/bash /opt/jobs-dev/deploy/update-vacancies.sh

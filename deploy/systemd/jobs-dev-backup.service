@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup jobs.dev production data
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/jobs-dev
+ExecStart=/bin/bash /opt/jobs-dev/deploy/backup.sh

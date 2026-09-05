@@ -1,7 +1,41 @@
 {
   "close_after_missing_runs": 2,
-  "http": {"timeout_seconds": 30, "retries": 2},
-  "filters": {"title_keywords": [], "locations": []},
+  "stale_after_days": 7,
+  "http": {"timeout_seconds": 30, "retries": 2, "source_workers": 6, "per_domain_workers": 2},
+  "filters": {
+    "title_keywords": [],
+    "exclude_title_keywords": [
+      "мобильный банкир", "альфа-агент", "прямых продаж", "кассир", "операционно-кассов",
+      "взыскани", "кредитовани", "менеджер по работе с клиентами", "менеджер по продаж",
+      "бухгалтер", "юрист", "офис-менеджер", "делопроизвод", "ассистент руководителя",
+      "маркетолог", "бренд-менеджер", "ивент", "event", "кладовщик", "сотрудник склада",
+      "пункт выдачи", "продавец", "курьер", "водитель", "грузчик", "повар", "бариста",
+      "оператор технологических установок", "аппаратчик", "токарь", "фрезеровщик", "станочник",
+      "термист", "слесарь", "электромонтер", "электрогазосварщик", "машинист", "бурени",
+      "геолог", "метролог", "инженер-проектировщик", "инженер-конструктор", "инженер-сметчик",
+      "инженер-энергетик", "котельн", "строитель", "прораб", "маркшейдер",
+      "воинскому учету", "складской логистике", "санитарной безопасности", "инженер-пусконаладчик",
+      "presales manager", "заместитель директора магазина", "координатор по документообороту",
+      "специалист по закупкам", "ведущий специалист по закупкам", "категорийный менеджер",
+      "развитию b2c", "ценообразования", "ассистент руководител", "финансового документооборота",
+      "работе с договорами", "вентиляции и кондиционирования", "сервисный инженер по дгу",
+      "химик", "наладчик", "оператор товарный", "неразрушающему контролю",
+      "технического надзора и контроля", "тендерный специалист", "пекарь-тандырщик",
+      "ассистент в отдел закупок", "экспедитор", "по развитию бизнеса", "межрегиональный директор",
+      "кампейнер", "входящим продаж", "сохранению клиентов", "тестированию продаж",
+      "аутсорсинговых продаж", "супервайзер", "мойщиц", "пекарь", "начальник участка пути",
+      "по привлечению зарплатных", "кредитный аналитик", "экономист", "бизнес-маркетинг",
+      "залогам", "универсальный менеджер", "премиальными клиентами", "клиентов малого бизнеса",
+      "партнёрских продаж", "лидогенерац",
+      "диспетчер", "менеджер пункта выдачи", "менеджер по закупкам",
+      "оператор call", "преподаватель",
+      "охране труда", "пожарной безопасност", "военно-учет", "директор магазина",
+      "валютного контроля", "онлайн-воронка", "работе с юридическими лицами",
+      "работе с партнерами", "оператор поддержки покупателей", "call-центра",
+      "зарплатный бизнес", "начинающий специалист банка", "юрисконсульт"
+    ],
+    "locations": []
+  },
   "sources": [
     {
       "key": "aviasales-direct",
@@ -76,6 +110,9 @@
       "job_url_pattern": "/vacancy/(?P<id>[0-9]+)$",
       "min_expected_jobs": 5,
       "fetch_details": true,
+      "filters": {
+        "exclude_team_keywords": ["Продажи"]
+      },
       "authoritative": false,
       "enabled": true
     },
@@ -126,6 +163,28 @@
       "api_url": "https://job.alfabank.ru/api/vacancies",
       "exclude_codes_url": "https://digital.alfabank.ru/vacancies",
       "take": 5000,
+      "filters": {
+        "exclude_title_keywords": [
+          "ведущий менеджер", "главный менеджер", "менеджер по премиальному",
+          "менеджер по развитию отношений", "эксперт по решениям", "специалист по работе с премиальными",
+          "специалист", "эксперт", "советник", "трейдер", "секретарь", "премиум-менеджер",
+          "представитель банка", "практика", "консьерж", "брокер", "партнер", "операционный сервис-менеджер",
+          "инкассатор", "заместитель руководителя", "бизнес-тренер", "автомеханик", "финансовый советник",
+          "начальник управления", "начальник отдела", "начальник группы", "альфа - агент", "бизнес советник",
+          "бизнес-партнёр", "клиентский менеджер", "менеджер ммб", "риск-технолог", "портфельный аналитик",
+          "креативный директор", "дизайнер презентаций", "ведущий тренер"
+        ],
+        "exclude_title_prefixes": [
+          "менеджер", "начальник управления", "начальник отдела", "начальник группы",
+          "эксперт", "специалист", "советник", "трейдер", "секретарь", "премиум-менеджер",
+          "представитель банка", "практика", "консьерж", "брокер", "партнер",
+          "операционный сервис-менеджер", "инкассатор", "заместитель руководителя", "бизнес-тренер"
+        ],
+        "exclude_team_keywords": [
+          "работа в отделении", "розничные продажи", "работа с бизнесом", "финансы, казначейство",
+          "другое", "юридические вопросы", "премиум-сервис"
+        ]
+      },
       "authoritative": true,
       "enabled": true
     },
@@ -207,6 +266,9 @@
       "max_pages": 20,
       "min_expected_jobs": 500,
       "foreign_cities": ["Минск", "Белград", "Ереван", "Ташкент", "Алматы", "Астана"],
+      "filters": {
+        "exclude_team_keywords": ["Плюс AdTech"]
+      },
       "authoritative": true,
       "enabled": true
     },
@@ -229,6 +291,7 @@
       "max_pages": 20,
       "min_expected_jobs": 40,
       "detail_workers": 8,
+      "filters": {"title_keywords": ["технической поддержки корпоративных систем"], "locations": []},
       "authoritative": true,
       "enabled": true
     },
@@ -315,6 +378,15 @@
       "max_pages": 40,
       "min_expected_jobs": 100,
       "detail_workers": 10,
+      "filters": {
+        "title_keywords": [
+          "1С", "цифров", "информационн", "ит-подраздел", "ит инфраструктура",
+          "бизнес-аналитик по коммуникациям", "руководитель проектов (ИТ инфраструктура)",
+          "руководитель проектов 1С"
+        ],
+        "exclude_title_keywords": ["исполнительной документации", "асу тоир"],
+        "locations": []
+      },
       "authoritative": true,
       "enabled": true
     },
@@ -447,6 +519,11 @@
       "type": "astra",
       "url": "https://astra.ru/about/career/vacancies/",
       "min_expected_jobs": 40,
+      "filters": {
+        "exclude_team_keywords": [
+          "Домашний, обслуживающий персонал / Уборщица, уборщик"
+        ]
+      },
       "authoritative": true,
       "enabled": true
     },
@@ -473,6 +550,586 @@
       "detail_workers": 8,
       "authoritative": true,
       "enabled": true
+    },
+    {
+      "key": "glowbyte-direct",
+      "company": "GlowByte",
+      "type": "html",
+      "url": "https://job.glowbyteconsulting.com/",
+      "job_url_pattern": "job\\.glowbyteconsulting\\.com/(?P<id>(?!benefits$|policy$|soglasie$)[^/?#]+)$",
+      "force_https": true,
+      "min_expected_jobs": 3,
+      "fetch_details": true,
+      "require_details": true,
+      "detail_workers": 3,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "magnit-tech-direct",
+      "company": "Магнит Тех",
+      "type": "magnit_tech",
+      "url": "https://magnit.tech",
+      "api_url": "https://magnit.tech/api/v1",
+      "per_page": 100,
+      "max_pages": 5,
+      "min_expected_jobs": 30,
+      "detail_workers": 8,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "psb-direct",
+      "company": "ПСБ",
+      "type": "psb",
+      "url": "https://job.psbank.ru/vacancies/it-specialists",
+      "api_url": "https://job.psbank.ru/api/v1/content",
+      "per_page": 100,
+      "max_pages": 5,
+      "min_expected_jobs": 10,
+      "detail_workers": 8,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "lanit-direct",
+      "company": "ЛАНИТ",
+      "type": "lanit",
+      "url": "https://job.lanit.ru/main/",
+      "api_url": "https://job.lanit.ru/_vti_bin/Lanit.Job.Redesign/WebService.svc/GetVacancyForWidget",
+      "min_expected_jobs": 10,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "1c-direct",
+      "company": "1С",
+      "type": "one_c",
+      "url": "https://1c.ru/rus/firm1c/vacan/search",
+      "directions": [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 14, 15],
+      "min_expected_jobs": 20,
+      "detail_workers": 8,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "bft-direct",
+      "company": "БФТ",
+      "type": "html",
+      "url": "https://bft.ru/career/list/",
+      "job_url_pattern": "/career/detail/(?P<id>\\d+)/",
+      "min_expected_jobs": 30,
+      "fetch_details": true,
+      "require_details": true,
+      "detail_workers": 8,
+      "filters": {"title_keywords": ["devops", "аналитик", "разработчик", "системн", "технической поддержки", "инженер внедрения", "тестирован", "qa", "сопровожд"], "locations": []},
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "samolet-direct",
+      "company": "Самолет",
+      "type": "samolet",
+      "url": "https://career.samolet.ru/vakansii/",
+      "api_url": "https://career.samolet.ru/api/integrations/skillaz/vacancies/",
+      "min_expected_jobs": 20,
+      "filters": {"title_keywords": ["инженер технической поддержки"], "locations": []},
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "rwb-direct",
+      "company": "Wildberries & Russ",
+      "type": "rwb",
+      "url": "https://career.rwb.ru/vacancies",
+      "api_url": "https://career.rwb.ru/crm-api/api/v1/pub/vacancies",
+      "per_page": 100,
+      "max_pages": 10,
+      "min_expected_jobs": 20,
+      "detail_workers": 8,
+      "filters": {
+        "exclude_team_keywords": ["Производство питания"]
+      },
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "rshb-digital-direct",
+      "company": "РСХБ.цифра",
+      "type": "rshb_digital",
+      "url": "https://rshbdigital.ru/vacancies",
+      "api_url": "https://rshbdigital.ru/api/v1/owb-ms-plt-app/vacancies",
+      "per_page": 100,
+      "max_pages": 5,
+      "min_expected_jobs": 20,
+      "filters": {
+        "exclude_team_keywords": [
+          "АО Россельхозбанк", "РСХБ-Интех", "РСХБ Страхование",
+          "РСХБ Управление Активами", "РСХБ Факторинг"
+        ]
+      },
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "bell-integrator-direct",
+      "company": "Bell Integrator",
+      "type": "html",
+      "url": "https://bellintegrator.ru/information/careers",
+      "job_url_pattern": "/vacancy/(?P<id>\\d+)",
+      "min_expected_jobs": 15,
+      "fetch_details": true,
+      "require_details": true,
+      "detail_workers": 4,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "aston-direct",
+      "company": "Aston",
+      "type": "aston",
+      "url": "https://career.astondevs.ru/vacancy",
+      "min_expected_jobs": 100,
+      "detail_workers": 8,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "ertelecom-direct",
+      "company": "ЭР-Телеком Холдинг",
+      "type": "ertelecom",
+      "url": "https://job.ertelecom.ru/vacancies",
+      "api_url": "https://job.ertelecom.ru/api/vacancy",
+      "max_pages": 20,
+      "min_expected_jobs": 50,
+      "filters": {
+        "exclude_title_keywords": [
+          "работе с окн", "клиент менеджер", "партнерских продаж", "привлечению и развитию клиентов",
+          "территориальный менеджер", "редактор", "рекрутер", "контактного центра", "документооборот",
+          "нормам расхода", "проектных продаж", "энергетик", "контроля качества обслуживания", "речевой аналитик",
+          "менеджер по развитию", "менеджер продаж", "цифровых каналов продаж", "работе с территорией"
+        ],
+        "exclude_team_keywords": [
+          "01 Инфраструктура и эксплуатация сети", "02 Продажи",
+          "03 Сервис и обслуживание клиентов", "08 Инсталляция и сервисное обслуживание",
+          "13 Финансы, Бухгалтерия", "15 Другое"
+        ],
+        "locations": []
+      },
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "korus-consulting-direct",
+      "company": "КОРУС Консалтинг",
+      "type": "html",
+      "url": "https://career.korusconsulting.ru/vacancies/",
+      "job_url_pattern": "/vacancies/(?P<id>[^/?#]+)/?$",
+      "min_expected_jobs": 10,
+      "fetch_details": true,
+      "detail_workers": 8,
+      "filters": {"title_keywords": ["1С", "программист", "разработчик", "аналитик", "архитектор", "инженер", "техническ", "системн", "IT", "ИТ", "ERP", "data", "DevOps"], "locations": []},
+      "close_after_missing_runs": 1,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "polyus-direct",
+      "company": "Полюс",
+      "type": "html",
+      "url": "https://career.polyus.com/vacancies/",
+      "job_url_pattern": "/vacancies/(?P<id>[^/?#]+)/?$",
+      "min_expected_jobs": 5,
+      "fetch_details": true,
+      "detail_workers": 6,
+      "filters": {"title_keywords": ["1С", "программист", "разработчик", "аналитик", "архитектор", "инженер", "автоматизац", "системн", "IT", "ИТ", "ERP", "data", "DevOps"], "locations": []},
+      "close_after_missing_runs": 1,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "tmk-direct",
+      "company": "ТМК",
+      "type": "html",
+      "url": "https://www.tmk-group.ru/vacancies/",
+      "job_url_pattern": "/vacancies/(?P<id>\\d+)/?$",
+      "min_expected_jobs": 5,
+      "fetch_details": true,
+      "detail_workers": 6,
+      "filters": {"title_keywords": ["1С", "программист", "разработчик", "аналитик", "архитектор", "инженер", "автоматизац", "системн", "IT", "ИТ", "ERP", "data", "DevOps"], "locations": []},
+      "close_after_missing_runs": 1,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "merlion-direct",
+      "company": "MERLION",
+      "type": "html",
+      "url": "https://job.merlion.com/vacancy/",
+      "job_url_pattern": "/vacancy/(?P<id>\\d+)/?$",
+      "min_expected_jobs": 50,
+      "fetch_details": true,
+      "detail_workers": 10,
+      "filters": {"title_keywords": ["1С", "программист", "разработчик", "аналитик", "архитектор", "инженер", "тестиров", "техническ", "системн", "IT", "ИТ", "ERP", "data", "DevOps", "Bitrix"], "locations": []},
+      "close_after_missing_runs": 1,
+      "authoritative": true,
+      "enabled": true
+    },
+    {
+      "key": "moex-direct",
+      "company": "Московская биржа (MOEX)",
+      "type": "html",
+      "url": "https://career.moex.com/vacancies",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "yoomoney-direct",
+      "company": "ЮMoney",
+      "type": "html",
+      "url": "https://jobs.yoomoney.ru/vacancies",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "orionsoft-direct",
+      "company": "Orion soft",
+      "type": "html",
+      "url": "https://career.orionsoft.ru/vacancy",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "reksoft-direct",
+      "company": "Рексофт (Reksoft)",
+      "type": "html",
+      "url": "https://career.reksoft.com/vacancies/",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "finam-it-direct",
+      "company": "Финам / FINAM IT",
+      "type": "html",
+      "url": "https://it.finam.ru/vacancies/all",
+      "job_url_pattern": "/vacancies/(?:all/)?(?P<id>[0-9]+)$",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "kryptonite-direct",
+      "company": "Криптонит",
+      "type": "html",
+      "url": "https://career.kryptonite.ru/vacancies/",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "uchi-direct",
+      "company": "Учи.ру",
+      "type": "html",
+      "url": "https://career.uchi.ru/vacancies",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "innostage-direct",
+      "company": "Innostage",
+      "type": "html",
+      "url": "https://innostage-group.ru/career/vakancy/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "kode-direct",
+      "company": "KODE",
+      "type": "html",
+      "url": "https://career.kode.ru/career/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "picodata-direct",
+      "company": "Picodata",
+      "type": "html",
+      "url": "https://picodata.io/careers/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "mindbox-direct",
+      "company": "Mindbox",
+      "type": "html",
+      "url": "https://jobs.mindbox.ru/vacancies/",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "garant-direct",
+      "company": "ГАРАНТ",
+      "type": "html",
+      "url": "https://www.garant.ru/company/vacancy/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "moysklad-direct",
+      "company": "МойСклад / Lognex",
+      "type": "html",
+      "url": "https://www.moysklad.ru/company/careers/vacancy/",
+      "job_url_pattern": "/(?:career|company/careers)/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "ntechlab-direct",
+      "company": "NtechLab",
+      "type": "html",
+      "url": "https://ntechlab.com/career/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "zyfra-direct",
+      "company": "Цифра / Zyfra",
+      "type": "html",
+      "url": "https://zyfra.com/career/",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "bellsoft-direct",
+      "company": "BellSoft",
+      "type": "html",
+      "url": "https://bell-sw.com/company/careers/",
+      "job_url_pattern": "/(?:career|company/careers)/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "sravni-direct",
+      "company": "Сравни",
+      "type": "html",
+      "url": "https://www.sravni.ru/company/vacancies/",
+      "job_url_pattern": "/(?:company/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "banki-ru-direct",
+      "company": "Банки.ру",
+      "type": "html",
+      "url": "https://www.banki.ru/about/vacancies/",
+      "job_url_pattern": "/(?:about/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "filters": {"title_keywords": ["1С", "разработчик", "программист", "системный", "DevOps", "инженер", "аналитик", "тестиров", "QA", "Bitrix", "IT", "ИТ"], "exclude_title_keywords": ["hr-менедж", "рекрут", "кадр"]},
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "tutu-direct",
+      "company": "Туту",
+      "type": "html",
+      "url": "https://c.tutu.ru/hr/vacancies",
+      "job_url_pattern": "/(?:hr/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "usergate-direct",
+      "company": "UserGate",
+      "type": "html",
+      "url": "https://usergate.com/company/career",
+      "job_url_pattern": "/(?:career|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "dns-tech-direct",
+      "company": "DNS Технологии",
+      "type": "html",
+      "url": "https://www.dns-tech.ru/vacancies",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "infosec-direct",
+      "company": "Информзащита",
+      "type": "html",
+      "url": "https://www.infosec.ru/job/vacancy/",
+      "job_url_pattern": "/job/vacancy/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "infowatch-direct",
+      "company": "InfoWatch",
+      "type": "html",
+      "url": "https://www.infowatch.ru/o-kompanii-infowatch/career/vakansii",
+      "job_url_pattern": "/o-kompanii-infowatch/career/vakansii/(?P<id>[0-9]+)$",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "securitycode-direct",
+      "company": "Код Безопасности",
+      "type": "html",
+      "url": "https://www.securitycode.ru/company/hr/",
+      "job_url_pattern": "/(?:company/hr|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "drweb-direct",
+      "company": "Dr.Web",
+      "type": "html",
+      "url": "https://company.drweb.ru/careers/",
+      "job_url_pattern": "/(?:careers?|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": false
+    },
+    {
+      "key": "directum-direct",
+      "company": "Directum",
+      "type": "html",
+      "url": "https://career.directum.ru/vacancy",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "elma365-direct",
+      "company": "ELMA 365",
+      "type": "html",
+      "url": "https://elma365.com/ru/company/careers/",
+      "job_url_pattern": "/(?:careers?|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "sportmaster-lab-direct",
+      "company": "SportMaster Lab",
+      "type": "html",
+      "url": "https://job.sportmaster.ru/vacancies/?category=96",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "aquarius-direct",
+      "company": "Aquarius",
+      "type": "html",
+      "url": "https://www.aq.ru/career/vacancies",
+      "job_url_pattern": "/(?:career/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": false
+    },
+    {
+      "key": "iva-direct",
+      "company": "IVA Technologies",
+      "type": "html",
+      "url": "https://iva.ru/ru/karera/",
+      "job_url_pattern": "/(?:karera|career|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "auriga-direct",
+      "company": "Auriga",
+      "type": "html",
+      "url": "https://hr.auriga.ru/",
+      "job_url_pattern": "/(?:vacanc(?:y|ies)|job)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "rsoft-direct",
+      "company": "Р-Софт",
+      "type": "html",
+      "url": "https://r-soft.org/vacancies/",
+      "job_url_pattern": "/vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": false
+    },
+    {
+      "key": "digital-clouds-direct",
+      "company": "Digital Clouds",
+      "type": "html",
+      "url": "https://dclouds.ru/about/vacancy",
+      "job_url_pattern": "/(?:about/)?vacanc(?:y|ies)/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "filters": {"title_keywords": ["1С", "разработчик", "программист", "системный", "DevOps", "инженер", "аналитик", "тестиров", "QA", "Bitrix", "IT", "ИТ"], "exclude_title_keywords": ["hr-менедж", "рекрут", "кадр"]},
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "itfb-direct",
+      "company": "ITFB Group",
+      "type": "html",
+      "url": "https://itfbgroup.ru/career",
+      "job_url_pattern": "/(?:career|vacanc(?:y|ies))/(?P<id>[^/?#]+)",
+      "min_expected_jobs": 1,
+      "authoritative": false,
+      "enabled": true
+    },
+    {
+      "key": "grand-line-direct",
+      "company": "Grand Line",
+      "type": "html",
+      "url": "https://rabota.grandline.ru/vacancies/",
+      "job_url_pattern": "/vacancies/(?P<id>\\d+)/?$",
+      "min_expected_jobs": 50,
+      "fetch_details": true,
+      "detail_workers": 8,
+      "filters": {"title_keywords": ["1С", "программист", "разработчик", "аналитик", "архитектор", "инженер", "автоматизац", "техническ", "системн", "IT", "ИТ", "ERP", "data", "DevOps"], "locations": []},
+      "close_after_missing_runs": 1,
+      "authoritative": true,
+      "enabled": false
     }
   ]
 }

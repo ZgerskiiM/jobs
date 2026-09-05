@@ -1,12 +1,16 @@
 {
   "close_after_missing_runs": 2,
+  "stale_after_days": 7,
   "hh_user_agent": "JobTracker/1.0 (ВАША_ПОЧТА@example.com)",
   "http": {
     "timeout_seconds": 30,
-    "retries": 2
+    "retries": 2,
+    "source_workers": 6,
+    "per_domain_workers": 2
   },
   "filters": {
     "title_keywords": [],
+    "exclude_title_keywords": [],
     "locations": []
   },
   "sources": [

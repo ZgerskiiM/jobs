@@ -1,7 +1,5 @@
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$FrontendDir = Join-Path $ProjectDir "frontend"
-$BackendDir = Join-Path $ProjectDir "backend"
 $Python = "C:\Users\Admin\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 if (-not (Test-Path $Python)) { $Python = (Get-Command py -ErrorAction Stop).Source }
 $EnvFile = Join-Path $ProjectDir "backend\.env"
@@ -24,27 +22,13 @@ else {
     $env:FRONTEND_URL = $PublicUrl.TrimEnd('/')
 }
 
-Push-Location $BackendDir
+Push-Location (Join-Path $ProjectDir "backend")
 try {
     & $Python manage.py migrate
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-finally {
-    Pop-Location
-}
-
-$LogDir = Join-Path $ProjectDir "work"
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$ApiLog = Join-Path $LogDir "backend.log"
-$ApiErrorLog = Join-Path $LogDir "backend.error.log"
-$ApiProcess = Start-Process -FilePath $Python -ArgumentList "manage.py", "runserver", "127.0.0.1:8000" -WorkingDirectory $BackendDir -RedirectStandardOutput $ApiLog -RedirectStandardError $ApiErrorLog -WindowStyle Hidden -PassThru
-
-try {
-    Push-Location $FrontendDir
-    npm.cmd run dev -- --open
+    & $Python manage.py runserver 127.0.0.1:8000
     exit $LASTEXITCODE
 }
 finally {
     Pop-Location
-    if ($ApiProcess -and -not $ApiProcess.HasExited) { Stop-Process -Id $ApiProcess.Id -Force }
 }

@@ -17,6 +17,13 @@ $Credential = Import-Clixml -LiteralPath $CredentialPath
 $Settings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
 $env:TELEGRAM_BOT_TOKEN = $Credential.GetNetworkCredential().Password
 $env:TELEGRAM_CHAT_ID = [string]$Settings.chat_id
+. (Join-Path $ProjectDir "run-lock.ps1")
+$RunMutex = Enter-JobTrackerUpdateLock
+if ($null -eq $RunMutex) {
+    "$(Get-Date -Format o) Обновление уже выполняется в другом процессе." |
+        Tee-Object -FilePath $LogPath -Append
+    exit 3
+}
 
 Push-Location $ProjectDir
 try {
@@ -34,7 +41,7 @@ try {
         Tee-Object -FilePath $LogPath -Append
     $ExportExit = $LASTEXITCODE
 
-    & $Python job_tracker.py --db data/jobs.sqlite3 site-data --output site/vacancies.js 2>&1 |
+    & $Python job_tracker.py --db data/jobs.sqlite3 site-data --output data/vacancies.js 2>&1 |
         Tee-Object -FilePath $LogPath -Append
     $SiteExit = $LASTEXITCODE
 
@@ -48,4 +55,5 @@ finally {
     Remove-Item Env:TELEGRAM_BOT_TOKEN -ErrorAction SilentlyContinue
     Remove-Item Env:TELEGRAM_CHAT_ID -ErrorAction SilentlyContinue
     Pop-Location
+    Exit-JobTrackerUpdateLock $RunMutex
 }

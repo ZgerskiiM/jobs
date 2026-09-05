@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jobs}
+      POSTGRES_USER: ${POSTGRES_USER:-jobs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobs-dev-only}
+    volumes:
+      - jobs_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobs -d jobs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: ${API_IMAGE:-jobs-dev-api:local}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: backend/.env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8000/healthz/', headers={'X-Forwarded-Proto': 'https'}), timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    volumes:
+      - jobs_media:/app/media
+
+  worker:
+    image: ${API_IMAGE:-jobs-dev-api:local}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A config worker -l INFO
+    env_file:
+      - path: backend/.env
+        required: false
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - jobs_media:/app/media
+
+  web:
+    image: ${WEB_IMAGE:-jobs-dev-web:local}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--header=X-Forwarded-Proto: https", "--spider", "http://127.0.0.1/healthz/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    ports:
+      - "8080:80"
+    volumes:
+      - jobs_media:/usr/share/nginx/media:ro
+
+volumes:
+  jobs_postgres:
+  jobs_media:

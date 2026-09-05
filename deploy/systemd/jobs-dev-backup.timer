@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily jobs.dev production backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Europe/Moscow
+Persistent=true
+
+[Install]
+WantedBy=timers.target

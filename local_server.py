@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import cgi
+import io
 import json
+import re
 import subprocess
 import threading
 import webbrowser
@@ -14,9 +17,12 @@ from pathlib import Path
 from typing import Any
 
 
+
 PROJECT_DIR = Path(__file__).resolve().parent
-SITE_DIR = PROJECT_DIR / "site"
+FRONTEND_DIST_DIR = PROJECT_DIR / "frontend" / "dist"
+SITE_DIR = FRONTEND_DIST_DIR if FRONTEND_DIST_DIR.is_dir() else PROJECT_DIR / "site"
 RUNNER = PROJECT_DIR / "run-direct.ps1"
+VACANCIES_FILE = PROJECT_DIR / "data" / "vacancies.js"
 STATE_LOCK = threading.Lock()
 STATE: dict[str, Any] = {
     "running": False,
@@ -34,6 +40,19 @@ def timestamp() -> str:
 def public_state() -> dict[str, Any]:
     with STATE_LOCK:
         return dict(STATE)
+
+
+def vacancy_payload() -> dict[str, Any]:
+    """Return the tracker export as JSON for the React frontend."""
+    source = VACANCIES_FILE.read_text(encoding="utf-8")
+    meta_match = re.search(r"window\.VACANCIES_META\s*=\s*(\{.*?\});", source, re.DOTALL)
+    vacancies_match = re.search(r"window\.VACANCIES\s*=\s*(\[.*\])\s*;\s*$", source, re.DOTALL)
+    if not meta_match or not vacancies_match:
+        raise ValueError("Файл vacancies.js имеет неизвестный формат")
+    return {
+        "meta": json.loads(meta_match.group(1)),
+        "vacancies": json.loads(vacancies_match.group(1)),
+    }
 
 
 def refresh_vacancies() -> None:
@@ -90,7 +109,8 @@ class LandingHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(SITE_DIR), **kwargs)
 
     def end_headers(self) -> None:
-        if self.path.startswith("/api/") or self.path.endswith((".js", ".html")):
+        clean_path = self.path.split("?", 1)[0]
+        if clean_path.startswith("/api/") or clean_path.endswith((".js", ".css", ".html")):
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
@@ -103,13 +123,24 @@ class LandingHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
-        if self.path.split("?", 1)[0] == "/api/update/status":
+        route = self.path.split("?", 1)[0]
+        if route == "/api/update/status":
             self.send_json(200, public_state())
+            return
+        if route == "/api/vacancies":
+            try:
+                self.send_json(200, vacancy_payload())
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                self.send_json(500, {"message": f"Не удалось прочитать вакансии: {exc}"})
             return
         super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path.split("?", 1)[0] != "/api/update":
+        route = self.path.split("?", 1)[0]
+        if route == "/api/resume/extract":
+            self.extract_resume()
+            return
+        if route != "/api/update":
             self.send_json(404, {"message": "Маршрут не найден"})
             return
         if self.headers.get("X-Requested-With") != "vacancy-update":
@@ -124,6 +155,48 @@ class LandingHandler(SimpleHTTPRequestHandler):
             state = dict(STATE)
         threading.Thread(target=refresh_vacancies, daemon=True).start()
         self.send_json(202, state)
+
+    def extract_resume(self) -> None:
+        if self.headers.get("X-Requested-With") != "resume-analyzer":
+            self.send_json(403, {"message": "Запрос отклонён"})
+            return
+        content_length = int(self.headers.get("Content-Length", "0") or 0)
+        if content_length > 8 * 1024 * 1024:
+            self.send_json(413, {"message": "Файл больше 8 МБ"})
+            return
+        form = cgi.FieldStorage(
+            fp=self.rfile, headers=self.headers,
+            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": self.headers.get("Content-Type", "")},
+        )
+        upload = form["resume"] if "resume" in form else None
+        if upload is None or not getattr(upload, "file", None):
+            self.send_json(400, {"message": "Файл не получен"})
+            return
+        filename = Path(upload.filename or "resume.txt").name
+        data = upload.file.read()
+        suffix = Path(filename).suffix.casefold()
+        try:
+            if suffix == ".pdf":
+                from pypdf import PdfReader
+                text = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages)
+            elif suffix == ".docx":
+                from docx import Document
+                document = Document(io.BytesIO(data))
+                text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            elif suffix in {".txt", ".md", ".html", ".htm", ".json"}:
+                text = data.decode("utf-8-sig", errors="replace")
+            else:
+                self.send_json(415, {"message": "Поддерживаются PDF, DOCX, TXT и MD"})
+                return
+        except Exception as exc:
+            print(f"Ошибка чтения резюме {filename}: {exc}", flush=True)
+            self.send_json(422, {"message": "Не удалось прочитать файл. Попробуйте вставить текст резюме."})
+            return
+        text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+        if len(text) < 30:
+            self.send_json(422, {"message": "В файле почти нет распознаваемого текста"})
+            return
+        self.send_json(200, {"filename": filename, "text": text[:200000]})
 
     def log_message(self, format: str, *args: Any) -> None:
         if not self.path.startswith("/api/update/status"):
