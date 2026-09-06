@@ -84,14 +84,20 @@ class HhVacanciesView(APIView):
 
 
 class ExtensionDownloadView(APIView):
-    def get(self, request):
-        archive = settings.BASE_DIR.parent / "jobs-dev-zen-extension.zip"
+    archives = {
+        "firefox": ("jobs-dev-zen-extension.zip", "jobs-dev-zen-extension.zip"),
+        "chrome": ("jobs-dev-zen-extension-chrome.zip", "jobs-dev-zen-extension-chrome.zip"),
+    }
+
+    def get(self, request, browser="firefox"):
+        archive_name, download_name = self.archives.get(browser, self.archives["firefox"])
+        archive = settings.BASE_DIR.parent / archive_name
         if not archive.is_file():
             raise Http404("Архив расширения не найден")
         return FileResponse(
             archive.open("rb"),
             as_attachment=True,
-            filename="jobs-dev-zen-extension.zip",
+            filename=download_name,
             content_type="application/zip",
         )
 

@@ -68,6 +68,14 @@ class AccountApiTests(TestCase):
         self.assertEqual(response["Content-Type"], "application/zip")
         self.assertIn("jobs-dev-zen-extension.zip", response["Content-Disposition"])
 
+    @override_settings(LOCAL_AUTH_BYPASS=True, DEBUG=True)
+    def test_chrome_extension_archive_can_be_downloaded_locally(self):
+        response = APIClient().get("/api/extension/download/chrome/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertIn("jobs-dev-zen-extension-chrome.zip", response["Content-Disposition"])
+
     def test_extension_submit_is_resolved_to_catalog_application(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", encoding="utf-8", delete=False) as catalog:
             json.dump({"vacancies": [{"id": "42", "source_key": "acme", "company": "Acme", "title": "Senior Python Engineer", "location": "Remote", "url": "https://acme.example/jobs/python-42", "technologies": ["Python"]}]}, catalog)

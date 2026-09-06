@@ -107,7 +107,7 @@ export default function Profile() {
   const [targetRoleSaving, setTargetRoleSaving] = useState(false);
   const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
-  const [extensionDownloading, setExtensionDownloading] = useState(false);
+  const [extensionDownloading, setExtensionDownloading] = useState<"firefox" | "chrome" | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const resumeFileRef = useRef<HTMLInputElement>(null);
 
@@ -133,21 +133,21 @@ export default function Profile() {
 
   const openResumePicker = () => resumeFileRef.current?.click();
 
-  const handleExtensionDownload = async () => {
+  const handleExtensionDownload = async (browser: "firefox" | "chrome") => {
     setExtensionError(null);
-    setExtensionDownloading(true);
+    setExtensionDownloading(browser);
     try {
-      const blob = await accountApi.downloadExtension();
+      const blob = await accountApi.downloadExtension(browser);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "jobs-dev-zen-extension.zip";
+      link.download = browser === "chrome" ? "jobs-dev-zen-extension-chrome.zip" : "jobs-dev-zen-extension.zip";
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (requestError) {
       setExtensionError(requestError instanceof Error ? requestError.message : "Не удалось скачать расширение");
     } finally {
-      setExtensionDownloading(false);
+      setExtensionDownloading(null);
     }
   };
 
@@ -507,10 +507,15 @@ export default function Profile() {
               <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Показывает подсказку на страницах вакансий и заполняет форму выбранным резюме</div>
             </div>
             <div className="p-5 bg-[#0e1018] flex items-center justify-between gap-4 flex-wrap">
-              <div className="font-mono text-[11px] text-[#5a6070]">доступно для авторизованного аккаунта · Zen / Firefox</div>
-              <button type="button" onClick={() => void handleExtensionDownload()} disabled={extensionDownloading} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
-                {extensionDownloading ? "готовим архив..." : "скачать расширение →"}
-              </button>
+              <div className="font-mono text-[11px] text-[#5a6070]">доступно для авторизованного аккаунта · Zen / Firefox / Chrome</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={() => void handleExtensionDownload("firefox")} disabled={extensionDownloading !== null} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
+                  {extensionDownloading === "firefox" ? "готовим архив..." : "скачать для Firefox →"}
+                </button>
+                <button type="button" onClick={() => void handleExtensionDownload("chrome")} disabled={extensionDownloading !== null} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
+                  {extensionDownloading === "chrome" ? "готовим архив..." : "скачать для Chrome →"}
+                </button>
+              </div>
             </div>
             {extensionError && <div role="alert" className="px-5 pb-4 bg-[#0e1018] font-sans text-xs text-[#ff3e78]">{extensionError}</div>}
           </div>

@@ -98,8 +98,9 @@ export const accountApi = {
   },
   patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string; targetRole?: ResumeTargetRole }) =>
     request<{ resume: ResumeData | null; resumes: ResumeData[] }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify(body) }),
-  downloadExtension: async () => {
-    const response = await fetch(`${API_ORIGIN}/api/extension/download/`, { credentials: "include" });
+  downloadExtension: async (browser: "firefox" | "chrome" = "firefox") => {
+    const suffix = browser === "firefox" ? "" : `${browser}/`;
+    const response = await fetch(`${API_ORIGIN}/api/extension/download/${suffix}`, { credentials: "include" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(body.message ?? "Не удалось скачать расширение");
