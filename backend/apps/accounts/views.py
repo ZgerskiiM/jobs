@@ -460,12 +460,19 @@ class ScoringRankView(APIView):
             "items": items,
             "compact": bool(request.data.get("compact")),
         }
-        bridge = settings.BASE_DIR.parent / "frontend" / "scripts" / "scoring-api.mjs"
+        bridge_candidates = (
+            settings.BASE_DIR / "frontend" / "scripts" / "scoring-api.mjs",
+            settings.BASE_DIR.parent / "frontend" / "scripts" / "scoring-api.mjs",
+        )
+        bridge = next((candidate for candidate in bridge_candidates if candidate.is_file()), None)
+        if bridge is None:
+            return error("Модуль расчёта релевантности не установлен", 503)
+        project_root = bridge.parents[2]
         try:
             completed = subprocess.run(
                 ["node", str(bridge)], input=jsonlib.dumps(payload), text=True,
                 encoding="utf-8", capture_output=True, timeout=60,
-                cwd=settings.BASE_DIR.parent, check=True,
+                cwd=project_root, check=True,
             )
             return Response(jsonlib.loads(completed.stdout))
         except (OSError, subprocess.SubprocessError, jsonlib.JSONDecodeError) as exc:
