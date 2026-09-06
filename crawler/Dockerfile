@@ -11,6 +11,8 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . /app
-RUN mkdir -p /shared
+RUN mkdir -p /shared \
+    && cp frontend/public/vacancies.json /shared/vacancies.json \
+    && cp frontend/public/vacancy-refresh.json /shared/vacancy-refresh.json
 
 CMD ["python", "crawler/runner.py"]
