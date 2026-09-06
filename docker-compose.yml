@@ -31,6 +31,10 @@ services:
     env_file:
       - path: backend/.env
         required: false
+    environment:
+      VACANCY_CATALOG_PATH: /app/catalog/vacancies.json
+      JOB_TRACKER_DB_PATH: /app/catalog/jobs.sqlite3
+      VACANCY_REFRESH_REPORT_PATH: /app/catalog/vacancy-refresh.json
     depends_on:
       db:
         condition: service_healthy
@@ -44,6 +48,7 @@ services:
       retries: 6
     volumes:
       - jobs_media:/app/media
+      - jobs_catalog:/app/catalog:ro
 
   worker:
     image: ${API_IMAGE:-jobs-dev-api:local}
@@ -65,6 +70,19 @@ services:
     volumes:
       - jobs_media:/app/media
 
+  crawler:
+    image: ${CRAWLER_IMAGE:-jobs-dev-crawler:local}
+    build:
+      context: .
+      dockerfile: crawler/Dockerfile
+    restart: unless-stopped
+    environment:
+      CRAWLER_SHARED_PATH: /shared
+      CRAWLER_TIMEOUT_SECONDS: ${CRAWLER_TIMEOUT_SECONDS:-20}
+      CRAWLER_RETRIES: ${CRAWLER_RETRIES:-1}
+    volumes:
+      - jobs_catalog:/shared
+
   web:
     image: ${WEB_IMAGE:-jobs-dev-web:local}
     build:
@@ -83,7 +101,9 @@ services:
       - "8080:80"
     volumes:
       - jobs_media:/usr/share/nginx/media:ro
+      - jobs_catalog:/usr/share/nginx/catalog:ro
 
 volumes:
   jobs_postgres:
   jobs_media:
+  jobs_catalog:

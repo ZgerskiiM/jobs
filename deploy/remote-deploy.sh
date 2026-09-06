@@ -3,11 +3,12 @@ set -euo pipefail
 
 : "${API_IMAGE:?API_IMAGE is required}"
 : "${WEB_IMAGE:?WEB_IMAGE is required}"
+: "${CRAWLER_IMAGE:?CRAWLER_IMAGE is required}"
 
 ENV_FILE="${ENV_FILE:-deploy/.env}"
 DEPLOY_MODE="${DEPLOY_MODE:-https}"
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml)
-SERVICES=(db redis api worker web)
+SERVICES=(db redis api worker crawler web)
 
 case "$DEPLOY_MODE" in
   http)

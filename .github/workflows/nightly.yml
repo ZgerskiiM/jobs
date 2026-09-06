@@ -6,9 +6,6 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/nightly.yml"
-  schedule:
-    # 05:00 in UTC-3 (08:00 UTC), every day.
-    - cron: "0 8 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -167,7 +164,8 @@ jobs:
           remote="$DEPLOY_USER@$DEPLOY_HOST"
           repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           api_image="ghcr.io/$repository/api:staging"
-          ssh "$remote" "cd '$DEPLOY_PATH' && DEPLOY_MODE='$DEPLOY_MODE' API_IMAGE='$api_image' WEB_IMAGE='$NIGHTLY_WEB_IMAGE' bash deploy/remote-deploy.sh"
+          crawler_image="ghcr.io/$repository/crawler:staging"
+          ssh "$remote" "cd '$DEPLOY_PATH' && DEPLOY_MODE='$DEPLOY_MODE' API_IMAGE='$api_image' WEB_IMAGE='$NIGHTLY_WEB_IMAGE' CRAWLER_IMAGE='$crawler_image' bash deploy/remote-deploy.sh"
 
       - name: Smoke test refreshed staging
         run: |

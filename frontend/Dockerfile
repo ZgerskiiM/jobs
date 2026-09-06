@@ -14,4 +14,7 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
+RUN mkdir -p /usr/share/nginx/catalog \
+    && cp /usr/share/nginx/html/vacancies.json /usr/share/nginx/catalog/vacancies.json \
+    && cp /usr/share/nginx/html/vacancy-refresh.json /usr/share/nginx/catalog/vacancy-refresh.json
 EXPOSE 80

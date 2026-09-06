@@ -114,21 +114,11 @@ bash deploy/backup.sh
 
 ### 4. Ночное обновление вакансий
 
-На сервере должны быть установлены Python-зависимости из `requirements.txt`, после
-чего установите systemd unit-файлы:
-
-```bash
-sudo cp deploy/systemd/jobs-dev-vacancies.* deploy/systemd/jobs-dev-backup.* /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now jobs-dev-vacancies.timer
-sudo systemctl enable --now jobs-dev-backup.timer
-sudo systemctl start jobs-dev-vacancies.service
-```
-
-Путь `/opt/jobs-dev` в unit-файле замените на фактический путь проекта. Обновление
-выполняет `sync`, экспортирует каталог, пересобирает web-контейнер и запускает его
-заново. GitHub Actions ниже по-прежнему публикует отдельную GitHub Pages-версию и
-не обновляет Docker-сервер.
+При запуске compose на стенде поднимается постоянный сервис `crawler`. Он выполняет
+первый проход сразу, затем повторяет его каждый день в 05:00 по UTC−3 (08:00 UTC).
+Состояние SQLite и сгенерированный каталог хранятся в Docker volume `jobs_catalog`,
+который одновременно читают API и nginx. Отдельный systemd-timer для вакансий больше
+не нужен; оставьте systemd только для резервного копирования.
 
 ## Backend
 
@@ -141,12 +131,13 @@ sudo systemctl start jobs-dev-vacancies.service
 Для локальной разработки `start-site.ps1` поднимает Django API на `:8000` и Vite
 на `:8443`; Vite проксирует API-запросы автоматически.
 
-Проект подготовлен для GitHub Pages. Каждую ночь в 03:15 по Москве GitHub Actions:
+Резервный GitHub Actions-проход выполняется по тому же расписанию и дополнительно:
 
 1. восстанавливает SQLite с состоянием предыдущего запуска;
 2. обходит подключённые карьерные сайты;
 3. отправляет только новые вакансии, прошедшие Telegram-фильтр;
-4. пересобирает витрину и публикует её на GitHub Pages.
+4. пересобирает web-образ и обновляет staging (GitHub Pages остаётся дополнительной
+   публичной витриной).
 
 ## Первый запуск
 
