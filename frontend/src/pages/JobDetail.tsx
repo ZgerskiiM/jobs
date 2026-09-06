@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from "react-router";
 import { useVacancyData } from "../context/VacancyDataContext";
 import LogoBadge from "../components/LogoBadge";
 import { useAuth } from "../context/AuthContext";
-import QuickApplyModal from "../components/QuickApplyModal";
 import { accountApi, type VacancyScore } from "../api";
 
 type DescriptionBlock =
@@ -63,8 +62,7 @@ export default function JobDetail() {
   const { jobs, companies, loading } = useVacancyData();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, resume, openAuthModal, resumeSkills, isJobSaved, toggleSavedJob } = useAuth();
-  const [applyOpen, setApplyOpen] = useState(false);
+  const { user, resume, resumeSkills, isJobSaved, toggleSavedJob } = useAuth();
   const [vacancyScore, setVacancyScore] = useState<VacancyScore | null>(null);
 
   const job = jobs.find((j) => j.id === Number(id));
@@ -99,9 +97,7 @@ export default function JobDetail() {
   );
   const matchedSkills = job.parsedSkills.filter((s) => confirmedSkillNames.has(s.toLowerCase()));
   const missingSkills = job.parsedSkills.filter((s) => !confirmedSkillNames.has(s.toLowerCase()));
-  const matchPct = resumeSkills.length > 0 && job.parsedSkills.length > 0
-    ? Math.round((matchedSkills.length / job.parsedSkills.length) * 100)
-    : null;
+  const hasSkillMatchData = resumeSkills.length > 0 && job.parsedSkills.length > 0;
 
   const levelColors: Record<string, string> = {
     Junior: "#33ff77",
@@ -250,6 +246,42 @@ export default function JobDetail() {
 
         {/* RIGHT — sticky sidebar */}
         <div className="space-y-4 lg:sticky lg:top-20">
+          {/* apply */}
+          <div className="card-surface rounded-sm p-5 border border-[rgba(51,255,119,0.15)]">
+            <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-3">// откликнуться</div>
+            <a
+              href={job.url}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-3 font-mono text-sm rounded-sm transition-all mb-3 flex items-center justify-center"
+              style={{
+                background: "rgba(51,255,119,0.15)",
+                border: "1px solid rgba(51,255,119,0.4)",
+                color: "#33ff77",
+              }}
+            >
+              откликнуться →
+            </a>
+            <p className="font-sans text-[10px] text-[#3a404f] text-center">откроем страницу вакансии работодателя</p>
+            {user && (
+              <button
+                onClick={() => toggleSavedJob(job.id)}
+                aria-pressed={isJobSaved(job.id)}
+                className="w-full py-2.5 mt-3 font-mono text-xs rounded-sm transition-all flex items-center justify-center gap-1.5"
+                style={{
+                  background: isJobSaved(job.id) ? "rgba(0,212,255,0.08)" : "transparent",
+                  border: `1px solid ${isJobSaved(job.id) ? "rgba(0,212,255,0.35)" : "rgba(58,64,79,0.4)"}`,
+                  color: isJobSaved(job.id) ? "#00d4ff" : "#5a6070",
+                }}
+              >
+                <svg className="w-3.5 h-3.5" fill={isJobSaved(job.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                {isJobSaved(job.id) ? "в сохранённых" : "сохранить вакансию"}
+              </button>
+            )}
+          </div>
+
           {vacancyScore && (
             <div className="card-surface rounded-sm p-5 border border-[rgba(51,255,119,0.2)]">
               <div className="flex items-center justify-between mb-3">
@@ -273,28 +305,9 @@ export default function JobDetail() {
             </div>
           )}
           {/* skill match */}
-          {matchPct !== null && (
+          {hasSkillMatchData && (
             <div className="card-surface rounded-sm p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-mono text-xs text-[#3a404f] uppercase tracking-widest">// совпадение навыков</span>
-                <span
-                  className="font-mono text-lg font-medium"
-                  style={{ color: matchPct >= 70 ? "#33ff77" : matchPct >= 40 ? "#fbbf24" : "#ff3e78" }}
-                >
-                  {matchPct}%
-                </span>
-              </div>
-
-              {/* progress bar */}
-              <div className="h-1 bg-[rgba(58,64,79,0.4)] rounded-full mb-4 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${matchPct}%`,
-                    background: matchPct >= 70 ? "#33ff77" : matchPct >= 40 ? "#fbbf24" : "#ff3e78",
-                  }}
-                />
-              </div>
+              <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-4">// совпадение навыков</div>
 
               {/* matched skills */}
               {matchedSkills.length > 0 && (
@@ -332,9 +345,6 @@ export default function JobDetail() {
                 </div>
               )}
 
-              <div className="font-mono text-[10px] text-[#3a404f]">
-                {matchedSkills.length} из {job.parsedSkills.length} навыков совпадает
-              </div>
             </div>
           )}
 
@@ -350,42 +360,6 @@ export default function JobDetail() {
               </Link>
             </div>
           )}
-
-          {/* apply */}
-          <div className="card-surface rounded-sm p-5 border border-[rgba(51,255,119,0.15)]">
-            <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-3">// откликнуться</div>
-            <button
-              onClick={user ? () => setApplyOpen(true) : openAuthModal}
-              className="w-full py-3 font-mono text-sm rounded-sm transition-all mb-3"
-              style={{
-                background: "rgba(51,255,119,0.15)",
-                border: "1px solid rgba(51,255,119,0.4)",
-                color: "#33ff77",
-              }}
-            >
-              {user ? "быстрый отклик →" : "войти и откликнуться →"}
-            </button>
-            {!user && (
-              <p className="font-sans text-[10px] text-[#3a404f] text-center">нужна авторизация</p>
-            )}
-            {user && (
-              <button
-                onClick={() => toggleSavedJob(job.id)}
-                aria-pressed={isJobSaved(job.id)}
-                className="w-full py-2.5 font-mono text-xs rounded-sm transition-all flex items-center justify-center gap-1.5"
-                style={{
-                  background: isJobSaved(job.id) ? "rgba(0,212,255,0.08)" : "transparent",
-                  border: `1px solid ${isJobSaved(job.id) ? "rgba(0,212,255,0.35)" : "rgba(58,64,79,0.4)"}`,
-                  color: isJobSaved(job.id) ? "#00d4ff" : "#5a6070",
-                }}
-              >
-                <svg className="w-3.5 h-3.5" fill={isJobSaved(job.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-                {isJobSaved(job.id) ? "в сохранённых" : "сохранить вакансию"}
-              </button>
-            )}
-          </div>
 
           {/* company */}
           {company && (
@@ -429,9 +403,6 @@ export default function JobDetail() {
         </div>
       </div>
 
-      {applyOpen && (
-        <QuickApplyModal job={job} onClose={() => setApplyOpen(false)} />
-      )}
     </div>
   );
 }
