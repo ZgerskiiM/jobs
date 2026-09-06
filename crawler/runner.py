@@ -32,7 +32,16 @@ def run_once() -> None:
     config = runtime_config()
     started = time.monotonic()
     print(f"[crawler] sync started at {datetime.now(timezone.utc).isoformat()}", flush=True)
-    subprocess.run(["python", "job_tracker.py", "--db", str(DB_PATH), "sync", "--config", str(config)], check=False)
+    sync_timeout = int(os.getenv("CRAWLER_SYNC_TIMEOUT_SECONDS", "3300"))
+    try:
+        result = subprocess.run(
+            ["python", "job_tracker.py", "--db", str(DB_PATH), "sync", "--config", str(config)],
+            check=False,
+            timeout=sync_timeout,
+        )
+        print(f"[crawler] sync exited with code {result.returncode}", flush=True)
+    except subprocess.TimeoutExpired:
+        print(f"[crawler] sync exceeded {sync_timeout}s; publishing the last completed state", flush=True)
 
     # Export into the image filesystem first, then atomically publish files to
     # the shared volume consumed by nginx and Django.
