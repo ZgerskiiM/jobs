@@ -26,10 +26,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Application, AuditLog, Profile, User
+from .models import Application, AuditLog, Profile, Resume, User
 from .resume_parser import analyze_resume
 from .serializers import EmailAuthSerializer, ProfilePatchSerializer, SavedJobSerializer
-from .services import account_payload, get_profile, infer_target_role, login_from_telegram, normalize_resume_scoring_profile, telegram_payload_is_valid
+from .services import account_payload, get_active_resume_record, get_profile, get_resume_records, infer_target_role, login_from_telegram, normalize_resume_scoring_profile, resume_payload, telegram_payload_is_valid
 
 
 def error(message: str, code: int = status.HTTP_400_BAD_REQUEST) -> Response:
@@ -110,11 +110,14 @@ class ResumeFileView(APIView):
     """Return the authenticated user's uploaded resume to the browser extension."""
 
     def get(self, request):
-        profile = get_profile(request.user)
-        if not profile.resume_file:
+        records = get_resume_records(request.user)
+        requested_id = str(request.query_params.get("id", ""))
+        record = next((item for item in records if resume_payload(item).get("id") == requested_id), None) if requested_id else None
+        record = record or next((item for item in records if item.is_active), records[0] if records else None)
+        if not record or not record.file:
             raise Http404("Файл резюме не найден")
-        filename = Path(profile.resume_file.name).name
-        response = FileResponse(profile.resume_file.open("rb"), as_attachment=True, filename=filename, content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
+        filename = Path(record.file.name).name
+        response = FileResponse(record.file.open("rb"), as_attachment=True, filename=filename, content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
         return response
 
 
@@ -390,8 +393,16 @@ class SavedJobsView(APIView):
 class ResumeView(APIView):
     def patch(self, request):
         profile = get_profile(request.user)
-        if not profile.resume:
+        records = get_resume_records(request.user, profile)
+        if not records:
             return error("Сначала загрузите резюме")
+        requested_id = str(request.data.get("resumeId") or request.data.get("activeResumeId") or "")
+        target = next((item for item in records if resume_payload(item).get("id") == requested_id), None) if requested_id else None
+        target = target or next((item for item in records if item.is_active), records[0])
+        if "activeResumeId" in request.data and target:
+            for item in records:
+                item.is_active = item.pk == target.pk
+            Resume.objects.bulk_update(records, ["is_active"])
         changes = {}
         if "skills" in request.data:
             if not isinstance(request.data["skills"], list):
@@ -405,11 +416,13 @@ class ResumeView(APIView):
         for field in ("fullName", "contactEmail", "contactPhone", "contactTelegram"):
             if field in request.data:
                 changes[field] = str(request.data[field])[:250]
-        if not changes:
+        if not changes and "activeResumeId" not in request.data:
             return error("Нет данных для обновления")
-        profile.resume = {**profile.resume, **changes}
-        profile.save(update_fields=["resume", "updated_at"])
-        return Response({"resume": profile.resume, "resumes": [profile.resume]})
+        if changes:
+            target.data = {**(target.data if isinstance(target.data, dict) else {}), **changes}
+            target.save(update_fields=["data", "updated_at"])
+        payload = account_payload(request.user)
+        return Response({"resume": payload["resume"], "resumes": payload["resumes"]})
 
     def post(self, request):
         upload = request.FILES.get("resume")
@@ -427,19 +440,34 @@ class ResumeView(APIView):
         resume = {"id": f"upload-{uuid.uuid4().hex}", "source": "upload", "hasFile": True, "fileName": filename, "uploadedAt": now, **analysis}
         resume["targetRole"] = infer_target_role(resume)
         profile = get_profile(request.user)
-        if profile.resume_file:
-            profile.resume_file.delete(save=False)
-        profile.resume_file.save(filename, ContentFile(data), save=False)
-        profile.resume = resume
-        profile.save()
-        return Response({"resume": resume, "resumes": [resume]})
+        existing = get_resume_records(request.user, profile)
+        for item in existing:
+            if item.is_active:
+                item.is_active = False
+        if existing:
+            Resume.objects.bulk_update(existing, ["is_active"])
+        record = Resume.objects.create(user=request.user, data=resume, is_active=True)
+        record.file.save(filename, ContentFile(data), save=True)
+        payload = account_payload(request.user)
+        return Response({"resume": payload["resume"], "resumes": payload["resumes"]})
 
     def delete(self, request):
-        profile = get_profile(request.user)
-        profile.resume_file.delete(save=False)
-        profile.resume = None
-        profile.save(update_fields=["resume", "resume_file", "updated_at"])
-        return Response({"resume": None})
+        records = get_resume_records(request.user)
+        requested_id = str(request.query_params.get("id") or request.data.get("resumeId") or "")
+        target = next((item for item in records if resume_payload(item).get("id") == requested_id), None) if requested_id else None
+        target = target or next((item for item in records if item.is_active), records[0] if records else None)
+        if target:
+            was_active = target.is_active
+            if target.file:
+                target.file.delete(save=False)
+            target.delete()
+            if was_active:
+                next_record = Resume.objects.filter(user=request.user).first()
+                if next_record:
+                    next_record.is_active = True
+                    next_record.save(update_fields=["is_active", "updated_at"])
+        payload = account_payload(request.user)
+        return Response({"resume": payload["resume"], "resumes": payload["resumes"]})
 
 
 class ScoringRankView(APIView):
@@ -450,11 +478,13 @@ class ScoringRankView(APIView):
         if not isinstance(items, list):
             return error("Ожидался список вакансий")
         profile = get_profile(request.user)
-        resume = profile.resume if isinstance(profile.resume, dict) else {}
+        active_record = get_active_resume_record(request.user, profile)
+        resume = active_record.data if active_record and isinstance(active_record.data, dict) else {}
         resume, changed = normalize_resume_scoring_profile(resume)
         if changed:
-            profile.resume = resume
-            profile.save(update_fields=["resume", "updated_at"])
+            if active_record:
+                active_record.data = resume
+                active_record.save(update_fields=["data", "updated_at"])
         payload = {
             "account": {"resume": resume, "onboarding": profile.onboarding or {}},
             "items": items,

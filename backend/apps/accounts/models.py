@@ -64,6 +64,20 @@ class Profile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class Resume(models.Model):
+    """A user-owned resume with its parsed data and optional source file."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="resumes")
+    data = models.JSONField(default=dict)
+    file = models.FileField(upload_to="resumes/%Y/%m/", blank=True)
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_active", "-updated_at", "-id"]
+
+
 class Application(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="applications")
     job_id = models.PositiveIntegerField()

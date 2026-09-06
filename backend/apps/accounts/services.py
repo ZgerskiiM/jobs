@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.auth import login
 from django.db import transaction
 
-from .models import AuditLog, Profile, User
+from .models import AuditLog, Profile, Resume, User
 from .resume_parser import RESUME_ANALYSIS_VERSION, analyze_resume
 
 
@@ -76,33 +76,82 @@ def get_profile(user: User) -> Profile:
 
 
 def refresh_resume_analysis(profile: Profile) -> None:
-    """Upgrade resume metadata created by an older parser without another upload."""
-    if not isinstance(profile.resume, dict) or not profile.resume_file:
-        return
-    if profile.resume.get("analysisVersion") == RESUME_ANALYSIS_VERSION:
-        return
+    """Keep legacy Profile-based resumes working while using Resume records."""
+    record = ensure_legacy_resume_record(profile)
+    if record:
+        refresh_resume_record(record)
 
+
+def ensure_legacy_resume_record(profile: Profile) -> Resume | None:
+    """Import a pre-multi-resume Profile resume on demand for old/local data."""
+    existing = Resume.objects.filter(user=profile.user).first()
+    if existing or (not isinstance(profile.resume, dict) and not profile.resume_file):
+        return existing
+    data = dict(profile.resume) if isinstance(profile.resume, dict) else {}
+    data.setdefault("id", f"legacy-{profile.pk}")
+    data.setdefault("source", "upload" if profile.resume_file else "hh")
+    data.setdefault("hasFile", bool(profile.resume_file))
+    if profile.resume_file:
+        data.setdefault("fileName", Path(profile.resume_file.name).name)
+    return Resume.objects.create(
+        user=profile.user,
+        data=data,
+        file=profile.resume_file.name if profile.resume_file else "",
+        is_active=True,
+    )
+
+
+def resume_payload(record: Resume) -> dict:
+    data = dict(record.data) if isinstance(record.data, dict) else {}
+    data.setdefault("id", f"upload-{record.pk}" if record.file else f"resume-{record.pk}")
+    data["isActive"] = bool(record.is_active)
+    if record.file:
+        data.setdefault("source", "upload")
+        data["hasFile"] = True
+        data.setdefault("fileName", Path(record.file.name).name)
+    else:
+        data.setdefault("source", "hh")
+        data.setdefault("hasFile", False)
+    return data
+
+
+def get_resume_records(user: User, profile: Profile | None = None) -> list[Resume]:
+    profile = profile or get_profile(user)
+    ensure_legacy_resume_record(profile)
+    return list(Resume.objects.filter(user=user))
+
+
+def get_active_resume_record(user: User, profile: Profile | None = None) -> Resume | None:
+    records = get_resume_records(user, profile)
+    if not records:
+        return None
+    return next((record for record in records if record.is_active), records[0])
+
+
+def refresh_resume_record(record: Resume) -> bool:
+    """Upgrade parsed metadata without replacing user-edited contact values."""
+    if not record.file or not isinstance(record.data, dict):
+        return False
+    if record.data.get("analysisVersion") == RESUME_ANALYSIS_VERSION:
+        return False
     opened = False
     try:
-        profile.resume_file.open("rb")
+        record.file.open("rb")
         opened = True
-        data = profile.resume_file.read()
-        filename = profile.resume.get("fileName") or Path(profile.resume_file.name).name
-        analysis = analyze_resume(data, filename)
+        raw = record.file.read()
+        filename = record.data.get("fileName") or Path(record.file.name).name
+        analysis = analyze_resume(raw, filename)
     except Exception:
-        return
+        return False
     finally:
         if opened:
-            profile.resume_file.close()
-
-    # Keep a manually corrected contact when the document does not contain a
-    # readable value (common for scanned PDFs), while accepting newly detected
-    # values from the upgraded parser.
+            record.file.close()
     for field in ("fullName", "contactEmail", "contactPhone", "contactTelegram"):
-        if not analysis.get(field) and profile.resume.get(field):
-            analysis[field] = profile.resume[field]
-    profile.resume = {**profile.resume, **analysis}
-    profile.save(update_fields=["resume", "updated_at"])
+        if not analysis.get(field) and record.data.get(field):
+            analysis[field] = record.data[field]
+    record.data = {**record.data, **analysis}
+    record.save(update_fields=["data", "updated_at"])
+    return True
 
 
 def telegram_payload_is_valid(data: Mapping[str, str]) -> bool:
@@ -150,26 +199,15 @@ def login_from_telegram(data: Mapping[str, str], request) -> User:
 
 def account_payload(user: User, *, is_new: bool = False) -> dict:
     profile = get_profile(user)
-    refresh_resume_analysis(profile)
-    if isinstance(profile.resume, dict) and profile.resume_file:
-        resume = dict(profile.resume)
-        changed = False
-        if not resume.get("id"):
-            resume["id"] = f"upload-{profile.resume_file.name}"
-            changed = True
-        if resume.get("source") != "upload":
-            resume["source"] = "upload"
-            changed = True
-        if resume.get("hasFile") is not True:
-            resume["hasFile"] = True
-            changed = True
+    records = get_resume_records(user, profile)
+    for record in records:
+        refresh_resume_record(record)
+        normalized, changed = normalize_resume_scoring_profile(record.data if isinstance(record.data, dict) else {})
         if changed:
-            profile.resume = resume
-            profile.save(update_fields=["resume", "updated_at"])
-    if isinstance(profile.resume, dict):
-        profile.resume, changed = normalize_resume_scoring_profile(profile.resume)
-        if changed:
-            profile.save(update_fields=["resume", "updated_at"])
+            record.data = normalized
+            record.save(update_fields=["data", "updated_at"])
+    resumes = [resume_payload(record) for record in records]
+    active_resume = next((resume for resume in resumes if resume.get("isActive")), resumes[0] if resumes else None)
     return {
         "user": {
             "id": user.pk,
@@ -180,7 +218,8 @@ def account_payload(user: User, *, is_new: bool = False) -> dict:
         },
         "onboarding": profile.onboarding,
         "settings": profile.settings,
-        "resume": profile.resume,
+        "resume": active_resume,
+        "resumes": resumes,
         "coverLetter": profile.cover_letter,
         "savedJobIds": profile.saved_job_ids,
         "savedJobNotes": profile.saved_job_notes,

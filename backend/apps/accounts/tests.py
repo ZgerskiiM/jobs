@@ -199,6 +199,36 @@ class AccountApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("PDF и DOCX", response.data["message"])
 
+    def test_multiple_resume_uploads_are_kept_and_can_be_selected(self):
+        client = APIClient()
+        client.post("/api/auth/email/", {"email": "resume-list@example.com", "password": "correct-horse", "mode": "register"}, format="json")
+
+        def make_resume(filename: str, title: str) -> bytes:
+            document = Document()
+            document.add_paragraph("Тестовый кандидат")
+            document.add_paragraph(title)
+            document.add_paragraph("Опыт: 3 года. Python, Docker")
+            output = BytesIO()
+            document.save(output)
+            return output.getvalue()
+
+        first_data = make_resume("first.docx", "Backend Engineer")
+        second_data = make_resume("second.docx", "DevOps Engineer")
+        first = client.post("/api/profile/resume/", {"resume": SimpleUploadedFile("first.docx", first_data)}, format="multipart")
+        second = client.post("/api/profile/resume/", {"resume": SimpleUploadedFile("second.docx", second_data)}, format="multipart")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(len(second.data["resumes"]), 2)
+        self.assertNotEqual(first.data["resume"]["id"], second.data["resume"]["id"])
+        self.assertTrue(second.data["resume"]["isActive"])
+
+        selected = client.patch("/api/profile/resume/", {"activeResumeId": first.data["resume"]["id"]}, format="json")
+        self.assertEqual(selected.status_code, 200)
+        self.assertEqual(selected.data["resume"]["id"], first.data["resume"]["id"])
+        downloaded = client.get(f"/api/profile/resume/file/?id={first.data['resume']['id']}")
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(b"".join(downloaded.streaming_content), first_data)
+
     def test_skill_detection_handles_aliases_and_pdf_line_breaks(self):
         skills = detect_skills("Golang, K8s, Postgre-\nsql, JavaScript, Google Cloud")
 
