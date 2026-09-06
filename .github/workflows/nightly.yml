@@ -17,6 +17,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: write
   pages: write
   id-token: write
   actions: write
@@ -25,12 +26,20 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    environment:
+      name: staging
+      url: ${{ vars.DEPLOY_URL }}
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TELEGRAM_SUBSCRIBERS_URL: ${{ vars.TELEGRAM_SUBSCRIBERS_URL }}
       TELEGRAM_SYNC_TOKEN: ${{ secrets.TELEGRAM_SYNC_TOKEN }}
       TELEGRAM_SITE_URL: ${{ vars.TELEGRAM_SITE_URL }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+      DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'http' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +100,80 @@ jobs:
           npm ci
           npm run build
 
+      # The vacancy catalog is generated in this job. Publish the resulting
+      # web image to the same staging host as the regular staging workflow so
+      # the live catalog is refreshed together with the nightly statistics.
+      - name: Resolve nightly web image
+        id: nightly-image
+        shell: bash
+        run: |
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "web=ghcr.io/$repository/web:nightly-$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish nightly web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.nightly-image.outputs.web }}
+
+      - name: Configure SSH for staging refresh
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "Missing staging variable DEPLOY_HOST" >&2; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "Missing staging variable DEPLOY_USER" >&2; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "Missing staging variable DEPLOY_PATH" >&2; exit 1; }
+          test -n "$DEPLOY_URL" || { echo "Missing staging variable DEPLOY_URL" >&2; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "Missing staging secret SSH_PRIVATE_KEY" >&2; exit 1; }
+          test -n "$SSH_KNOWN_HOSTS" || { echo "Missing staging secret SSH_KNOWN_HOSTS" >&2; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload deployment files
+        shell: bash
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh "$remote" "mkdir -p '$DEPLOY_PATH/deploy'"
+          scp docker-compose.yml docker-compose.prod.yml "$remote:$DEPLOY_PATH/"
+          scp deploy/Caddyfile deploy/remote-deploy.sh "$remote:$DEPLOY_PATH/deploy/"
+
+      - name: Log in to GHCR on staging
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          printf '%s' "$GHCR_TOKEN" | ssh "$remote" "docker login ghcr.io --username '$GITHUB_ACTOR' --password-stdin"
+
+      - name: Restart staging with refreshed catalog
+        shell: bash
+        env:
+          NIGHTLY_WEB_IMAGE: ${{ steps.nightly-image.outputs.web }}
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          api_image="ghcr.io/$repository/api:staging"
+          ssh "$remote" "cd '$DEPLOY_PATH' && DEPLOY_MODE='$DEPLOY_MODE' API_IMAGE='$api_image' WEB_IMAGE='$NIGHTLY_WEB_IMAGE' bash deploy/remote-deploy.sh"
+
+      - name: Smoke test refreshed staging
+        run: |
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 "$DEPLOY_URL/healthz/"
+          curl --fail --silent --show-error "$DEPLOY_URL/vacancy-refresh.json"
+
       - name: Save vacancy state
         if: always()
         uses: actions/cache/save@v4
@@ -99,11 +182,13 @@ jobs:
           key: vacancy-state-${{ github.run_id }}
 
       - name: Configure GitHub Pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
       - name: Upload website
+        continue-on-error: true
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
