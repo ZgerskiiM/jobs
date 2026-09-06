@@ -183,6 +183,23 @@ function remoteLogoUrl(value: string, company: string) {
   }
 }
 
+function inferredCompanyProfile(name: string) {
+  const value = name.toLowerCase();
+  const rules: Array<{ test: RegExp; industry: string; domains: string[]; label: string }> = [
+    { test: /банк|bank|финанс|бирж|страх|qiwi|yoomoney|юmoney|банки/, industry: "Fintech", domains: ["Fintech", "Банкинг", "Платежи"], label: "финансовые и цифровые сервисы" },
+    { test: /безопас|security|kaspersky|dr\.web|usergate|infotecs|infowatch|bi\.zone|solar|информзащит|код безопасност/, industry: "Security", domains: ["Кибербезопасность", "Защита данных", "Enterprise IT"], label: "кибербезопасность и защита данных" },
+    { test: /облак|cloud|selectel|хост|data.?center|цод|rtlabs/, industry: "Cloud", domains: ["Cloud", "Data platform", "Инфраструктура"], label: "облачная инфраструктура и данные" },
+    { test: /маркет|ритейл|магаз|ламод|ozon|wildber|мегамаркет|магнит|лента|ашан|детский мир|вкусвилл|купер|самолет|leman|sportmaster|x5|cdek|dodo|достав|ecom/, industry: "Retail tech", domains: ["E-commerce", "Retail tech", "Логистика"], label: "цифровые продукты для торговли и логистики" },
+    { test: /авиа|авиас|s7|туту|travel|туризм/, industry: "Travel tech", domains: ["Travel tech", "Мобильные сервисы", "Логистика"], label: "технологии для путешествий и транспорта" },
+    { test: /нефть|газпром|росатом|северстал|сибур|нлмк|фосагро|транснеф|россети|норник|полюс|тмк|металл|энерг/, industry: "Industry", domains: ["Industrial tech", "Data & AI", "Автоматизация"], label: "промышленная цифровизация и автоматизация" },
+    { test: /карты|2гис|циан|домклик|недвиж|яндекс|авито|head.?hunter|hh|rabota|уч\.ру|skyeng|skillbox/, industry: "Digital platforms", domains: ["Digital platform", "Marketplace", "Data & AI"], label: "цифровые платформы и сервисы для пользователей" },
+    { test: /телеком|мегафон|мтс|ростелеком|билайн|t2|транстелеком|nexign|rutube|vk|okko/, industry: "Telecom & media", domains: ["Telecom", "Media", "Digital products"], label: "телеком, медиа и цифровые продукты" },
+    { test: /интегратор|консалт|soft|it_|it one|крок|ланит|ибс|корус|ай-теко|рексофт|axenix|neoflex|haиlmont|simbir|glowbyte|bell integrator|jet|т1|t1/, industry: "IT services", domains: ["IT consulting", "Enterprise software", "Data & AI"], label: "корпоративные IT-решения и консалтинг" },
+  ];
+  const match = rules.find((rule) => rule.test.test(value));
+  return match || { industry: "Technology", domains: ["IT и цифровые продукты"], label: "технологические продукты и сервисы" };
+}
+
 function toJobs(vacancies: SourceVacancy[]): Job[] {
   return vacancies.map((vacancy, index) => {
     const companyId = slug(vacancy.company);
@@ -227,7 +244,7 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
     const sourceJob = sourceByCompany.get(id);
     let site = item.career_url || sourceJob?.url || "#";
     const name = item.name;
-    const profile = COMPANY_PROFILES[name];
+    const profile = COMPANY_PROFILES[name] || inferredCompanyProfile(name);
     const color = COLORS[hash(name) % COLORS.length];
     try { site = new URL(site).origin; } catch { /* keep the career URL when it is not a valid URL */ }
     return {
@@ -241,8 +258,8 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
       color,
       industry: profile?.industry || "Работодатель",
       size: "",
-      about: profile?.about || (companyJobs.length > 0 ? `${companyJobs.length} актуальных вакансий от работодателя.` : "Вакансии доступны на сайте компании."),
-      businessDomains: profile?.businessDomains || ["IT и цифровые продукты"],
+      about: "about" in profile ? profile.about : `${name} развивает ${profile.label}.`,
+      businessDomains: profile.businessDomains,
       tech_stack: [...new Set(companyJobs.flatMap((job) => job.tags))].slice(0, 12),
       culture: [],
       perks: [],
@@ -259,7 +276,7 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
     .map(([id, companyJobs]) => {
       const first = companyJobs[0];
       const sourceJob = sourceByCompany.get(id);
-      const profile = COMPANY_PROFILES[first.company];
+      const profile = COMPANY_PROFILES[first.company] || inferredCompanyProfile(first.company);
       let site = sourceJob?.url || "#";
       try { site = new URL(site).origin; } catch { /* source URL is already the best available value */ }
       return {
@@ -273,8 +290,8 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
         color: first.logoColor,
         industry: profile?.industry || "Работодатель",
         size: "",
-        about: profile?.about || `${companyJobs.length} актуальных вакансий от работодателя.`,
-        businessDomains: profile?.businessDomains || ["IT и цифровые продукты"],
+        about: "about" in profile ? profile.about : `${first.company} развивает ${profile.label}.`,
+        businessDomains: profile.businessDomains,
         tech_stack: [...new Set(companyJobs.flatMap((job) => job.tags))].slice(0, 12),
         culture: [], perks: [], rating: { overall: 0, wlb: 0, growth: 0, management: 0 }, reviews: [], hiringInsights: [],
         vacancyStatus: "imported" as const,
