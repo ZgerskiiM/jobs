@@ -76,6 +76,7 @@ jobs:
         run: |
           python job_tracker.py --db work/state/jobs.sqlite3 export --output data/jobs.csv
           python job_tracker.py --db work/state/jobs.sqlite3 site-data --output data/vacancies.js
+          python job_tracker.py --db work/state/jobs.sqlite3 refresh-report --output frontend/public/vacancy-refresh.json
 
       - name: Build website
         working-directory: frontend

@@ -45,6 +45,49 @@ export interface AdminStats {
   savedVacancies: number;
   registrationsByDay: Array<{ date: string; label: string; count: number }>;
   snapshotAt: string;
+  refresh: {
+    available: boolean;
+    message?: string;
+    latest: RefreshRun | null;
+    sources: RefreshSource[];
+    history: RefreshRun[];
+  };
+}
+
+export interface RefreshRun {
+  runId?: number;
+  status: "running" | "ok" | "error" | string;
+  startedAt?: string;
+  finishedAt?: string | null;
+  durationSeconds?: number | null;
+  totalSources: number;
+  succeededSources: number;
+  failedSources: number;
+  jobsReceived: number;
+  jobsAccepted: number;
+  newJobs: number;
+  updatedJobs: number;
+  reopenedJobs: number;
+  restoredJobs: number;
+  closedJobs: number;
+  staleJobs: number;
+}
+
+export interface RefreshSource {
+  sourceKey: string;
+  company: string;
+  status: "ok" | "error" | string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationSeconds?: number | null;
+  jobsReceived: number;
+  jobsAccepted: number;
+  newJobs: number;
+  updatedJobs: number;
+  reopenedJobs: number;
+  restoredJobs: number;
+  closedJobs: number;
+  error?: string | null;
 }
 
 export interface VacancyScore {

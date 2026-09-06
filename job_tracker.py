@@ -24,7 +24,7 @@ import httpx
 
 from jobtracker.models import Job, plain_text, text_value, utc_now
 from jobtracker.filters import matches_filters, source_filters
-from jobtracker.exports import detect_technologies, export_csv, export_site_data, show_stats
+from jobtracker.exports import detect_technologies, export_csv, export_refresh_report, export_site_data, show_stats
 from jobtracker import notifications
 from jobtracker.storage import connect_db, persist_source, record_event
 from jobtracker.adapters_standard import greenhouse_jobs as greenhouse_adapter, lever_jobs as lever_adapter
@@ -2917,6 +2917,7 @@ def reindex_vacancies(
 def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = None) -> int:
     config = load_config(config_path)
     db = connect_db(db_path)
+    sync_started = utc_now()
     timeout = int(config.get("http", {}).get("timeout_seconds", 20))
     retries = int(config.get("http", {}).get("retries", 2))
     source_workers = max(1, min(16, int(config.get("http", {}).get("source_workers", 6))))
@@ -2933,6 +2934,16 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
         print("Нет включённых источников. Отредактируйте config.json.")
         db.close()
         return 0
+
+    sync_cursor = db.execute(
+        "INSERT INTO sync_runs(started_at, total_sources) VALUES (?, ?)",
+        (sync_started, len(enabled)),
+    )
+    sync_id = sync_cursor.lastrowid
+    db.commit()
+    totals = {"succeeded": 0, "failed": 0, "jobs_received": 0, "jobs_accepted": 0,
+              "new_jobs": 0, "updated_jobs": 0, "reopened_jobs": 0, "restored_jobs": 0,
+              "closed_jobs": 0}
 
     def fetch_one(source: dict[str, Any]) -> tuple[str, list[Job] | None, Exception | None]:
         started = utc_now()
@@ -2960,9 +2971,14 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
                     with db:
                         counts = persist_source(db, jobs, source["key"], source_close_after, now, authoritative)
                         db.execute(
-                            "INSERT INTO runs(source_key, started_at, finished_at, status, jobs_received) VALUES (?, ?, ?, 'ok', ?)",
-                            (source["key"], started, now, len(fetched)),
+                            "INSERT INTO runs(source_key, company, sync_id, started_at, finished_at, status, jobs_received, jobs_accepted, new_jobs, updated_jobs, reopened_jobs, restored_jobs, closed_jobs) VALUES (?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?, ?)",
+                            (source["key"], source["company"], sync_id, started, now, len(fetched), len(jobs), counts["new"], counts["updated"], counts["reopened"], counts["restored"], counts["closed"]),
                         )
+                    totals["succeeded"] += 1
+                    totals["jobs_received"] += len(fetched)
+                    totals["jobs_accepted"] += len(jobs)
+                    for key in ("new", "updated", "reopened", "restored", "closed"):
+                        totals[f"{key}_jobs"] += counts[key]
                     print(f"{source['company']}: получено {len(fetched)}, подходит {len(jobs)}, "
                           f"новых {counts['new']}, изменено {counts['updated']}, "
                           f"переоткрыто {counts['reopened']}, восстановлено {counts['restored']}, "
@@ -2972,13 +2988,18 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
                     now = utc_now()
                     with db:
                         db.execute(
-                            "INSERT INTO runs(source_key, started_at, finished_at, status, error) VALUES (?, ?, ?, 'error', ?)",
-                            (source["key"], started, now, str(exc)),
+                            "INSERT INTO runs(source_key, company, sync_id, started_at, finished_at, status, error) VALUES (?, ?, ?, ?, ?, 'error', ?)",
+                            (source["key"], source["company"], sync_id, started, now, str(exc)),
                         )
+                    totals["failed"] += 1
                     print(f"ОШИБКА {source['company']}: {exc}", file=sys.stderr)
     now = utc_now()
     with db:
         stale_count = mark_stale_jobs(db, config.get("sources", []), stale_after_days, now)
+        db.execute(
+            "UPDATE sync_runs SET finished_at=?, status=?, succeeded_sources=?, failed_sources=?, jobs_received=?, jobs_accepted=?, new_jobs=?, updated_jobs=?, reopened_jobs=?, restored_jobs=?, closed_jobs=?, stale_jobs=? WHERE id=?",
+            (now, "error" if failures else "ok", totals["succeeded"], totals["failed"], totals["jobs_received"], totals["jobs_accepted"], totals["new_jobs"], totals["updated_jobs"], totals["reopened_jobs"], totals["restored_jobs"], totals["closed_jobs"], stale_count, sync_id),
+        )
     db.close()
     if stale_count:
         print(f"Помечено устаревшими: {stale_count} (не подтверждались более {stale_after_days} дн.)")
@@ -3182,6 +3203,9 @@ def main(argv: list[str] | None = None) -> int:
     site_data = sub.add_parser("site-data", help="выгрузить активные вакансии с индексом релевантности")
     site_data.add_argument("--output", type=Path, default=Path("data/vacancies.js"))
     site_data.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY_PATH)
+    refresh_report = sub.add_parser("refresh-report", help="выгрузить отчёт последнего обновления")
+    refresh_report.add_argument("--output", type=Path, default=Path("frontend/public/vacancy-refresh.json"))
+    refresh_report.add_argument("--limit", type=int, default=12)
     reindex = sub.add_parser("reindex", help="построить/обновить индекс релевантности вакансий")
     reindex.add_argument("--taxonomy", type=Path, default=DEFAULT_TAXONOMY_PATH)
     reindex.add_argument("--force", action="store_true", help="переиндексировать все активные вакансии")
@@ -3219,6 +3243,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "site-data":
         export_site_data(args.db, args.output, args.taxonomy)
+        return 0
+    if args.command == "refresh-report":
+        export_refresh_report(args.db, args.output, args.limit)
         return 0
     if args.command == "reindex":
         reindex_vacancies(args.db, args.taxonomy, args.force)

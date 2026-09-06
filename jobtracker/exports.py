@@ -107,3 +107,28 @@ def show_stats(db_path: Path) -> None:
         for row in rows:
             print(f"{row['company'][:30]:30} {row['total']:8} {row['fresh']:8} {row['stale']:8} {row['closed']:8}")
     db.close()
+
+
+def export_refresh_report(db_path: Path, output_path: Path, limit: int = 12) -> None:
+    """Export the latest synchronisation runs for the admin operational dashboard."""
+    db = connect_db(db_path)
+    latest = db.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
+    if latest is None:
+        payload = {"available": False, "message": "Обновления ещё не запускались", "runs": [], "sources": []}
+    else:
+        latest_id = latest["id"]
+        sources = db.execute(
+            "SELECT * FROM runs WHERE sync_id = ? ORDER BY CASE WHEN status = 'error' THEN 0 ELSE 1 END, company COLLATE NOCASE",
+            (latest_id,),
+        ).fetchall()
+        history = db.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT ?", (max(1, limit),)).fetchall()
+        payload = {
+            "available": True,
+            "latest": dict(latest),
+            "sources": [dict(row) for row in sources],
+            "runs": [dict(row) for row in history],
+        }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    db.close()
+    print(f"Отчёт обновления: {output_path}")

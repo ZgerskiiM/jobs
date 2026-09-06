@@ -32,8 +32,23 @@ def connect_db(path: Path) -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL,
+            company TEXT NOT NULL DEFAULT '',
+            sync_id INTEGER,
             started_at TEXT NOT NULL, finished_at TEXT NOT NULL, status TEXT NOT NULL,
-            jobs_received INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT ''
+            jobs_received INTEGER NOT NULL DEFAULT 0, jobs_accepted INTEGER NOT NULL DEFAULT 0,
+            new_jobs INTEGER NOT NULL DEFAULT 0, updated_jobs INTEGER NOT NULL DEFAULT 0,
+            reopened_jobs INTEGER NOT NULL DEFAULT 0, restored_jobs INTEGER NOT NULL DEFAULT 0,
+            closed_jobs INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS sync_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL,
+            finished_at TEXT, status TEXT NOT NULL DEFAULT 'running',
+            total_sources INTEGER NOT NULL DEFAULT 0, succeeded_sources INTEGER NOT NULL DEFAULT 0,
+            failed_sources INTEGER NOT NULL DEFAULT 0, jobs_received INTEGER NOT NULL DEFAULT 0,
+            jobs_accepted INTEGER NOT NULL DEFAULT 0, new_jobs INTEGER NOT NULL DEFAULT 0,
+            updated_jobs INTEGER NOT NULL DEFAULT 0, reopened_jobs INTEGER NOT NULL DEFAULT 0,
+            restored_jobs INTEGER NOT NULL DEFAULT 0, closed_jobs INTEGER NOT NULL DEFAULT 0,
+            stale_jobs INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS notifier_state (
             name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -50,6 +65,19 @@ def connect_db(path: Path) -> sqlite3.Connection:
         db.execute("ALTER TABLE jobs ADD COLUMN stale INTEGER NOT NULL DEFAULT 0")
     if "stale_at" not in columns:
         db.execute("ALTER TABLE jobs ADD COLUMN stale_at TEXT")
+    run_columns = {row["name"] for row in db.execute("PRAGMA table_info(runs)")}
+    for name, definition in {
+        "company": "TEXT NOT NULL DEFAULT ''",
+        "sync_id": "INTEGER",
+        "jobs_accepted": "INTEGER NOT NULL DEFAULT 0",
+        "new_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "updated_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "reopened_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "restored_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "closed_jobs": "INTEGER NOT NULL DEFAULT 0",
+    }.items():
+        if name not in run_columns:
+            db.execute(f"ALTER TABLE runs ADD COLUMN {name} {definition}")
     return db
 
 

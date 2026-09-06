@@ -87,6 +87,94 @@ class HhVacanciesView(APIView):
 class AdminStatsView(APIView):
     """Return operational counters for the jobs.dev admin dashboard."""
 
+    @staticmethod
+    def _refresh_report() -> dict[str, Any]:
+        configured = Path(getattr(settings, "VACANCY_REFRESH_REPORT_PATH", ""))
+        candidates = [configured, settings.BASE_DIR / "vacancy-refresh.json", settings.BASE_DIR / "catalog" / "vacancy-refresh.json"]
+        for path in candidates:
+            if not path or not path.is_file():
+                continue
+            try:
+                payload = jsonlib.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+            except (OSError, jsonlib.JSONDecodeError):
+                continue
+        # Local installations may have the tracker SQLite database but not the
+        # generated JSON artifact. Infer the latest pass from its per-source
+        # runs so the dashboard remains useful before the next nightly build.
+        db_path = Path(getattr(settings, "JOB_TRACKER_DB_PATH", ""))
+        if db_path.is_file():
+            try:
+                with sqlite3.connect(db_path) as db:
+                    db.row_factory = sqlite3.Row
+                    latest_finished = db.execute("SELECT MAX(finished_at) FROM runs").fetchone()[0]
+                    if latest_finished:
+                        cutoff = datetime.fromisoformat(latest_finished) - timedelta(minutes=15)
+                        rows = db.execute("""
+                            SELECT r.*, COALESCE(NULLIF(r.company, ''), MAX(j.company), r.source_key) AS resolved_company
+                            FROM runs r LEFT JOIN jobs j ON j.source_key = r.source_key
+                            WHERE r.finished_at >= ? GROUP BY r.id ORDER BY r.status DESC, resolved_company COLLATE NOCASE
+                        """, (cutoff.isoformat(),)).fetchall()
+                        if rows:
+                            source_rows = [dict(row) | {"company": row["resolved_company"]} for row in rows]
+                            totals = {"succeeded_sources": sum(row["status"] == "ok" for row in rows), "failed_sources": sum(row["status"] != "ok" for row in rows), "total_sources": len(rows)}
+                            for key in ("jobs_received", "jobs_accepted", "new_jobs", "updated_jobs", "reopened_jobs", "restored_jobs", "closed_jobs"):
+                                totals[key] = sum(int(row[key] or 0) if key in row.keys() else 0 for row in rows)
+                            started = min(row["started_at"] for row in rows)
+                            synthetic = {"id": None, "started_at": started, "finished_at": latest_finished, "status": "error" if totals["failed_sources"] else "ok", **totals, "stale_jobs": 0}
+                            return {"available": True, "message": "Показатели восстановлены из локальной базы проходов", "latest": synthetic, "sources": source_rows, "runs": [synthetic]}
+            except (OSError, sqlite3.Error, ValueError):
+                pass
+        return {"available": False, "message": "Отчёт обновления недоступен", "runs": [], "sources": []}
+
+    @staticmethod
+    def _duration(started: str | None, finished: str | None) -> float | None:
+        if not started or not finished:
+            return None
+        try:
+            return round(max(0.0, (datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds()), 1)
+        except ValueError:
+            return None
+
+    def _operational_payload(self) -> dict[str, Any]:
+        report = self._refresh_report()
+
+        def run_payload(item: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "runId": item.get("id"), "status": item.get("status"),
+                "startedAt": item.get("started_at"), "finishedAt": item.get("finished_at"),
+                "durationSeconds": self._duration(item.get("started_at"), item.get("finished_at")),
+                "totalSources": item.get("total_sources", 0), "succeededSources": item.get("succeeded_sources", 0),
+                "failedSources": item.get("failed_sources", 0), "jobsReceived": item.get("jobs_received", 0),
+                "jobsAccepted": item.get("jobs_accepted", 0), "newJobs": item.get("new_jobs", 0),
+                "updatedJobs": item.get("updated_jobs", 0), "reopenedJobs": item.get("reopened_jobs", 0),
+                "restoredJobs": item.get("restored_jobs", 0), "closedJobs": item.get("closed_jobs", 0),
+                "staleJobs": item.get("stale_jobs", 0),
+            }
+
+        latest = report.get("latest") if isinstance(report.get("latest"), dict) else None
+        sources = []
+        for item in report.get("sources", []) if isinstance(report.get("sources"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            sources.append({
+                "sourceKey": item.get("source_key"), "company": item.get("company") or item.get("source_key"),
+                "status": item.get("status"), "startedAt": item.get("started_at"), "finishedAt": item.get("finished_at"),
+                "durationSeconds": self._duration(item.get("started_at"), item.get("finished_at")),
+                "jobsReceived": item.get("jobs_received", 0), "jobsAccepted": item.get("jobs_accepted", 0),
+                "newJobs": item.get("new_jobs", 0), "updatedJobs": item.get("updated_jobs", 0),
+                "reopenedJobs": item.get("reopened_jobs", 0), "restoredJobs": item.get("restored_jobs", 0),
+                "closedJobs": item.get("closed_jobs", 0), "error": item.get("error") or None,
+            })
+        return {
+            "available": bool(report.get("available") and latest),
+            "message": report.get("message"),
+            "latest": run_payload(latest) if latest else None,
+            "sources": sources,
+            "history": [run_payload(item) for item in report.get("runs", []) if isinstance(item, dict)],
+        }
+
     def get(self, request):
         if not request.user.is_authenticated or not (request.user.is_staff or request.user.role == User.Role.ADMIN):
             return error("Доступ только для администраторов", status.HTTP_403_FORBIDDEN)
@@ -127,6 +215,7 @@ class AdminStatsView(APIView):
             "savedVacancies": sum(len(profile.saved_job_ids or []) for profile in Profile.objects.all()),
             "registrationsByDay": registration_days,
             "snapshotAt": now.isoformat(),
+            "refresh": self._operational_payload(),
         })
 
 

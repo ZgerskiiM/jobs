@@ -13,6 +13,7 @@ COPY backend /app
 COPY jobs-dev-zen-extension.zip jobs-dev-zen-extension-chrome.zip /app/
 RUN mkdir -p /app/catalog /app/frontend/scripts /app/config
 COPY frontend/public/vacancies.json /app/catalog/vacancies.json
+COPY frontend/public/vacancy-refresh.json /app/catalog/vacancy-refresh.json
 COPY frontend/scripts/scoring-api.mjs frontend/scripts/vacancy-scoring.js /app/frontend/scripts/
 COPY config/java_backend_vacancy_relevance_ru_v1.json config/devops_vacancy_relevance_ru_v1.json config/1c_developer_vacancy_relevance_ru_v1.json /app/config/
 RUN python manage.py collectstatic --noinput

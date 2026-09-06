@@ -128,6 +128,7 @@ HH_USER_AGENT = os.getenv("HH_USER_AGENT", "jobs.dev/1.0 (support@jobs.dev)")
 # at a mounted jobs.sqlite3 file).
 VACANCY_CATALOG_PATH = os.getenv("VACANCY_CATALOG_PATH", str(BASE_DIR.parent / "frontend" / "public" / "vacancies.json"))
 JOB_TRACKER_DB_PATH = os.getenv("JOB_TRACKER_DB_PATH", str(BASE_DIR.parent / "data" / "jobs.sqlite3"))
+VACANCY_REFRESH_REPORT_PATH = os.getenv("VACANCY_REFRESH_REPORT_PATH", str(BASE_DIR.parent / "frontend" / "public" / "vacancy-refresh.json"))
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 CELERY_BROKER_URL = REDIS_URL
