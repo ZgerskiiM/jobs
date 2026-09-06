@@ -68,7 +68,8 @@ jobs:
         id: images
         shell: bash
         run: |
-          echo "namespace=ghcr.io/$(echo \"${GITHUB_REPOSITORY}\" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "namespace=ghcr.io/$repository" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
