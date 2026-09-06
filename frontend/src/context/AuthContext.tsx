@@ -6,7 +6,7 @@ export interface OnboardingData { roles: string[]; levels: string[]; formats: st
 export interface NotificationSettings { newJobs: boolean; salaryDigest: boolean; trendDigest: boolean; companyActivity: boolean; }
 export interface AccountSettings { profileVisible: boolean; showSalaryExpectation: boolean; }
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
-export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; }
+export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; isAdmin?: boolean; }
 export interface ResumeSkill { name: string; category: string; confirmed: boolean; }
 export type ResumeTargetRole = "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER" | "UNKNOWN";
 export interface ResumeData {

@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from html import unescape
 import json as jsonlib
+import hashlib
 import mimetypes
 import re
 import sqlite3
@@ -26,7 +27,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Application, AuditLog, Profile, Resume, User
+from .models import Application, AuditLog, Profile, Resume, User, VacancySnapshot
 from .resume_parser import analyze_resume
 from .serializers import EmailAuthSerializer, ProfilePatchSerializer, SavedJobSerializer
 from .services import account_payload, get_active_resume_record, get_profile, get_resume_records, infer_target_role, login_from_telegram, normalize_resume_scoring_profile, resume_payload, telegram_payload_is_valid
@@ -81,6 +82,52 @@ class HhVacanciesView(APIView):
             }
 
         return Response({"source": "hh", "vacancies": [mapped(item) for item in payload.get("items", [])], "meta": {"found": payload.get("found", 0), "page": payload.get("page", 0), "pages": payload.get("pages", 0), "updated_at": timezone.now().isoformat()}})
+
+
+class AdminStatsView(APIView):
+    """Return operational counters for the jobs.dev admin dashboard."""
+
+    def get(self, request):
+        if not request.user.is_authenticated or not (request.user.is_staff or request.user.role == User.Role.ADMIN):
+            return error("Доступ только для администраторов", status.HTTP_403_FORBIDDEN)
+
+        records = _catalog_records()
+        keys = sorted({
+            f"{item.get('source_key') or 'catalog'}:{item.get('id') or item.get('url') or index}"
+            for index, item in enumerate(records)
+        })
+        fingerprint = hashlib.sha256(jsonlib.dumps(keys, ensure_ascii=False).encode("utf-8")).hexdigest()
+        previous = VacancySnapshot.objects.first()
+        previous_keys = set(previous.vacancy_keys if previous else [])
+        current_keys = set(keys)
+        added = len(current_keys - previous_keys) if previous else 0
+        removed = len(previous_keys - current_keys) if previous else 0
+        if previous is None or previous.fingerprint != fingerprint:
+            VacancySnapshot.objects.create(fingerprint=fingerprint, vacancy_keys=keys, total=len(keys))
+
+        now = timezone.localtime()
+        current_timezone = timezone.get_current_timezone()
+        registration_days = []
+        for offset in range(13, -1, -1):
+            day = (now - timedelta(days=offset)).date()
+            start = timezone.make_aware(datetime.combine(day, datetime.min.time()), current_timezone)
+            end = start + timedelta(days=1)
+            registration_days.append({
+                "date": day.isoformat(),
+                "label": day.strftime("%d.%m"),
+                "count": User.objects.filter(date_joined__gte=start, date_joined__lt=end).count(),
+            })
+
+        return Response({
+            "vacancies": {"total": len(keys), "added": added, "removed": removed},
+            "companies": {"total": len({str(item.get('company') or '').strip() for item in records if str(item.get('company') or '').strip()})},
+            "users": {"total": User.objects.count(), "active": User.objects.filter(is_active=True).count(), "last7Days": User.objects.filter(date_joined__gte=now - timedelta(days=7)).count()},
+            "resumes": Resume.objects.count(),
+            "applications": Application.objects.count(),
+            "savedVacancies": sum(len(profile.saved_job_ids or []) for profile in Profile.objects.all()),
+            "registrationsByDay": registration_days,
+            "snapshotAt": now.isoformat(),
+        })
 
 
 class ExtensionDownloadView(APIView):

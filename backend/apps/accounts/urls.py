@@ -9,6 +9,7 @@ from .views import (
     ExtensionDownloadView,
     ExtensionApplicationView,
     HhVacanciesView,
+    AdminStatsView,
     LogoutView,
     MeView,
     ProfileView,
@@ -23,6 +24,7 @@ from .views import (
 
 urlpatterns = [
     path("vacancies/hh/", HhVacanciesView.as_view()),
+    path("admin/stats/", AdminStatsView.as_view()),
     path("extension/download/", ExtensionDownloadView.as_view()),
     path("extension/download/<str:browser>/", ExtensionDownloadView.as_view()),
     path("applications/from-extension/", ExtensionApplicationView.as_view()),

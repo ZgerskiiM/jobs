@@ -215,6 +215,7 @@ def account_payload(user: User, *, is_new: bool = False) -> dict:
             "email": None if user.email.endswith("@telegram.local") else user.email,
             "telegram": f"@{user.telegram_username}" if user.telegram_username else None,
             "telegramPhotoUrl": user.telegram_photo_url or None,
+            "isAdmin": bool(user.is_staff or user.role == User.Role.ADMIN),
         },
         "onboarding": profile.onboarding,
         "settings": profile.settings,

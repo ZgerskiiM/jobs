@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Application, AuditLog, PaymentEvent, Profile, Subscription, User
+from .models import Application, AuditLog, PaymentEvent, Profile, Subscription, User, VacancySnapshot
 
 
 @admin.register(User)
@@ -49,3 +49,9 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_filter = ("action", "object_type")
     search_fields = ("actor__email", "object_id")
     readonly_fields = ("actor", "action", "object_type", "object_id", "metadata", "created_at")
+
+
+@admin.register(VacancySnapshot)
+class VacancySnapshotAdmin(admin.ModelAdmin):
+    list_display = ("snapshot_at", "total", "fingerprint")
+    readonly_fields = ("snapshot_at", "fingerprint", "total", "vacancy_keys")

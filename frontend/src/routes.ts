@@ -7,6 +7,7 @@ import Activity from "./pages/Activity";
 import JobDetail from "./pages/JobDetail";
 import CompanyPage from "./pages/CompanyPage";
 import Companies from "./pages/Companies";
+import Admin from "./pages/Admin";
 
 export const router = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: "activity", Component: Activity },
       { path: "jobs/:id", Component: JobDetail },
       { path: "companies/:id", Component: CompanyPage },
+      { path: "admin", Component: Admin },
     ],
   },
 ]);

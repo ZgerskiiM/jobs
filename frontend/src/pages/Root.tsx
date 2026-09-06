@@ -59,6 +59,9 @@ export default function Root() {
                   }>
                     Отклики
                   </NavLink>
+                  {user.isAdmin && <NavLink to="/admin" className={({ isActive }) =>
+                    `font-mono text-xs transition-colors tracking-wide uppercase ${isActive ? "text-[#33ff77]" : "text-[#5a6070] hover:text-[#33ff77]"}`
+                  }>Админка</NavLink>}
                   <Link to="/profile" className="group flex items-center gap-1.5">
                     <span className="font-mono text-xs text-[#5a6070] group-hover:text-[#33ff77] transition-colors">{user.name}</span>
                     {isPro && (
@@ -139,6 +142,11 @@ export default function Root() {
               }
             >
               Отклики
+            </NavLink>
+          )}
+          {user?.isAdmin && (
+            <NavLink to="/admin" onClick={() => setMenuOpen(false)} className={({ isActive }) => `block py-3 font-mono text-sm tracking-wide uppercase border-b border-[rgba(58,64,79,0.3)] ${isActive ? "text-[#33ff77]" : "text-[#5a6070]"}`}>
+              Админка
             </NavLink>
           )}
           <div className="pt-3 flex flex-col gap-2">

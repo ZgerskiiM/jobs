@@ -36,6 +36,17 @@ export interface AccountPayload {
   isNew?: boolean;
 }
 
+export interface AdminStats {
+  vacancies: { total: number; added: number; removed: number };
+  companies: { total: number };
+  users: { total: number; active: number; last7Days: number };
+  resumes: number;
+  applications: number;
+  savedVacancies: number;
+  registrationsByDay: Array<{ date: string; label: string; count: number }>;
+  snapshotAt: string;
+}
+
 export interface VacancyScore {
   vacancyId: string; scoringVersion: string; score: number; confidence: number; eligibility: "ELIGIBLE" | "INELIGIBLE" | "UNCERTAIN"; eligibilityReasons: string[]; level: string; label: string; summary: string; hardMatchScore: number | null; vacancyRequirementCoverage: number | null;
   matched: Array<{ required: string; found: string; coefficient: number }>;
@@ -118,4 +129,5 @@ export const accountApi = {
     request<{ scoringVersion: string; taxonomyVersion: string; profile: unknown; scores: VacancyScore[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items }) }),
   scoreVacancyIndex: (items: VacancyScoreInput[]) =>
     request<{ scoringVersion: string; taxonomyVersion: string; profile: unknown; scores: VacancyScoreSummary[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items, compact: true }) }),
+  adminStats: () => request<AdminStats>("/api/admin/stats/"),
 };

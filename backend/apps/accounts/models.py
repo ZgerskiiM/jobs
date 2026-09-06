@@ -79,6 +79,18 @@ class Resume(models.Model):
         ordering = ["created_at", "id"]
 
 
+class VacancySnapshot(models.Model):
+    """A catalog pass used to calculate vacancies added and removed since the previous pass."""
+
+    snapshot_at = models.DateTimeField(auto_now_add=True)
+    fingerprint = models.CharField(max_length=64, db_index=True)
+    vacancy_keys = models.JSONField(default=list)
+    total = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-snapshot_at", "-id"]
+
+
 class Application(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="applications")
     job_id = models.PositiveIntegerField()
