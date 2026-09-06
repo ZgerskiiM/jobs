@@ -14,7 +14,7 @@ const profileLink = document.getElementById("profile-link");
 let activeTab = null;
 let account = null;
 async function loadApiOrigin() {
-  profileLink.href = "http://127.0.0.1:8443/profile";
+  profileLink.href = "http://139.100.233.153:8080/profile";
 }
 
 function setResult(message, kind = "") {
@@ -125,7 +125,7 @@ async function fillCurrentPage() {
 
 resumeSelect.addEventListener("change", updateMeta);
 fillButton.addEventListener("click", () => void fillCurrentPage());
-loginButton.addEventListener("click", () => void api.tabs.create({ url: "http://127.0.0.1:8443/?extension_login=1" }));
+loginButton.addEventListener("click", () => void api.tabs.create({ url: "http://139.100.233.153:8080/?extension_login=1" }));
 checkAuthButton.addEventListener("click", () => void checkAuthorization());
 
 async function init() {

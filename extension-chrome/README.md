@@ -10,11 +10,11 @@ Python API пытается найти вакансию в каталоге и �
 Для Google Chrome используется отдельная Manifest V3-сборка из папки
 `extension-chrome` или архива `jobs-dev-zen-extension-chrome.zip`.
 
-## Установка в Zen для проверки
+## Установка в Chrome для проверки
 
-1. Открой Zen и зайди в аккаунт на `https://jobs-dev.zgerskiim.chatgpt.site`.
-2. Перейди в `about:debugging` → **This Zen** → **Load Temporary Add-on**.
-3. Выбери файл `extension/manifest.json` из этого проекта.
+1. Открой jobs.dev и зайди в аккаунт на `http://139.100.233.153:8080`.
+2. Открой `chrome://extensions`, включи **Developer mode**.
+3. Нажми **Load unpacked** и выбери папку `extension-chrome` из этого проекта.
 4. Открой страницу с формой отклика. Для первой проверки можно использовать вакансию ASTON на `career.astondevs.ru/vacancy/...`.
 5. Нажми на иконку расширения и выбери **заполнить форму**. Для безопасной проверки откликов можно нажать **тест: отметить отклик (без отправки)** — форма на сайте не отправляется, а адрес текущей вакансии проверяется в каталоге jobs.dev.
 

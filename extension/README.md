@@ -12,7 +12,7 @@ Python API пытается найти вакансию в каталоге и �
 
 ## Установка в Zen для проверки
 
-1. Открой Zen и зайди в аккаунт на `https://jobs-dev.zgerskiim.chatgpt.site`.
+1. Открой jobs.dev и зайди в аккаунт на `http://139.100.233.153:8080`.
 2. Перейди в `about:debugging` → **This Zen** → **Load Temporary Add-on**.
 3. Выбери файл `extension/manifest.json` из этого проекта.
 4. Открой страницу с формой отклика. Для первой проверки можно использовать вакансию ASTON на `career.astondevs.ru/vacancy/...`.

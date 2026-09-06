@@ -7,7 +7,7 @@
     "activeTab",
     "tabs",
     "<all_urls>",
-    "https://jobs-dev.zgerskiim.chatgpt.site/*"
+    "http://139.100.233.153:8080/*"
   ],
   "browser_action": {
     "default_title": "Заполнить отклик из jobs.dev",

@@ -1,5 +1,5 @@
 const extensionApi = globalThis.browser || globalThis.chrome;
-const API_ORIGIN = "http://127.0.0.1:8000";
+const API_ORIGIN = "http://139.100.233.153:8080";
 const CHUNK_SIZE = 256 * 1024;
 const pendingFiles = new Map();
 const API_TIMEOUT_MS = 8000;
