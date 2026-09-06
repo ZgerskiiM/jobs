@@ -3,7 +3,17 @@ import { type Application } from "../data";
 import { accountApi, type AccountPayload } from "../api";
 
 export interface OnboardingData { roles: string[]; levels: string[]; formats: string[]; }
-export interface NotificationSettings { newJobs: boolean; salaryDigest: boolean; trendDigest: boolean; companyActivity: boolean; }
+export interface NotificationSettings {
+  newJobs: boolean;
+  salaryDigest: boolean;
+  trendDigest: boolean;
+  companyActivity: boolean;
+  telegramEnabled?: boolean;
+  telegramKeywords?: string[];
+  telegramCompanies?: string[];
+  telegramLocations?: string[];
+  telegramTechnologies?: string[];
+}
 export interface AccountSettings { profileVisible: boolean; showSalaryExpectation: boolean; }
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
 export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; isAdmin?: boolean; }
@@ -30,7 +40,7 @@ interface AuthState {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false },
+  notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false, telegramEnabled: false, telegramKeywords: [], telegramCompanies: [], telegramLocations: [], telegramTechnologies: [] },
   account: { profileVisible: true, showSalaryExpectation: false },
 };
 const AuthContext = createContext<AuthState | null>(null);

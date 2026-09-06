@@ -16,6 +16,16 @@ from .models import text_value, utc_now
 from .storage import connect_db
 
 
+def site_job_id(source_key: str, external_id: str) -> int:
+    """Match the signed 32-bit hash used by the frontend for catalog jobs."""
+    value = f"{source_key}:{external_id}"
+    result = 0
+    for char in value:
+        result = ((result * 31 + ord(char)) & 0xFFFFFFFF)
+    signed = result - 0x100000000 if result & 0x80000000 else result
+    return abs(signed)
+
+
 def initialize_cursor(db_path: Path, force: bool = False) -> None:
     db = connect_db(db_path)
     existing = db.execute("SELECT value FROM notifier_state WHERE name='telegram_event_cursor'").fetchone()
@@ -53,7 +63,14 @@ def matches_filter(job: sqlite3.Row, settings: dict[str, Any]) -> bool:
     if selected and not any(value.casefold() in selected for value in technologies): return False
     selected_filter = settings.get("filter") or {}
     haystack = " ".join(text_value(job[key]) for key in ("company", "title", "location", "team", "workplace_type", "description")).casefold()
-    for key, value in (("keywords", haystack), ("companies", text_value(job["company"]).casefold()), ("locations", text_value(job["location"]).casefold())):
+    for key, value in (
+        ("keywords", haystack),
+        ("companies", text_value(job["company"]).casefold()),
+        ("locations", text_value(job["location"]).casefold()),
+        ("roles", text_value(job["title"]).casefold()),
+        ("levels", text_value(job["title"]).casefold()),
+        ("formats", " ".join((text_value(job["workplace_type"]), text_value(job["location"]))).casefold()),
+    ):
         choices = [text_value(item).casefold() for item in selected_filter.get(key, []) if item]
         if choices and not any(choice in value for choice in choices): return False
     return True
@@ -81,6 +98,55 @@ def send_new(db_path: Path, token: str, chat_id: str, settings: dict[str, Any], 
         if not dry_run:
             db.execute("UPDATE notifier_state SET value=?, updated_at=? WHERE name='telegram_event_cursor'", (str(cursor), utc_now())); db.commit()
     db.close(); print(f"Telegram: отправлено новых вакансий: {sent}; не подошло под фильтр: {filtered}."); return sent
+
+
+def send_new_to_subscribers(
+    db_path: Path, token: str, subscribers: list[dict[str, Any]], site_url: str,
+    dry_run: bool, sender: Callable[..., None], printer: Callable[[str], None],
+) -> dict[str, int]:
+    """Deliver new vacancy events to each user's saved Telegram filter."""
+    db = connect_db(db_path)
+    state = db.execute("SELECT value FROM notifier_state WHERE name='telegram_event_cursor'").fetchone()
+    if not state:
+        db.close()
+        initialize_cursor(db_path)
+        return {"sent": 0, "matched": 0, "failed": 0}
+    cursor = int(state["value"])
+    events = db.execute("""
+        SELECT e.id, e.source_key, e.external_id, e.event_type, j.company, j.title, j.location,
+               j.team, j.workplace_type, j.description, j.url
+        FROM events e LEFT JOIN jobs j ON j.source_key=e.source_key AND j.external_id=e.external_id
+        WHERE e.id > ? AND e.event_type = 'new' ORDER BY e.id
+    """, (cursor,)).fetchall()
+    sent = matched = failed = 0
+    site_origin = site_url.rstrip("/")
+    for event in events:
+        for subscriber in subscribers:
+            chat_id = str(subscriber.get("chatId") or "")
+            if not chat_id or not matches_filter(event, {"filter": subscriber.get("filter") or {}}):
+                continue
+            matched += 1
+            delivery = db.execute("SELECT status FROM telegram_deliveries WHERE event_id=? AND chat_id=?", (event["id"], chat_id)).fetchone()
+            if delivery and delivery["status"] == "sent":
+                continue
+            vacancy_url = f"{site_origin}/jobs/{site_job_id(event['source_key'], event['external_id'])}"
+            message = f"🆕 <b>Новая вакансия</b>\n\n<b>{html.escape(event['company'] or 'Компания')}</b>\n{html.escape(event['title'] or 'Без названия')}\n\n<a href=\"{html.escape(vacancy_url, quote=True)}\">Открыть на jobs.dev</a>"
+            try:
+                if dry_run:
+                    printer(f"[{chat_id}] {message}")
+                else:
+                    sender(token, chat_id, message)
+                db.execute("INSERT OR REPLACE INTO telegram_deliveries(event_id, chat_id, status, error, sent_at) VALUES (?, ?, 'sent', '', ?)", (event["id"], chat_id, utc_now()))
+                sent += 1
+            except Exception as exc:
+                failed += 1
+                db.execute("INSERT OR REPLACE INTO telegram_deliveries(event_id, chat_id, status, error, sent_at) VALUES (?, ?, 'error', ?, NULL)", (event["id"], chat_id, str(exc)))
+        cursor = int(event["id"])
+    if not dry_run:
+        db.execute("UPDATE notifier_state SET value=?, updated_at=? WHERE name='telegram_event_cursor'", (str(cursor), utc_now()))
+        db.commit()
+    db.close()
+    return {"sent": sent, "matched": matched, "failed": failed}
 
 
 def send_digest(db_path: Path, token: str, chat_id: str, settings: dict[str, Any], limit: int, offset: int, dry_run: bool, sender: Callable[..., None], printer: Callable[[str], None]) -> int:

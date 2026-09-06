@@ -3065,6 +3065,20 @@ def send_telegram_notifications(
         telegram_api_send, print_console_message,
     )
 
+
+def send_telegram_user_notifications(
+    db_path: Path, token: str, subscribers_url: str, sync_token: str,
+    site_url: str, dry_run: bool = False,
+) -> dict[str, int]:
+    payload = fetch_json(subscribers_url, 30, 2, {"Authorization": f"Bearer {sync_token}"})
+    subscribers = payload.get("subscribers") if isinstance(payload, dict) else None
+    if not isinstance(subscribers, list):
+        raise RuntimeError("Сервис не вернул список подписчиков Telegram")
+    return notifications.send_new_to_subscribers(
+        db_path, token, subscribers, site_url, dry_run,
+        telegram_api_send, print_console_message,
+    )
+
     # Legacy implementation kept temporarily below during the adapter refactor.
     settings = settings or {}
     db = connect_db(db_path)
@@ -3225,6 +3239,11 @@ def main(argv: list[str] | None = None) -> int:
     telegram_notify.add_argument(
         "--settings", type=Path, help="JSON с chat_id и фильтром уведомлений",
     )
+    telegram_users = sub.add_parser("telegram-notify-users", help="отправить новые вакансии по фильтрам пользователей")
+    telegram_users.add_argument("--subscribers-url", required=True)
+    telegram_users.add_argument("--sync-token", required=True)
+    telegram_users.add_argument("--site-url", required=True)
+    telegram_users.add_argument("--dry-run", action="store_true")
     telegram_digest = sub.add_parser(
         "telegram-digest", help="отправить подборку активных вакансий по фильтру",
     )
@@ -3256,15 +3275,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "telegram-init":
         initialize_telegram_cursor(args.db, args.force)
         return 0
-    if args.command in {"telegram-notify", "telegram-digest", "telegram-test"}:
+    if args.command in {"telegram-notify", "telegram-digest", "telegram-test", "telegram-notify-users"}:
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         dry_run = bool(getattr(args, "dry_run", False))
-        if not dry_run and (not token or not chat_id):
+        if not dry_run and not token:
             print(
-                "Для отправки задайте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID.",
+                "Для отправки задайте TELEGRAM_BOT_TOKEN.",
                 file=sys.stderr,
             )
+            return 2
+        if args.command == "telegram-notify-users":
+            result = send_telegram_user_notifications(args.db, token, args.subscribers_url, args.sync_token, args.site_url, dry_run)
+            print(f"Telegram пользователям: отправлено: {result['sent']}; совпадений: {result['matched']}; ошибок: {result['failed']}.")
+            return 0 if not result["failed"] else 1
+        if not dry_run and not chat_id:
+            print("Для этого режима задайте TELEGRAM_CHAT_ID.", file=sys.stderr)
             return 2
         if args.command == "telegram-test":
             telegram_api_send(

@@ -19,6 +19,11 @@ DEFAULT_SETTINGS = {
         "salaryDigest": True,
         "trendDigest": False,
         "companyActivity": False,
+        "telegramEnabled": False,
+        "telegramKeywords": [],
+        "telegramCompanies": [],
+        "telegramLocations": [],
+        "telegramTechnologies": [],
     },
     "account": {
         "profileVisible": True,
@@ -69,8 +74,12 @@ def normalize_resume_scoring_profile(resume: dict) -> tuple[dict, bool]:
 
 def get_profile(user: User) -> Profile:
     profile, created = Profile.objects.get_or_create(user=user, defaults={"settings": DEFAULT_SETTINGS})
-    if created or not profile.settings:
-        profile.settings = DEFAULT_SETTINGS
+    current = profile.settings if isinstance(profile.settings, dict) else {}
+    notifications = {**DEFAULT_SETTINGS["notifications"], **(current.get("notifications") or {})}
+    account = {**DEFAULT_SETTINGS["account"], **(current.get("account") or {})}
+    normalized = {**current, "notifications": notifications, "account": account}
+    if created or normalized != profile.settings:
+        profile.settings = normalized
         profile.save(update_fields=["settings", "updated_at"])
     return profile
 

@@ -19,6 +19,7 @@ from .views import (
     SavedJobsView,
     ScoringRankView,
     TelegramAuthView,
+    TelegramSubscribersView,
 )
 
 
@@ -32,6 +33,7 @@ urlpatterns = [
     path("auth/me/", MeView.as_view()),
     path("auth/email/", EmailAuthView.as_view()),
     path("auth/telegram/", TelegramAuthView.as_view()),
+    path("integrations/telegram/subscribers/", TelegramSubscribersView.as_view()),
     path("auth/logout/", LogoutView.as_view()),
     path("auth/password/", PasswordView.as_view()),
     path("auth/account/", DeleteAccountView.as_view()),

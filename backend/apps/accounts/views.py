@@ -6,6 +6,7 @@ import json as jsonlib
 import hashlib
 import mimetypes
 import re
+import secrets
 import sqlite3
 import subprocess
 import uuid
@@ -82,6 +83,40 @@ class HhVacanciesView(APIView):
             }
 
         return Response({"source": "hh", "vacancies": [mapped(item) for item in payload.get("items", [])], "meta": {"found": payload.get("found", 0), "page": payload.get("page", 0), "pages": payload.get("pages", 0), "updated_at": timezone.now().isoformat()}})
+
+
+class TelegramSubscribersView(APIView):
+    """Service endpoint consumed by the nightly vacancy notifier."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        expected = str(getattr(settings, "TELEGRAM_SYNC_TOKEN", ""))
+        supplied = request.headers.get("Authorization", "")
+        supplied = supplied[7:] if supplied.lower().startswith("bearer ") else ""
+        if not expected or not secrets.compare_digest(supplied, expected):
+            return error("Недействительный токен синхронизации", status.HTTP_403_FORBIDDEN)
+        subscribers = []
+        for user in User.objects.filter(is_active=True).exclude(telegram_id__isnull=True).select_related("profile"):
+            profile = get_profile(user)
+            notification = (profile.settings or {}).get("notifications") or {}
+            if not notification.get("telegramEnabled") or not notification.get("newJobs"):
+                continue
+            onboarding = profile.onboarding if isinstance(profile.onboarding, dict) else {}
+            subscribers.append({
+                "chatId": user.telegram_id,
+                "filter": {
+                    "keywords": notification.get("telegramKeywords") or [],
+                    "companies": notification.get("telegramCompanies") or [],
+                    "locations": notification.get("telegramLocations") or [],
+                    "technologies": notification.get("telegramTechnologies") or [],
+                    "roles": onboarding.get("roles") or [],
+                    "levels": onboarding.get("levels") or [],
+                    "formats": [value for value in (onboarding.get("formats") or []) if value != "any"],
+                },
+            })
+        return Response({"subscribers": subscribers, "count": len(subscribers), "generatedAt": timezone.now().isoformat()})
 
 
 class AdminStatsView(APIView):

@@ -53,6 +53,11 @@ def connect_db(path: Path) -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS notifier_state (
             name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS telegram_deliveries (
+            event_id INTEGER NOT NULL, chat_id TEXT NOT NULL, status TEXT NOT NULL,
+            error TEXT NOT NULL DEFAULT '', sent_at TEXT,
+            PRIMARY KEY (event_id, chat_id)
+        );
         CREATE TABLE IF NOT EXISTS vacancy_feature_index (
             source_key TEXT NOT NULL, external_id TEXT NOT NULL,
             taxonomy_version TEXT NOT NULL, indexed_at TEXT NOT NULL,

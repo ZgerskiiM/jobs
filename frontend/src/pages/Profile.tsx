@@ -60,12 +60,13 @@ function TagToggle({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-label={label}
       onClick={() => onChange(!on)}
       className="w-9 h-5 rounded-full relative cursor-pointer transition-colors shrink-0 block"
       style={{ background: on ? "rgba(51,255,119,0.3)" : "#1a1d28" }}
@@ -267,6 +268,12 @@ export default function Profile() {
   const [localSettings, setLocalSettings] = useState<UserSettings>(settings);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [telegramFilters, setTelegramFilters] = useState({
+    keywords: (settings.notifications.telegramKeywords ?? []).join(", "),
+    companies: (settings.notifications.telegramCompanies ?? []).join(", "),
+    locations: (settings.notifications.telegramLocations ?? []).join(", "),
+    technologies: (settings.notifications.telegramTechnologies ?? []).join(", "),
+  });
 
   // Account form state
   const [editingName, setEditingName] = useState(false);
@@ -295,9 +302,15 @@ export default function Profile() {
     setTimeout(() => setPrefSaved(false), 2500);
   };
 
-  const patchNotif = (key: keyof typeof localSettings.notifications, val: boolean) => {
+  const patchNotif = (key: "newJobs" | "salaryDigest" | "trendDigest" | "companyActivity" | "telegramEnabled", val: boolean) => {
     const next = { ...localSettings, notifications: { ...localSettings.notifications, [key]: val } };
     setLocalSettings(next);
+    setSettingsDirty(true);
+    setSettingsSaved(false);
+  };
+
+  const patchTelegramFilter = (key: keyof typeof telegramFilters, value: string) => {
+    setTelegramFilters((current) => ({ ...current, [key]: value }));
     setSettingsDirty(true);
     setSettingsSaved(false);
   };
@@ -310,7 +323,17 @@ export default function Profile() {
   };
 
   const handleSaveSettings = () => {
-    updateSettings(localSettings);
+    const split = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 30);
+    updateSettings({
+      ...localSettings,
+      notifications: {
+        ...localSettings.notifications,
+        telegramKeywords: split(telegramFilters.keywords),
+        telegramCompanies: split(telegramFilters.companies),
+        telegramLocations: split(telegramFilters.locations),
+        telegramTechnologies: split(telegramFilters.technologies),
+      },
+    });
     setSettingsDirty(false);
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
@@ -985,9 +1008,41 @@ export default function Profile() {
                     <div className="font-sans text-sm text-[#e8eaf0]">{item.label}</div>
                     <div className="font-mono text-[10px] text-[#5a6070] mt-0.5">{item.sub}</div>
                   </div>
-                  <Toggle on={localSettings.notifications[item.key]} onChange={(v) => patchNotif(item.key, v)} />
+                  <Toggle label={item.label} on={localSettings.notifications[item.key]} onChange={(v) => patchNotif(item.key, v)} />
                 </div>
               ))}
+            </div>
+
+            <div className="mt-5 border border-[rgba(0,212,255,0.2)] bg-[rgba(0,212,255,0.035)] rounded-sm p-5">
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <div>
+                  <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// telegram-канал</div>
+                  <div className="font-sans text-sm text-[#e8eaf0] mt-2">Новые вакансии после каждого обновления</div>
+                </div>
+                <Toggle label="Новые вакансии в Telegram" on={Boolean(localSettings.notifications.telegramEnabled)} onChange={(v) => patchNotif("telegramEnabled", v)} />
+              </div>
+              <p className="font-sans text-xs text-[#5a6070] mb-4">
+                {user.telegram ? `Сообщения будут приходить в Telegram ${user.telegram}.` : "Сначала войди через Telegram, чтобы бот мог отправлять сообщения."}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {([
+                  ["keywords", "Ключевые слова", "java, backend, kafka"],
+                  ["technologies", "Технологии", "Java, Python, Docker"],
+                  ["companies", "Компании", "Яндекс, Ozon"],
+                  ["locations", "Города", "Москва, удалённо"],
+                ] as const).map(([key, label, placeholder]) => (
+                  <label key={key} className="block">
+                    <span className="font-mono text-[10px] text-[#5a6070] uppercase tracking-wider">{label}</span>
+                    <input
+                      value={telegramFilters[key]}
+                      onChange={(event) => patchTelegramFilter(key, event.target.value)}
+                      placeholder={placeholder}
+                      className="mt-1 w-full bg-[#07080e] border border-[rgba(58,64,79,0.55)] rounded-sm px-3 py-2 font-mono text-xs text-[#e8eaf0] placeholder:text-[#3a404f] focus:border-[#00d4ff] focus:outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="font-mono text-[10px] text-[#3a404f] mt-3">через запятую · пустое поле не ограничивает выдачу · применяются только новые вакансии</div>
             </div>
           </div>
 
@@ -1008,7 +1063,7 @@ export default function Profile() {
                     <div className="font-sans text-sm text-[#e8eaf0]">{item.label}</div>
                     <div className="font-mono text-[10px] text-[#5a6070] mt-0.5">{item.sub}</div>
                   </div>
-                  <Toggle on={localSettings.account[item.key]} onChange={(v) => patchAccount(item.key, v)} />
+                  <Toggle label={item.label} on={localSettings.account[item.key]} onChange={(v) => patchAccount(item.key, v)} />
                 </div>
               ))}
             </div>

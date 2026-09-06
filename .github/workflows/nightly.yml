@@ -28,6 +28,9 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_SUBSCRIBERS_URL: ${{ vars.TELEGRAM_SUBSCRIBERS_URL }}
+      TELEGRAM_SYNC_TOKEN: ${{ secrets.TELEGRAM_SYNC_TOKEN }}
+      TELEGRAM_SITE_URL: ${{ vars.TELEGRAM_SITE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,14 +66,18 @@ jobs:
         run: python job_tracker.py --db work/state/jobs.sqlite3 sync --config config.direct.json
 
       - name: Build Telegram settings
-        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' && env.TELEGRAM_SUBSCRIBERS_URL == ''
         shell: pwsh
         run: |
           python -c "import json,os,pathlib; f=json.load(open('config/telegram-filter.json',encoding='utf-8')); pathlib.Path('work/telegram-settings.json').write_text(json.dumps({'chat_id':os.environ['TELEGRAM_CHAT_ID'],'filter':f},ensure_ascii=False),encoding='utf-8')"
 
       - name: Notify about matching new vacancies
-        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' && env.TELEGRAM_SUBSCRIBERS_URL == ''
         run: python job_tracker.py --db work/state/jobs.sqlite3 telegram-notify --settings work/telegram-settings.json
+
+      - name: Notify users about matching new vacancies
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_SUBSCRIBERS_URL != '' && env.TELEGRAM_SYNC_TOKEN != '' && env.TELEGRAM_SITE_URL != ''
+        run: python job_tracker.py --db work/state/jobs.sqlite3 telegram-notify-users --subscribers-url "$TELEGRAM_SUBSCRIBERS_URL" --sync-token "$TELEGRAM_SYNC_TOKEN" --site-url "$TELEGRAM_SITE_URL"
 
       - name: Build public site data
         run: |

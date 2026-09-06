@@ -12,7 +12,7 @@ from docx import Document
 
 from .models import Application, Profile, User
 from .resume_parser import detect_skills, extract_email, extract_full_name, extract_phone, extract_telegram
-from .services import infer_target_role, normalize_resume_scoring_profile
+from .services import get_profile, infer_target_role, normalize_resume_scoring_profile
 
 
 class AccountApiTests(TestCase):
@@ -143,6 +143,23 @@ class AccountApiTests(TestCase):
         self.assertEqual(response.data["user"]["telegram"], "@ada")
         self.assertTrue(User.objects.filter(telegram_id="42").exists())
         self.assertTrue(Profile.objects.filter(user__telegram_id="42").exists())
+
+    @override_settings(TELEGRAM_SYNC_TOKEN="sync-secret")
+    def test_telegram_subscribers_return_only_opted_in_users(self):
+        user = User.objects.create_user(email="telegram@example.com", password="correct-horse", telegram_id="777")
+        profile = get_profile(user)
+        profile.settings["notifications"].update({
+            "telegramEnabled": True,
+            "newJobs": True,
+            "telegramKeywords": ["backend"],
+        })
+        profile.onboarding = {"roles": ["backend"], "levels": [], "formats": []}
+        profile.save(update_fields=["settings", "onboarding", "updated_at"])
+        response = APIClient().get("/api/integrations/telegram/subscribers/", HTTP_AUTHORIZATION="Bearer sync-secret")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["subscribers"][0]["chatId"], "777")
+        self.assertEqual(response.data["subscribers"][0]["filter"]["keywords"], ["backend"])
 
     def test_email_registration_and_profile_patch_persist(self):
         client = APIClient()

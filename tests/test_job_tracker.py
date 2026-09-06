@@ -413,6 +413,21 @@ class TelegramNotificationTests(unittest.TestCase):
         self.assertIn("Java Developer", send.call_args.args[2])
         self.assertNotIn("Python Developer", send.call_args.args[2])
 
+    @patch("job_tracker.fetch_json", return_value={"subscribers": [{"chatId": "777", "filter": {"technologies": ["Java"]}}]})
+    @patch("job_tracker.telegram_api_send")
+    def test_user_notifications_use_jobs_dev_link_and_saved_filters(self, send, fetch):
+        db = job_tracker.connect_db(self.db_path)
+        job_tracker.initialize_telegram_cursor(self.db_path)
+        job_tracker.persist_source(db, [make_job("2", "Java Developer")], "acme-gh", 2, "t1")
+        db.commit(); db.close()
+
+        result = job_tracker.send_telegram_user_notifications(
+            self.db_path, "token", "https://api.example.test/subscribers", "sync", "https://jobs.dev",
+        )
+        self.assertEqual(result["sent"], 1)
+        self.assertIn("https://jobs.dev/jobs/", send.call_args.args[2])
+        fetch.assert_called_once()
+
 
 class AdapterTests(unittest.TestCase):
     def test_fetch_json_uses_shared_httpx_client(self):
