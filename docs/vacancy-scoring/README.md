@@ -4,6 +4,26 @@ The engine is implemented in `jobtracker.vacancy_scoring` and uses the existing
 `Job` entity plus the SQLite storage layer. It has no LLM or external AI
 dependency.
 
+## Scoring v2 contract
+
+The ranking response separates four different concerns:
+
+- `score` is a deterministic ranking value from 0 to 100, not a probability of hiring;
+- `confidence` measures how complete the evidence used by the score is;
+- `eligibility` is `ELIGIBLE`, `INELIGIBLE`, or `UNCERTAIN`;
+- `eligibilityReasons` explains failed gates or missing evidence.
+
+`hardMatchScore` is `null` when the candidate profile has no `MUST_HAVE`
+requirements. `vacancyRequirementCoverage` is `null` when the vacancy has no
+recognized stack or the resume has no recognized requirements. Missing
+experience and unknown seniority produce a `null` coefficient and add no score;
+they are never treated as perfect matches. Every result includes
+`scoringVersion`, independently from the taxonomy version.
+
+Python and JavaScript consume the shared fixtures in
+`tests/fixtures/scoring_v2_cases.json`. Any scoring-contract change must update
+both implementations and keep those fixtures passing.
+
 ## Index vacancies
 
 The taxonomy is loaded once from

@@ -8,7 +8,7 @@ export interface AccountSettings { profileVisible: boolean; showSalaryExpectatio
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
 export interface User { id?: number; name: string; email?: string | null; telegram?: string | null; telegramPhotoUrl?: string | null; }
 export interface ResumeSkill { name: string; category: string; confirmed: boolean; }
-export type ResumeTargetRole = "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER";
+export type ResumeTargetRole = "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER" | "UNKNOWN";
 export interface ResumeData {
   id: string; source?: "upload" | "hh"; sourceId?: string; sourceUrl?: string; fileName: string; uploadedAt: string; experience: string;
   experienceYears?: number | null; experienceMonths?: number | null; position: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string;

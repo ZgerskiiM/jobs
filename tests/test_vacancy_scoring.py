@@ -10,6 +10,7 @@ from jobtracker.vacancy_scoring import (
     CandidateRequirement,
     TaxonomyConfigLoader,
     VacancyFeatureExtractor,
+    VacancyFeatures,
     VacancyFeatureRepository,
     VacancyIndexingService,
     VacancyRankingService,
@@ -170,11 +171,30 @@ class VacancyScoringTests(unittest.TestCase):
         ranked = VacancyRankingService(self.scorer).rank(profile(("JAVA", "MUST_HAVE"), ("SPRING_BOOT", "MUST_HAVE")), [first, second])
         self.assertEqual([item.vacancy_id for item in ranked], ["b", "a"])
 
+    def test_ranking_accepts_profile_without_must_have_requirements(self):
+        features = self.extractor.analyze(make_job("Java Backend", "Java and Spring Boot."))
+        ranked = VacancyRankingService(self.scorer).rank(profile(("SPRING_BOOT", "STRONG_PREFERENCE")), [features])
+        self.assertIsNone(ranked[0].hard_match_score)
+
     def test_taxonomy_validation_rejects_unknown_related_concept(self):
         raw = json.loads(TAXONOMY.read_text(encoding="utf-8"))
         raw["taxonomy"][0]["related"] = [{"concept": "NOPE", "match": 0.5}]
         with self.assertRaises(ValueError):
             self.config.from_dict(raw)
+
+    def test_shared_scoring_v2_contract(self):
+        fixtures = json.loads((ROOT / "tests" / "fixtures" / "scoring_v2_cases.json").read_text(encoding="utf-8"))
+        for fixture in fixtures:
+            with self.subTest(fixture["name"]):
+                result = self.scorer.score(fixture["profile"], VacancyFeatures.from_dict(fixture["features"])).to_dict()
+                expected = fixture["expected"]
+                self.assertEqual(result["score"], expected["score"])
+                self.assertEqual(result["confidence"], expected["confidence"])
+                self.assertEqual(result["eligibility"], expected["eligibility"])
+                self.assertEqual(result["hardMatchScore"], expected["hardMatchScore"])
+                self.assertEqual(result["vacancyRequirementCoverage"], expected["vacancyRequirementCoverage"])
+                self.assertEqual(result["experienceMatch"]["coefficient"], expected["experienceCoefficient"])
+                self.assertEqual(result["seniorityMatch"]["coefficient"], expected["seniorityCoefficient"])
 
 
 if __name__ == "__main__":

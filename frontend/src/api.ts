@@ -1,5 +1,5 @@
 import type { Application, CompactVacancyFeatures } from "./data";
-import type { OnboardingData, ResumeSkill, User, UserSettings } from "./context/AuthContext";
+import type { OnboardingData, ResumeSkill, ResumeTargetRole, User, UserSettings } from "./context/AuthContext";
 
 export interface ResumeData {
   id: string;
@@ -16,7 +16,7 @@ export interface ResumeData {
   contactEmail?: string;
   contactPhone?: string;
   contactTelegram?: string;
-  targetRole?: "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER";
+  targetRole?: ResumeTargetRole;
   hasFile?: boolean;
   skills: ResumeSkill[];
   isActive?: boolean;
@@ -37,16 +37,16 @@ export interface AccountPayload {
 }
 
 export interface VacancyScore {
-  vacancyId: string; score: number; level: string; label: string; summary: string; hardMatchScore: number; vacancyRequirementCoverage: number;
+  vacancyId: string; scoringVersion: string; score: number; confidence: number; eligibility: "ELIGIBLE" | "INELIGIBLE" | "UNCERTAIN"; eligibilityReasons: string[]; level: string; label: string; summary: string; hardMatchScore: number | null; vacancyRequirementCoverage: number | null;
   matched: Array<{ required: string; found: string; coefficient: number }>;
   partialMatches: Array<{ required: string; found: string; coefficient: number }>;
   missingImportant: string[]; negativeSignals: Array<{ id: string; penalty: number; primaryRoleConflict: boolean; matchedText: string }>;
   gatesApplied: Array<{ id: string; maxScore: number; reason: string }>;
-  experienceMatch: { candidateYears: number | null; vacancyMinYears: number | null; coefficient: number };
-  seniorityMatch: { candidate: string; vacancy: string; coefficient: number };
+  experienceMatch: { candidateYears: number | null; vacancyMinYears: number | null; coefficient: number | null };
+  seniorityMatch: { candidate: string; vacancy: string; coefficient: number | null };
 }
 
-export type VacancyScoreSummary = Pick<VacancyScore, "vacancyId" | "score" | "level" | "label">;
+export type VacancyScoreSummary = Pick<VacancyScore, "vacancyId" | "scoringVersion" | "score" | "confidence" | "eligibility" | "level" | "label" | "summary">;
 export type VacancyScoreInput = { id: number | string; source_key?: string; title?: string; description?: string; posted_at?: string; features?: CompactVacancyFeatures };
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
@@ -96,7 +96,7 @@ export const accountApi = {
     body.append("resume", file);
     return request<{ resume: ResumeData; resumes: ResumeData[] }>("/api/profile/resume/", { method: "POST", body });
   },
-  patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string; targetRole?: "JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER" }) =>
+  patchResume: (body: { skills?: ResumeSkill[]; activeResumeId?: string; resumeId?: string; fullName?: string; contactEmail?: string; contactPhone?: string; contactTelegram?: string; targetRole?: ResumeTargetRole }) =>
     request<{ resume: ResumeData | null; resumes: ResumeData[] }>("/api/profile/resume/", { method: "PATCH", body: JSON.stringify(body) }),
   downloadExtension: async () => {
     const response = await fetch(`${API_ORIGIN}/api/extension/download/`, { credentials: "include" });
@@ -113,7 +113,7 @@ export const accountApi = {
   patchApplication: (id: number, patch: Partial<Application>) =>
     request<Application>(`/api/applications/${id}/`, { method: "PATCH", body: JSON.stringify(patch) }),
   scoreVacancies: (items: VacancyScoreInput[]) =>
-    request<{ taxonomyVersion: string; profile: unknown; scores: VacancyScore[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items }) }),
+    request<{ scoringVersion: string; taxonomyVersion: string; profile: unknown; scores: VacancyScore[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items }) }),
   scoreVacancyIndex: (items: VacancyScoreInput[]) =>
-    request<{ taxonomyVersion: string; profile: unknown; scores: VacancyScoreSummary[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items, compact: true }) }),
+    request<{ scoringVersion: string; taxonomyVersion: string; profile: unknown; scores: VacancyScoreSummary[] }>("/api/scoring/rank/", { method: "POST", body: JSON.stringify({ items, compact: true }) }),
 };

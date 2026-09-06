@@ -1,3 +1,5 @@
+const SCORING_ENGINE_VERSION = '2.0.0'
+
 function scoringNormalizeText(value) {
   return String(value || '')
     .replace(/[ёЁ]/g, (character) => character === 'ё' ? 'е' : 'Е')
@@ -286,7 +288,7 @@ function scoringGateResults(profile, features) {
 }
 
 function scoringExperience(candidate, minimum) {
-  if (candidate === null || minimum === null || candidate === undefined || minimum === undefined) return { candidateYears: candidate ?? null, vacancyMinYears: minimum ?? null, coefficient: 1 }
+  if (candidate === null || minimum === null || candidate === undefined || minimum === undefined) return { candidateYears: candidate ?? null, vacancyMinYears: minimum ?? null, coefficient: null }
   const delta = Number(candidate) - Number(minimum)
   const rules = [...(SCORING_CONFIG.experienceParsing?.matchRules || [])].sort((left, right) => Number(right.candidateDeltaMin) - Number(left.candidateDeltaMin))
   return { candidateYears: Number(candidate), vacancyMinYears: Number(minimum), coefficient: Number(rules.find((rule) => delta >= Number(rule.candidateDeltaMin))?.coefficient || 0) }
@@ -294,6 +296,7 @@ function scoringExperience(candidate, minimum) {
 
 function scoringSeniority(candidate, vacancy) {
   const levels = SCORING_CONFIG.seniority?.levels || {}
+  if (!(candidate in levels) || !(vacancy in levels)) return { candidate, vacancy, coefficient: null }
   const distance = Math.abs(Number(levels[candidate] || 0) - Number(levels[vacancy] || 0))
   const values = SCORING_CONFIG.seniority?.distanceMatch || {}
   return { candidate, vacancy, coefficient: Number(values[String(distance)] ?? values[String(Math.max(...Object.keys(values).map(Number)))] ?? 0) }
@@ -320,7 +323,35 @@ function scoringVacancyRequirementCoverage(profile, features) {
     }
     covered += weight * support
   }
-  return total ? covered / total : 1
+  return total && candidateConcepts.size ? covered / total : null
+}
+
+function scoringConfidence(profile, features, coverage, experience, seniority) {
+  const weights = SCORING_CONFIG.scoring?.componentWeights || {}
+  let confidence = 0
+  const concepts = Object.values(features.concepts || {})
+  if ((profile.requirements || []).length && concepts.length) {
+    const conceptConfidence = concepts.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / concepts.length
+    confidence += Number(weights.candidateSkillFit || 0) * conceptConfidence
+  }
+  if (coverage !== null) confidence += Number(weights.vacancyRequirementCoverage || 0)
+  if (experience.coefficient !== null) confidence += Number(weights.experience || 0)
+  if (seniority.coefficient !== null) confidence += Number(weights.seniority || 0) * Number(features.seniority?.confidence || 0)
+  return Math.max(0, Math.min(1, confidence))
+}
+
+function scoringEligibility(profile, features, gates) {
+  const gateIds = new Set(gates.map((gate) => gate.id))
+  const reasons = gates.map((gate) => gate.reason)
+  if (gateIds.has('WRONG_PRIMARY_ROLE')) return { status: 'INELIGIBLE', reasons }
+  if (!(profile.requirements || []).length) return { status: 'UNCERTAIN', reasons: ['В резюме недостаточно подтвержденных навыков для оценки.'] }
+  if (features.role?.primary === 'UNKNOWN' || !Object.keys(features.concepts || {}).length) {
+    return { status: 'UNCERTAIN', reasons: reasons.length ? reasons : ['В описании вакансии недостаточно данных для уверенной оценки.'] }
+  }
+  if (['JAVA_PRIMARY_MISSING', 'DEVOPS_ROLE_MISSING', 'ONE_C_PRIMARY_MISSING'].some((id) => gateIds.has(id))) {
+    return { status: 'INELIGIBLE', reasons }
+  }
+  return { status: 'ELIGIBLE', reasons: [] }
 }
 
 function scoringSummary(level, gates) {
@@ -377,22 +408,28 @@ function scoringScore(profile, features) {
   const vacancyRequirementCoverage = scoringVacancyRequirementCoverage(profile, features)
   const componentWeights = SCORING_CONFIG.scoring?.componentWeights || {}
   const combined = Number(componentWeights.candidateSkillFit || 0) * raw
-    + Number(componentWeights.vacancyRequirementCoverage || 0) * vacancyRequirementCoverage
-    + Number(componentWeights.experience || 0) * experienceMatch.coefficient
-    + Number(componentWeights.seniority || 0) * seniorityMatch.coefficient
+    + Number(componentWeights.vacancyRequirementCoverage || 0) * (vacancyRequirementCoverage ?? 0)
+    + Number(componentWeights.experience || 0) * (experienceMatch.coefficient ?? 0)
+    + Number(componentWeights.seniority || 0) * (seniorityMatch.coefficient ?? 0)
   const negativeSignals = features.negativeSignals || []
   const gatesApplied = scoringGateResults(profile, features)
   let score = combined * 100 - negativeSignals.reduce((sum, signal) => sum + Number(signal.penalty || 0), 0)
   if (gatesApplied.length) score = Math.min(score, ...gatesApplied.map((gate) => gate.maxScore))
   score = Math.max(0, Math.min(100, score))
+  const confidence = scoringConfidence(profile, features, vacancyRequirementCoverage, experienceMatch, seniorityMatch)
+  const eligibility = scoringEligibility(profile, features, gatesApplied)
   const band = (SCORING_CONFIG.outputBands || []).find((item) => score >= Number(item.min) && score <= Number(item.max)) || SCORING_CONFIG.outputBands?.at(-1) || { code: 'WEAK_MATCH', labelRu: 'Слабое совпадение' }
   return {
     vacancyId: features.vacancyId,
+    scoringVersion: SCORING_ENGINE_VERSION,
     score: Number(score.toFixed(2)),
+    confidence: Number((confidence * 100).toFixed(2)),
+    eligibility: eligibility.status,
+    eligibilityReasons: eligibility.reasons,
     level: band.code,
     label: band.labelRu,
-    hardMatchScore: hardTotal ? Number((hardMatched / hardTotal * 100).toFixed(2)) : 100,
-    vacancyRequirementCoverage: Number((vacancyRequirementCoverage * 100).toFixed(2)),
+    hardMatchScore: hardTotal ? Number((hardMatched / hardTotal * 100).toFixed(2)) : null,
+    vacancyRequirementCoverage: vacancyRequirementCoverage === null ? null : Number((vacancyRequirementCoverage * 100).toFixed(2)),
     categoryScores: Object.fromEntries(Object.entries(categoryScores).map(([key, value]) => [key, Number((value * 100).toFixed(2))])),
     matched,
     partialMatches,
@@ -408,9 +445,21 @@ function scoringScore(profile, features) {
 function scoringCandidateProfile(account) {
   const resume = account.resume || {}
   const onboarding = account.onboarding || {}
-  const profile = String(resume.targetRole || SCORING_CONFIG.meta?.profile || 'JAVA_BACKEND').toUpperCase()
   const position = scoringNormalizeText(resume.position)
   const skills = Array.isArray(resume.skills) ? resume.skills : []
+  const skillNames = skills.filter((skill) => skill?.confirmed !== false).map((skill) => scoringNormalizeText(skill?.name))
+  const signalText = `${position} ${skillNames.join(' ')}`
+  const explicitProfile = String(resume.targetRole || '').toUpperCase()
+  let profile = ['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER', 'UNKNOWN'].includes(explicitProfile) ? explicitProfile : ''
+  if (!profile) {
+    const scores = {
+      DEVOPS: ['devops', 'sre', 'kubernetes', 'docker', 'ansible', 'terraform', 'helm', 'linux', 'ci/cd'].filter((value) => signalText.includes(value)).length,
+      ONE_C_DEVELOPER: ['1с', '1c', 'конфигуратор', 'скд', 'бсп'].filter((value) => signalText.includes(value)).length,
+      JAVA_BACKEND: ['java', 'spring', 'hibernate', 'jvm'].filter((value) => signalText.includes(value)).length
+    }
+    const ranked = Object.entries(scores).sort((left, right) => right[1] - left[1])
+    profile = ranked[0][1] >= 2 && ranked[0][1] > ranked[1][1] ? ranked[0][0] : 'UNKNOWN'
+  }
   const requirements = []
   for (const skill of skills) {
     if (skill?.confirmed === false) continue
@@ -429,7 +478,7 @@ function scoringCandidateProfile(account) {
     ? 'DEVOPS'
     : profile === 'ONE_C_DEVELOPER'
       ? 'ONE_C_DEVELOPER'
-    : /backend|back-end|java|сервер|бэкенд|разработчик/iu.test(position) || onboarding.roles?.some((value) => /backend|back-end|java/iu.test(value)) ? 'BACKEND' : 'UNKNOWN'
+    : profile === 'JAVA_BACKEND' && (/backend|back-end|java|сервер|бэкенд|разработчик/iu.test(position) || onboarding.roles?.some((value) => /backend|back-end|java/iu.test(value))) ? 'BACKEND' : 'UNKNOWN'
   const levelAliases = SCORING_CONFIG.seniority?.aliases || {}
   const targetSeniority = Object.entries(levelAliases).find(([, aliases]) => aliases.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(position)))?.[0]
     || (Number(resume.experienceYears) >= 5 ? 'SENIOR' : Number(resume.experienceYears) >= 3 ? 'MIDDLE' : 'UNKNOWN')

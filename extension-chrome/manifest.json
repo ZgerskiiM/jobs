@@ -1,15 +1,14 @@
 {
-  "manifest_version": 2,
-  "name": "jobs.dev — быстрый отклик",
+  "manifest_version": 3,
+  "name": "jobs.dev — быстрый отклик для Chrome",
   "version": "0.4.5",
   "description": "Заполняет формы отклика и отмечает отправленные отклики в jobs.dev.",
   "permissions": [
     "activeTab",
     "tabs",
-    "<all_urls>",
-    "https://jobs-dev.zgerskiim.chatgpt.site/*"
+    "scripting"
   ],
-  "browser_action": {
+  "action": {
     "default_title": "Заполнить отклик из jobs.dev",
     "default_popup": "popup.html"
   },
@@ -21,12 +20,7 @@
     }
   ],
   "background": {
-    "scripts": ["background.js"]
+    "service_worker": "background.js"
   },
-  "applications": {
-    "gecko": {
-      "id": "apply@jobs.dev",
-      "strict_min_version": "109.0"
-    }
-  }
+  "host_permissions": ["http://*/*", "https://*/*"]
 }

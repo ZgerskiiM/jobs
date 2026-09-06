@@ -169,9 +169,9 @@ async function refreshResumeAnalysis(env, profile) {
   let activeId = stored?.activeId || records.find((record) => record.isActive)?.id || records[0]?.id || null
   let changed = !Array.isArray(stored?.resumes) && records.length > 0
   records = records.map((record) => {
-    if (record.targetRole === 'DEVOPS' || record.targetRole === 'JAVA_BACKEND') return record
+    if (['DEVOPS', 'JAVA_BACKEND', 'ONE_C_DEVELOPER', 'UNKNOWN'].includes(record.targetRole)) return record
     changed = true
-    return { ...record, targetRole: 'JAVA_BACKEND' }
+    return { ...record, targetRole: inferResumeTargetRole(record) }
   })
 
   if (env.MEDIA) {
@@ -248,6 +248,22 @@ function scoringVacancyId(vacancy) {
   return `${String(vacancy.source_key || 'catalog')}:${String(vacancy.id || vacancy.external_id || '')}`
 }
 
+function inferResumeTargetRole(resume) {
+  const position = String(resume?.position || '').toLocaleLowerCase('ru-RU')
+  const skills = Array.isArray(resume?.skills) ? resume.skills.filter((skill) => skill?.confirmed !== false).map((skill) => String(skill?.name || '').toLocaleLowerCase('ru-RU')) : []
+  const text = `${position} ${skills.join(' ')}`
+  if (/\b(?:devops|sre)\b|инженер\s+(?:по\s+)?(?:инфраструктуре|эксплуатации)/iu.test(position)) return 'DEVOPS'
+  if (/(?:1с|1c)[ -]?(?:программист|разработчик)|(?:программист|разработчик)[ -]?(?:1с|1c)/iu.test(position)) return 'ONE_C_DEVELOPER'
+  if (/java.{0,20}(?:developer|engineer|разработчик)|(?:backend|back-end|бэкенд).{0,20}java/iu.test(position)) return 'JAVA_BACKEND'
+  const scores = {
+    DEVOPS: ['devops', 'sre', 'kubernetes', 'docker', 'ansible', 'terraform', 'helm', 'linux', 'ci/cd'].filter((value) => text.includes(value)).length,
+    ONE_C_DEVELOPER: ['1с', '1c', 'конфигуратор', 'скд', 'бсп'].filter((value) => text.includes(value)).length,
+    JAVA_BACKEND: ['java', 'spring', 'hibernate', 'jvm'].filter((value) => text.includes(value)).length,
+  }
+  const ranked = Object.entries(scores).sort((left, right) => right[1] - left[1])
+  return ranked[0][1] >= 2 && ranked[0][1] > ranked[1][1] ? ranked[0][0] : 'UNKNOWN'
+}
+
 function scoringProfileKey(resume) {
   return ['DEVOPS', 'ONE_C_DEVELOPER'].includes(resume?.targetRole) ? resume.targetRole : 'JAVA_BACKEND'
 }
@@ -292,10 +308,10 @@ async function scoreVacancies(request, env, user) {
     if (!preparedFeatures && !vacancy.title.trim()) continue
     const features = preparedFeatures || await scoringIndexedFeatures(env, vacancy, engine)
     const score = engine.score(candidate, features)
-    scores.push(data.compact ? { vacancyId: score.vacancyId, score: score.score, level: score.level, label: score.label } : score)
+    scores.push(data.compact ? { vacancyId: score.vacancyId, scoringVersion: score.scoringVersion, score: score.score, confidence: score.confidence, eligibility: score.eligibility, level: score.level, label: score.label } : score)
   }
   scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId))
-  return json({ taxonomyVersion: String(engine.config.meta?.version || ''), profile: candidate, scores })
+  return json({ scoringVersion: scores[0]?.scoringVersion || '2.0.0', taxonomyVersion: String(engine.config.meta?.version || ''), profile: candidate, scores })
 }
 
 async function requireUser(request, env) {
@@ -651,7 +667,7 @@ async function resume(request, env, user) {
       const updated = { ...record }
       if (Array.isArray(data.skills)) updated.skills = data.skills
       for (const field of editable) if (data[field] !== undefined) updated[field] = String(data[field]).trim()
-      if (!['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER'].includes(updated.targetRole)) updated.targetRole = 'JAVA_BACKEND'
+      if (!['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER', 'UNKNOWN'].includes(updated.targetRole)) updated.targetRole = 'UNKNOWN'
       return updated
     })
     const saved = await saveResumeState(env, user.id, updatedRecords, nextActive.id)
@@ -668,7 +684,7 @@ async function resume(request, env, user) {
   try { analysis = await analyzeResume(fileName, bytes) } catch (error) { return json({ message: error instanceof Error ? error.message : 'Не удалось проанализировать резюме' }, 400) }
   const key = `resumes/${user.id}/${crypto.randomUUID()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
   if (env.MEDIA) await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: file.type || 'application/octet-stream' } })
-  const resumeData = { id: crypto.randomUUID(), source: 'upload', fileName, uploadedAt: now().slice(0, 10), fileKey: key, targetRole: 'JAVA_BACKEND', ...analysis }
+  const resumeData = { id: crypto.randomUUID(), source: 'upload', fileName, uploadedAt: now().slice(0, 10), fileKey: key, ...analysis, targetRole: inferResumeTargetRole(analysis) }
   const records = [...currentState.resumes.map((record) => ({ ...record, isActive: false })), resumeData]
   const saved = await saveResumeState(env, user.id, records, resumeData.id)
   return json({ resume: saved.active, resumes: saved.resumes })
@@ -703,7 +719,7 @@ function mapHhResume(resume) {
     position: resume.title || '',
     skills,
     fileKey: null,
-    targetRole: 'JAVA_BACKEND',
+    targetRole: inferResumeTargetRole({ position: resume.title || '', skills }),
   }
 }
 

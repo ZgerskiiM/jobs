@@ -9,7 +9,7 @@ import zipfile
 
 
 SUPPORTED_RESUME_SUFFIXES = {".pdf", ".docx"}
-RESUME_ANALYSIS_VERSION = 2
+RESUME_ANALYSIS_VERSION = 3
 
 # Keep the output stable even when candidates use an alias or a different case.
 # The list is intentionally explicit: extracting arbitrary capitalised words
@@ -111,6 +111,21 @@ _POSITION_TERMS = re.compile(
     re.IGNORECASE,
 )
 _EXPERIENCE_RE = re.compile(r"(?<!\d)(\d{1,2}(?:[.,]\d+)?)\s*(лет|года|год|years?|yrs?)\b", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"(?<![\w.+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}(?![\w.-])", re.IGNORECASE)
+_PHONE_RE = re.compile(r"(?<!\w)(?:\+?\s*[78])(?:[^\d\n]{0,4}\d){9,10}(?!\w)")
+_TELEGRAM_URL_RE = re.compile(r"(?:https?://)?(?:www\.)?t\.me/([A-Z0-9_]{5,32})", re.IGNORECASE)
+_TELEGRAM_LABEL_RE = re.compile(r"(?:telegram|телеграм|т\.г\.?|тг)\s*[:\-]?\s*@?([A-Z0-9_]{5,32})", re.IGNORECASE)
+_NAME_TOKEN_RE = re.compile(r"[A-ZА-ЯЁ][A-ZА-ЯЁa-zа-яё'’\-]{1,}")
+_NAME_LABEL_RE = re.compile(
+    r"(?:фио|full\s*name|имя\s+и\s+фамилия|name)\s*[:\-–—]\s*"
+    r"([A-ZА-ЯЁ][A-ZА-ЯЁa-zа-яё'’\-]{1,}(?:\s+[A-ZА-ЯЁ][A-ZА-ЯЁa-zа-яё'’\-]{1,}){1,3})",
+    re.IGNORECASE,
+)
+_NAME_STOP_WORDS = {
+    "резюме", "resume", "cv", "опыт", "работа", "образование", "навыки", "контакты",
+    "телефон", "email", "почта", "telegram", "город", "москва", "санкт-петербург",
+    "от", "до", "года", "лет", "год", "engineer", "developer", "разработчик", "инженер",
+}
 
 
 def extract_resume_text(data: bytes, suffix: str) -> str:
@@ -180,6 +195,75 @@ def detect_skills(text: str) -> list[dict[str, str | bool]]:
     ]
 
 
+def extract_email(text: str) -> str:
+    """Return the first email address found in the resume text."""
+    match = _EMAIL_RE.search(text or "")
+    return match.group(0).strip(".,;:)") if match else ""
+
+
+def extract_phone(text: str) -> str:
+    """Return a normalized Russian phone number when one is present."""
+    for match in _PHONE_RE.finditer(text or ""):
+        digits = re.sub(r"\D", "", match.group(0))
+        if len(digits) != 11 or digits[0] not in "78":
+            continue
+        if digits[0] == "8":
+            digits = "7" + digits[1:]
+        return f"+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
+    return ""
+
+
+def extract_telegram(text: str) -> str:
+    """Return a Telegram username from a labelled field or t.me link."""
+    source = text or ""
+    match = _TELEGRAM_URL_RE.search(source) or _TELEGRAM_LABEL_RE.search(source)
+    if not match:
+        return ""
+    username = match.group(1).strip("._")
+    return f"@{username}" if username else ""
+
+
+def _valid_name_candidate(value: str) -> str:
+    candidate = re.sub(r"\s+", " ", value).strip(" .,:;|/\\-–—")
+    tokens = candidate.split()
+    if not 2 <= len(tokens) <= 4 or any(token.casefold() in _NAME_STOP_WORDS for token in tokens):
+        return ""
+    if not all(_NAME_TOKEN_RE.fullmatch(token) for token in tokens):
+        return ""
+    # A name should contain at least two alphabetic tokens and should not look
+    # like a technical heading (which is handled by extract_position()).
+    if not any(re.search(r"[А-ЯЁа-яё]", token) for token in tokens) and len(tokens) < 2:
+        return ""
+    return candidate
+
+
+def extract_full_name(text: str, filename: str = "") -> str:
+    """Extract a candidate name from labelled/top-of-document text or filename."""
+    raw_source = text or ""
+    for match in _NAME_LABEL_RE.finditer(_normalize_text(raw_source)):
+        candidate = _valid_name_candidate(match.group(1))
+        if candidate:
+            return candidate
+
+    lines = [re.sub(r"\s+", " ", line).strip(" -•\t") for line in raw_source.splitlines()]
+    for line in lines[:20]:
+        if not line or _EMAIL_RE.search(line) or _PHONE_RE.search(line) or "@" in line or "http" in line.casefold():
+            continue
+        candidate = _valid_name_candidate(line)
+        if candidate and not any(_POSITION_TERMS.search(token) for token in candidate.split()):
+            return candidate
+
+    # PDF exports often lose Cyrillic glyphs, while the uploaded filename still
+    # contains the person's name (for example, Resume_DevOps_Иван_Петров.pdf).
+    stem = re.sub(r"[_-]+", " ", Path(filename).stem)
+    tokens = stem.split()
+    for index in range(len(tokens) - 1):
+        candidate = _valid_name_candidate(" ".join(tokens[index:index + 2]))
+        if candidate and not any(token.casefold() in _NAME_STOP_WORDS for token in candidate.split()):
+            return candidate
+    return ""
+
+
 def extract_experience(text: str) -> str:
     experience_lines = [
         line
@@ -219,5 +303,9 @@ def analyze_resume(data: bytes, filename: str) -> dict[str, object]:
         "analysisVersion": RESUME_ANALYSIS_VERSION,
         "experience": extract_experience(text),
         "position": extract_position(text),
+        "fullName": extract_full_name(text, filename),
+        "contactEmail": extract_email(text),
+        "contactPhone": extract_phone(text),
+        "contactTelegram": extract_telegram(text),
         "skills": detect_skills(text),
     }

@@ -25,6 +25,7 @@ export interface Job {
   featured: boolean;
   category: string;
   level: string;
+  url?: string;
   matchedSkills?: string[];
   description: string;
   parsedSkills: string[];
@@ -103,6 +104,10 @@ export interface Application {
   tags: string[];
   timeline: TimelineEvent[];
   notificationsOn: boolean;
+  submittedUrl?: string;
+  sourceKey?: string;
+  externalId?: string;
+  detectedBy?: string;
 }
 
 // Seed applications for the tracker (демо-данные)

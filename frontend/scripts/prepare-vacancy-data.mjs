@@ -2,7 +2,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const sourcePath = path.resolve(process.cwd(), '../data/vacancies.js');
-const outputPath = path.resolve(process.cwd(), 'public/api/vacancies.json');
+// Keep generated static data outside /api: the Vite dev proxy reserves that
+// prefix for the Django backend.
+const outputPath = path.resolve(process.cwd(), 'public/vacancies.json');
 const progressPath = path.resolve(process.cwd(), '../COMPANIES_PROGRESS.md');
 const configPath = path.resolve(process.cwd(), '../config.direct.json');
 const topCompaniesPath = path.resolve(process.cwd(), '../companies.top50.json');

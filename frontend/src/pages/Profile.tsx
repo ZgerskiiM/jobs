@@ -551,7 +551,7 @@ export default function Profile() {
                   >
                     <span className="min-w-0">
                       <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
-                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : item.targetRole === "ONE_C_DEVELOPER" ? "1С-разработчик" : "Java Backend"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : item.targetRole === "ONE_C_DEVELOPER" ? "1С-разработчик" : item.targetRole === "JAVA_BACKEND" ? "Java Backend" : "специализация не определена"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
                     </span>
                     <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
                   </button>
@@ -677,7 +677,7 @@ export default function Profile() {
               <div className="border border-[rgba(0,212,255,0.14)] rounded-sm overflow-hidden">
                 <div className="px-5 py-3 bg-[rgba(0,212,255,0.04)] border-b border-[rgba(0,212,255,0.1)]">
                   <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// данные для отклика</div>
-                  <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Проверь и отредактируй контакты — они будут подставляться в отклики</div>
+                  <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Заполнено из резюме автоматически — при необходимости можно поправить</div>
                 </div>
                 <div className="p-5 bg-[#0e1018] grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {([

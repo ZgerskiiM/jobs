@@ -74,8 +74,8 @@ export default function JobDetail() {
       setVacancyScore(null);
       return () => { cancelled = true; };
     }
-    const targetRole = resume.targetRole ?? "JAVA_BACKEND";
-    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: job.scoringFeatures?.[targetRole] }])
+    const targetRole = resume.targetRole && resume.targetRole !== "UNKNOWN" ? resume.targetRole : null;
+    accountApi.scoreVacancies([{ id: job.id, title: job.title, description: job.description, posted_at: job.posted, features: targetRole ? job.scoringFeatures?.[targetRole] : undefined }])
       .then(({ scores }) => { if (!cancelled) setVacancyScore(scores[0] ?? null); })
       .catch(() => { if (!cancelled) setVacancyScore(null); });
     return () => { cancelled = true; };

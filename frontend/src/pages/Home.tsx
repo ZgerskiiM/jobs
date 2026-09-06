@@ -106,8 +106,8 @@ export default function Home() {
       return () => { cancelled = true; };
     }
     setScoringLoading(true);
-    const targetRole = resume.targetRole ?? "JAVA_BACKEND";
-    accountApi.scoreVacancyIndex(jobs.map((job) => job.scoringFeatures?.[targetRole]
+    const targetRole = resume.targetRole && resume.targetRole !== "UNKNOWN" ? resume.targetRole : null;
+    accountApi.scoreVacancyIndex(jobs.map((job) => targetRole && job.scoringFeatures?.[targetRole]
       ? { id: job.id, features: job.scoringFeatures[targetRole] }
       : { id: job.id, title: job.title, description: job.description, posted_at: job.posted }))
       .then(({ scores }) => {

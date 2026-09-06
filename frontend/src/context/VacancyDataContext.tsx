@@ -196,6 +196,7 @@ function toJobs(vacancies: SourceVacancy[]): Job[] {
       id: hash(key),
       title: vacancy.title,
       company: vacancy.company,
+      url: vacancy.url,
       companyId,
       logo: initials(vacancy.company),
       logoUrl: remoteLogoUrl(vacancy.url, vacancy.company),
@@ -285,7 +286,7 @@ export function VacancyDataProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`${import.meta.env.BASE_URL}api/vacancies.json`, { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Не удалось загрузить каталог вакансий"))),
+      fetch(`${import.meta.env.BASE_URL}vacancies.json`, { signal: controller.signal }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Не удалось загрузить каталог вакансий"))),
       fetch(`/api/vacancies/hh/?text=разработчик&area=1&per_page=100`, { signal: controller.signal }).then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         return response.ok ? payload : { vacancies: [], error: payload.message || `HH.ru вернул ошибку ${response.status}` };

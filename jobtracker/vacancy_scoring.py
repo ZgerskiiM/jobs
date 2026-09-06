@@ -21,6 +21,7 @@ from .models import Job, utc_now
 
 
 DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parents[1] / "config" / "java_backend_vacancy_relevance_ru_v1.json"
+SCORING_ENGINE_VERSION = "2.0.0"
 _BOUNDARY = r"A-Za-zА-Яа-яЁё0-9_+#"
 
 
@@ -349,7 +350,7 @@ class Importance(str, Enum):
 class CandidateProfile:
     target_role: str
     target_seniority: str
-    experience_years: int | None
+    experience_years: float | None
     requirements: tuple[CandidateRequirement, ...]
     excluded_concepts: frozenset[str] = frozenset()
 
@@ -358,7 +359,11 @@ class CandidateProfile:
         return cls(
             target_role=str(payload.get("targetRole", payload.get("target_role", ""))).upper(),
             target_seniority=str(payload.get("targetSeniority", payload.get("target_seniority", ""))).upper(),
-            experience_years=payload.get("experienceYears", payload.get("experience_years")),
+            experience_years=(
+                float(payload.get("experienceYears", payload.get("experience_years")))
+                if payload.get("experienceYears", payload.get("experience_years")) is not None
+                else None
+            ),
             requirements=tuple(
                 CandidateRequirement(str(item.get("concept", "")).upper(), str(item.get("importance", "BONUS")).upper())
                 for item in payload.get("requirements", [])
@@ -392,25 +397,29 @@ class GateResult:
 
 @dataclass(frozen=True)
 class ExperienceMatch:
-    candidate_years: int | None
-    vacancy_min_years: int | None
-    coefficient: float
+    candidate_years: float | None
+    vacancy_min_years: float | None
+    coefficient: float | None
 
 
 @dataclass(frozen=True)
 class SeniorityCompatibility:
     candidate: str
     vacancy: str
-    coefficient: float
+    coefficient: float | None
 
 
 @dataclass(frozen=True)
 class ScoringResult:
     vacancy_id: str
+    scoring_version: str
     score: float
     level: str
-    hard_match_score: float
-    vacancy_requirement_coverage: float
+    confidence: float
+    eligibility: str
+    eligibility_reasons: tuple[str, ...]
+    hard_match_score: float | None
+    vacancy_requirement_coverage: float | None
     category_scores: Mapping[str, float]
     matched: tuple[RequirementMatch, ...]
     partial_matches: tuple[PartialMatch, ...]
@@ -424,10 +433,14 @@ class ScoringResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "vacancyId": self.vacancy_id,
+            "scoringVersion": self.scoring_version,
             "score": round(self.score, 2),
+            "confidence": round(self.confidence * 100, 2),
+            "eligibility": self.eligibility,
+            "eligibilityReasons": list(self.eligibility_reasons),
             "level": self.level,
-            "hardMatchScore": round(self.hard_match_score, 2),
-            "vacancyRequirementCoverage": round(self.vacancy_requirement_coverage * 100, 2),
+            "hardMatchScore": round(self.hard_match_score, 2) if self.hard_match_score is not None else None,
+            "vacancyRequirementCoverage": round(self.vacancy_requirement_coverage * 100, 2) if self.vacancy_requirement_coverage is not None else None,
             "categoryScores": {key: round(value * 100, 2) for key, value in self.category_scores.items()},
             "matched": [asdict(value) for value in self.matched],
             "partialMatches": [asdict(value) for value in self.partial_matches],
@@ -741,9 +754,9 @@ class VacancyScorer:
         component_weights = self.config.component_weights
         combined_score = (
             component_weights.get("candidateSkillFit", 0) * raw_score
-            + component_weights.get("vacancyRequirementCoverage", 0) * vacancy_requirement_coverage
-            + component_weights.get("experience", 0) * experience.coefficient
-            + component_weights.get("seniority", 0) * seniority.coefficient
+            + component_weights.get("vacancyRequirementCoverage", 0) * (vacancy_requirement_coverage or 0.0)
+            + component_weights.get("experience", 0) * (experience.coefficient or 0.0)
+            + component_weights.get("seniority", 0) * (seniority.coefficient or 0.0)
         )
         penalties = sum(signal.penalty for signal in vacancy.negative_signals)
         gated_score = combined_score * 100 - penalties
@@ -751,10 +764,13 @@ class VacancyScorer:
         if gates:
             gated_score = min(gated_score, min(gate.max_score for gate in gates))
         final_score = max(0.0, min(100.0, gated_score))
+        confidence = self._confidence(profile, vacancy, vacancy_requirement_coverage, experience, seniority)
+        eligibility, eligibility_reasons = self._eligibility(profile, vacancy, gates)
         band = next((band for band in self.config.output_bands if band.minimum <= final_score <= band.maximum), self.config.output_bands[-1])
         return ScoringResult(
-            vacancy_id=vacancy.vacancy_id, score=final_score, level=band.code,
-            hard_match_score=(hard_matched / hard_total * 100 if hard_total else 100.0),
+            vacancy_id=vacancy.vacancy_id, scoring_version=SCORING_ENGINE_VERSION, score=final_score, level=band.code,
+            confidence=confidence, eligibility=eligibility, eligibility_reasons=eligibility_reasons,
+            hard_match_score=(hard_matched / hard_total * 100 if hard_total else None),
             vacancy_requirement_coverage=vacancy_requirement_coverage,
             category_scores=category_scores, matched=tuple(matched), partial_matches=tuple(partial),
             missing_important=tuple(missing), negative_signals=vacancy.negative_signals,
@@ -785,7 +801,7 @@ class VacancyScorer:
             frequency_multiplier += float(boost.get("maxBoost", 0)) * progress
         return min(1.0, semantic * extracted.context_multiplier * extracted.confidence * frequency_multiplier)
 
-    def _vacancy_requirement_coverage(self, profile: CandidateProfile, vacancy: VacancyFeatures) -> float:
+    def _vacancy_requirement_coverage(self, profile: CandidateProfile, vacancy: VacancyFeatures) -> float | None:
         """Measure how much of the vacancy's stated stack is present in the profile.
 
         Context multipliers turn preferred and deprecated technologies into a
@@ -804,7 +820,48 @@ class VacancyScorer:
                 continue
             total += weight
             covered += weight * self._candidate_supports(concept, candidate_concepts)
-        return covered / total if total else 1.0
+        return covered / total if total and candidate_concepts else None
+
+    def _confidence(
+        self,
+        profile: CandidateProfile,
+        vacancy: VacancyFeatures,
+        coverage: float | None,
+        experience: ExperienceMatch,
+        seniority: SeniorityCompatibility,
+    ) -> float:
+        """Return evidence completeness separately from the relevance score."""
+        weights = self.config.component_weights
+        confidence = 0.0
+        if profile.requirements and vacancy.concepts:
+            concept_confidence = sum(item.confidence for item in vacancy.concepts.values()) / len(vacancy.concepts)
+            confidence += weights.get("candidateSkillFit", 0) * concept_confidence
+        if coverage is not None:
+            confidence += weights.get("vacancyRequirementCoverage", 0)
+        if experience.coefficient is not None:
+            confidence += weights.get("experience", 0)
+        if seniority.coefficient is not None:
+            confidence += weights.get("seniority", 0) * vacancy.seniority.confidence
+        return max(0.0, min(1.0, confidence))
+
+    @staticmethod
+    def _eligibility(
+        profile: CandidateProfile,
+        vacancy: VacancyFeatures,
+        gates: Sequence[GateResult],
+    ) -> tuple[str, tuple[str, ...]]:
+        gate_ids = {gate.id for gate in gates}
+        reasons = tuple(gate.reason for gate in gates)
+        if "WRONG_PRIMARY_ROLE" in gate_ids:
+            return "INELIGIBLE", reasons
+        if not profile.requirements:
+            return "UNCERTAIN", ("В резюме недостаточно подтвержденных навыков для оценки.",)
+        if vacancy.role.primary == "UNKNOWN" or not vacancy.concepts:
+            return "UNCERTAIN", reasons or ("В описании вакансии недостаточно данных для уверенной оценки.",)
+        primary_missing = gate_ids.intersection({"JAVA_PRIMARY_MISSING", "DEVOPS_ROLE_MISSING", "ONE_C_PRIMARY_MISSING"})
+        if primary_missing:
+            return "INELIGIBLE", reasons
+        return "ELIGIBLE", ()
 
     def _candidate_supports(self, vacancy_concept: str, candidate_concepts: set[str]) -> float:
         if vacancy_concept in candidate_concepts:
@@ -838,10 +895,10 @@ class VacancyScorer:
                 applied.append(GateResult(gate.id, gate.max_score, gate.reason))
         return applied
 
-    def _experience_match(self, candidate: int | None, minimum: int | None) -> ExperienceMatch:
+    def _experience_match(self, candidate: float | None, minimum: float | None) -> ExperienceMatch:
         if candidate is None or minimum is None:
-            return ExperienceMatch(candidate, minimum, 1.0)
-        delta = int(candidate) - int(minimum)
+            return ExperienceMatch(candidate, minimum, None)
+        delta = float(candidate) - float(minimum)
         rules = sorted(
             ((int(key.get("candidateDeltaMin", -999999)), float(key.get("coefficient", 0))) for key in self.config.experience_parsing.get("matchRules", [])),
             reverse=True,
@@ -850,6 +907,8 @@ class VacancyScorer:
         return ExperienceMatch(candidate, minimum, coefficient)
 
     def _seniority_match(self, candidate: str, vacancy: str) -> SeniorityCompatibility:
+        if candidate not in self.config.seniority_levels or vacancy not in self.config.seniority_levels:
+            return SeniorityCompatibility(candidate, vacancy, None)
         candidate_level = self.config.seniority_levels.get(candidate, 0)
         vacancy_level = self.config.seniority_levels.get(vacancy, 0)
         distance = abs(candidate_level - vacancy_level)
@@ -886,7 +945,12 @@ class VacancyRankingService:
 
         return sorted(
             scored,
-            key=lambda result: (-result.score, -result.hard_match_score, -date_key(dates.get(result.vacancy_id, "")), result.vacancy_id),
+            key=lambda result: (
+                -result.score,
+                -(result.hard_match_score if result.hard_match_score is not None else -1.0),
+                -date_key(dates.get(result.vacancy_id, "")),
+                result.vacancy_id,
+            ),
         )
 
 

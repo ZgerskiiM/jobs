@@ -1,5 +1,7 @@
 import hashlib
 import hmac
+import json
+import tempfile
 import time
 from io import BytesIO
 
@@ -8,11 +10,118 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from docx import Document
 
-from .models import Profile, User
-from .resume_parser import detect_skills
+from .models import Application, Profile, User
+from .resume_parser import detect_skills, extract_email, extract_full_name, extract_phone, extract_telegram
+from .services import infer_target_role, normalize_resume_scoring_profile
 
 
 class AccountApiTests(TestCase):
+    def test_target_role_inference_does_not_default_unrelated_resume_to_java(self):
+        self.assertEqual(infer_target_role({"position": "Frontend Engineer", "skills": [{"name": "React"}]}), "UNKNOWN")
+        self.assertEqual(infer_target_role({"position": "Java Backend Developer", "skills": []}), "JAVA_BACKEND")
+        self.assertEqual(infer_target_role({"position": "Platform Engineer", "skills": [{"name": "Linux"}, {"name": "Kubernetes"}]}), "DEVOPS")
+
+    def test_resume_scoring_profile_preserves_fractional_experience(self):
+        normalized, changed = normalize_resume_scoring_profile({"position": "Frontend Engineer", "experience": "1,5 года", "skills": []})
+        self.assertTrue(changed)
+        self.assertEqual(normalized["targetRole"], "UNKNOWN")
+        self.assertEqual(normalized["experienceYears"], 1.5)
+
+    def test_resume_contact_extraction_returns_form_values(self):
+        text = "Иванов Иван Иванович\nEmail: ivan@example.com\nТелефон: +7 (999) 123-45-67\nTelegram: @ivan_dev"
+
+        self.assertEqual(extract_full_name(text), "Иванов Иван Иванович")
+        self.assertEqual(extract_email(text), "ivan@example.com")
+        self.assertEqual(extract_phone(text), "+7 (999) 123-45-67")
+        self.assertEqual(extract_telegram(text), "@ivan_dev")
+
+    def test_resume_contact_extraction_uses_filename_when_pdf_text_is_corrupted(self):
+        self.assertEqual(
+            extract_full_name("�������� ������\nDevOps �������", "Резюме_DevOps_инженер_Матвеи_Пасечник_от_04.pdf"),
+            "Матвеи Пасечник",
+        )
+
+    @override_settings(LOCAL_AUTH_BYPASS=True, DEBUG=True)
+    def test_local_auth_bypass_uses_shared_account(self):
+        first_client = APIClient(enforce_csrf_checks=True)
+        second_client = APIClient()
+
+        first = first_client.get("/api/auth/me/")
+        second = second_client.get("/api/auth/me/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.data["user"]["email"], "local@jobs.dev")
+        self.assertEqual(first.data["user"]["id"], second.data["user"]["id"])
+        self.assertEqual(User.objects.filter(email="local@jobs.dev").count(), 1)
+        self.assertTrue(Profile.objects.filter(user__email="local@jobs.dev").exists())
+
+        write = first_client.post("/api/profile/saved/", {"jobId": 123, "saved": True}, format="json")
+        self.assertEqual(write.status_code, 200)
+        self.assertEqual(write.data["savedJobIds"], [123])
+
+    @override_settings(LOCAL_AUTH_BYPASS=True, DEBUG=True)
+    def test_extension_archive_can_be_downloaded_locally(self):
+        response = APIClient().get("/api/extension/download/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertIn("jobs-dev-zen-extension.zip", response["Content-Disposition"])
+
+    def test_extension_submit_is_resolved_to_catalog_application(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", encoding="utf-8", delete=False) as catalog:
+            json.dump({"vacancies": [{"id": "42", "source_key": "acme", "company": "Acme", "title": "Senior Python Engineer", "location": "Remote", "url": "https://acme.example/jobs/python-42", "technologies": ["Python"]}]}, catalog)
+            catalog_path = catalog.name
+        try:
+            with override_settings(VACANCY_CATALOG_PATH=catalog_path, JOB_TRACKER_DB_PATH=""):
+                client = APIClient()
+                client.post("/api/auth/email/", {"email": "extension@example.com", "password": "correct-horse", "mode": "register"}, format="json")
+                response = client.post("/api/applications/from-extension/", {"pageUrl": "https://acme.example/jobs/python-42?utm_source=board", "title": "Senior Python Engineer", "company": "Acme"}, format="json")
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.data["matched"])
+            self.assertEqual(response.data["match"], "url")
+            self.assertEqual(response.data["application"]["detectedBy"], "extension")
+            self.assertEqual(Application.objects.get(user__email="extension@example.com").payload["externalId"], "42")
+        finally:
+            import os
+            os.unlink(catalog_path)
+
+    def test_extension_submit_does_not_create_false_positive(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", encoding="utf-8", delete=False) as catalog:
+            json.dump({"vacancies": [{"id": "42", "source_key": "acme", "company": "Acme", "title": "Senior Python Engineer", "url": "https://acme.example/jobs/python-42"}]}, catalog)
+            catalog_path = catalog.name
+        try:
+            with override_settings(VACANCY_CATALOG_PATH=catalog_path, JOB_TRACKER_DB_PATH=""):
+                client = APIClient()
+                client.post("/api/auth/email/", {"email": "extension-miss@example.com", "password": "correct-horse", "mode": "register"}, format="json")
+                response = client.post("/api/applications/from-extension/", {"pageUrl": "https://other.example/jobs/unrelated", "title": "Accountant", "company": "Other"}, format="json")
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.data["matched"])
+            self.assertFalse(Application.objects.filter(user__email="extension-miss@example.com").exists())
+        finally:
+            import os
+            os.unlink(catalog_path)
+
+    def test_devops_scoring_uses_confirmed_resume_skills(self):
+        client = APIClient()
+        client.post("/api/auth/email/", {"email": "devops@example.com", "password": "correct-horse", "mode": "register"}, format="json")
+        profile = Profile.objects.get(user__email="devops@example.com")
+        profile.resume = {
+            "position": "DevOps engineer", "targetRole": "DEVOPS",
+            "skills": [{"name": "Docker", "confirmed": True}, {"name": "Kubernetes", "confirmed": True}],
+        }
+        profile.save()
+
+        response = client.post("/api/scoring/rank/", {"items": [{"id": 7, "features": {"v": "1.0.0", "p": "DEVOPS", "r": ["DEVOPS", 1, 1], "s": ["MIDDLE", 1], "e": 3, "c": [["DOCKER", 1, 1, 1, 1], ["KUBERNETES", 1, 1, 1, 1], ["TERRAFORM", 1, 1, 1, 1]], "n": [], "d": ""}}]}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["profile"]["targetProfile"], "DEVOPS")
+        self.assertEqual(response.data["scores"][0]["vacancyId"], "catalog:7")
+        self.assertEqual(response.data["scores"][0]["scoringVersion"], "2.0.0")
+        self.assertIn(response.data["scores"][0]["eligibility"], {"ELIGIBLE", "INELIGIBLE", "UNCERTAIN"})
+        self.assertGreaterEqual(response.data["scores"][0]["confidence"], 0)
+        self.assertGreater(response.data["scores"][0]["score"], 0)
+
     @override_settings(TELEGRAM_BOT_TOKEN="test-token", TELEGRAM_BOT_USERNAME="jobsdev_bot")
     def test_telegram_login_creates_session_and_profile(self):
         payload = {"id": "42", "first_name": "Ada", "username": "ada", "auth_date": str(int(time.time()))}
@@ -40,8 +149,10 @@ class AccountApiTests(TestCase):
         client = APIClient()
         client.post("/api/auth/email/", {"email": "resume@example.com", "password": "correct-horse", "mode": "register"}, format="json")
         document = Document()
+        document.add_paragraph("Иванов Иван Иванович")
         document.add_paragraph("Senior Backend Engineer")
         document.add_paragraph("Опыт: 6 лет. Python, Golang, PostgreSQL, Docker, Kubernetes, REST API")
+        document.add_paragraph("Email: ivan@example.com | Телефон: +7 (999) 123-45-67 | Telegram: @ivan_dev")
         file_data = BytesIO()
         document.save(file_data)
 
@@ -55,7 +166,17 @@ class AccountApiTests(TestCase):
         resume = response.data["resume"]
         self.assertEqual(resume["position"], "Senior Backend Engineer")
         self.assertEqual(resume["experience"], "6 лет")
+        self.assertEqual(resume["fullName"], "Иванов Иван Иванович")
+        self.assertEqual(resume["contactEmail"], "ivan@example.com")
+        self.assertEqual(resume["contactPhone"], "+7 (999) 123-45-67")
+        self.assertEqual(resume["contactTelegram"], "@ivan_dev")
+        self.assertTrue(resume["id"].startswith("upload-"))
+        self.assertTrue(resume["hasFile"])
         self.assertEqual({skill["name"] for skill in resume["skills"]}, {"Python", "Go", "PostgreSQL", "Docker", "Kubernetes", "REST API"})
+
+        downloaded = client.get("/api/profile/resume/file/")
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(b"".join(downloaded.streaming_content), file_data.getvalue())
 
     def test_resume_upload_rejects_unsupported_format(self):
         client = APIClient()
@@ -98,7 +219,7 @@ class AccountApiTests(TestCase):
 
         payload = account_payload(user)
 
-        self.assertEqual(payload["resume"]["analysisVersion"], 2)
+        self.assertEqual(payload["resume"]["analysisVersion"], 3)
         self.assertEqual(payload["resume"]["position"], "Java Backend Developer")
         self.assertEqual(payload["resume"]["experience"], "4 года")
         self.assertEqual({skill["name"] for skill in payload["resume"]["skills"]}, {"Java", "Spring", "Spring Boot", "PostgreSQL"})

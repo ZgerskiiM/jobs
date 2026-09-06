@@ -1,0 +1,97 @@
+[
+  {
+    "name": "complete_java_backend_match",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "SENIOR",
+      "experienceYears": 5,
+      "requirements": [
+        {"concept": "JAVA", "importance": "MUST_HAVE"},
+        {"concept": "SPRING_BOOT", "importance": "STRONG_PREFERENCE"},
+        {"concept": "KAFKA", "importance": "STRONG_PREFERENCE"}
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:complete",
+      "taxonomyVersion": "1.0.0",
+      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
+      "seniority": {"level": "SENIOR", "confidence": 1},
+      "minExperienceYears": 3,
+      "concepts": {
+        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
+        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
+        "KAFKA": {"concept": "KAFKA", "match": 1, "contextMultiplier": 0.5, "confidence": 1, "mentions": 1}
+      },
+      "negativeSignals": [],
+      "vacancyDate": "2026-09-01"
+    },
+    "expected": {"score": 96, "confidence": 100, "eligibility": "ELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 100, "experienceCoefficient": 1, "seniorityCoefficient": 1}
+  },
+  {
+    "name": "unknown_experience_and_seniority_are_not_perfect",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "UNKNOWN",
+      "experienceYears": null,
+      "requirements": [{"concept": "JAVA", "importance": "MUST_HAVE"}]
+    },
+    "features": {
+      "vacancyId": "fixture:unknowns",
+      "taxonomyVersion": "1.0.0",
+      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
+      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "minExperienceYears": null,
+      "concepts": {
+        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
+        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+      },
+      "negativeSignals": [],
+      "vacancyDate": ""
+    },
+    "expected": {"score": 65, "confidence": 80, "eligibility": "ELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 50, "experienceCoefficient": null, "seniorityCoefficient": null}
+  },
+  {
+    "name": "wrong_primary_role_is_ineligible",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "UNKNOWN",
+      "experienceYears": null,
+      "requirements": [{"concept": "JAVA", "importance": "MUST_HAVE"}]
+    },
+    "features": {
+      "vacancyId": "fixture:wrong-role",
+      "taxonomyVersion": "1.0.0",
+      "role": {"primary": "UNKNOWN", "match": 0, "confidence": 0.4},
+      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "minExperienceYears": null,
+      "concepts": {
+        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+      },
+      "negativeSignals": [{"id": "ANDROID_PRIMARY", "penalty": 40, "primaryRoleConflict": true, "matchedText": "android developer"}],
+      "vacancyDate": ""
+    },
+    "expected": {"score": 20, "confidence": 80, "eligibility": "INELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 100, "experienceCoefficient": null, "seniorityCoefficient": null}
+  },
+  {
+    "name": "missing_hard_requirements_are_not_reported_as_one_hundred",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "UNKNOWN",
+      "experienceYears": null,
+      "requirements": [{"concept": "SPRING_BOOT", "importance": "STRONG_PREFERENCE"}]
+    },
+    "features": {
+      "vacancyId": "fixture:no-hard-requirements",
+      "taxonomyVersion": "1.0.0",
+      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
+      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "minExperienceYears": null,
+      "concepts": {
+        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+      },
+      "negativeSignals": [],
+      "vacancyDate": ""
+    },
+    "expected": {"score": 25, "confidence": 80, "eligibility": "INELIGIBLE", "hardMatchScore": null, "vacancyRequirementCoverage": 100, "experienceCoefficient": null, "seniorityCoefficient": null}
+  }
+]

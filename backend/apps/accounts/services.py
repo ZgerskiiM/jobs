@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 from pathlib import Path
+import re
 import time
 from typing import Mapping
 
@@ -24,6 +25,46 @@ DEFAULT_SETTINGS = {
         "showSalaryExpectation": False,
     },
 }
+
+
+def infer_target_role(resume: dict) -> str:
+    text = " ".join([
+        str(resume.get("position", "")),
+        *(str(skill.get("name", "")) for skill in resume.get("skills", []) if isinstance(skill, dict)),
+    ]).casefold()
+    position = str(resume.get("position", "")).casefold()
+    devops_signals = ("devops", "sre", "kubernetes", "docker", "ansible", "terraform", "helm", "linux", "ci/cd")
+    one_c_signals = ("1с", "1c", "конфигуратор", "скд", "бсп")
+    java_signals = ("java", "spring", "hibernate", "jvm")
+    if re.search(r"\b(?:devops|sre)\b|инженер\s+(?:по\s+)?(?:инфраструктуре|эксплуатации)", position):
+        return "DEVOPS"
+    if re.search(r"(?:1с|1c)[ -]?(?:программист|разработчик)|(?:программист|разработчик)[ -]?(?:1с|1c)", position):
+        return "ONE_C_DEVELOPER"
+    if re.search(r"java.{0,20}(?:developer|engineer|разработчик)|(?:backend|back-end|бэкенд).{0,20}java", position):
+        return "JAVA_BACKEND"
+    scores = {
+        "DEVOPS": sum(signal in text for signal in devops_signals),
+        "ONE_C_DEVELOPER": sum(signal in text for signal in one_c_signals),
+        "JAVA_BACKEND": sum(signal in text for signal in java_signals),
+    }
+    best_role, best_score = max(scores.items(), key=lambda item: item[1])
+    if best_score < 2 or list(scores.values()).count(best_score) > 1:
+        return "UNKNOWN"
+    return best_role
+
+
+def normalize_resume_scoring_profile(resume: dict) -> tuple[dict, bool]:
+    normalized = dict(resume)
+    changed = False
+    if not normalized.get("targetRole"):
+        normalized["targetRole"] = infer_target_role(normalized)
+        changed = True
+    if normalized.get("experienceYears") is None:
+        match = re.search(r"\d+(?:[.,]\d+)?", str(normalized.get("experience", "")))
+        if match:
+            normalized["experienceYears"] = float(match.group().replace(",", "."))
+            changed = True
+    return normalized, changed
 
 
 def get_profile(user: User) -> Profile:
@@ -54,6 +95,12 @@ def refresh_resume_analysis(profile: Profile) -> None:
         if opened:
             profile.resume_file.close()
 
+    # Keep a manually corrected contact when the document does not contain a
+    # readable value (common for scanned PDFs), while accepting newly detected
+    # values from the upgraded parser.
+    for field in ("fullName", "contactEmail", "contactPhone", "contactTelegram"):
+        if not analysis.get(field) and profile.resume.get(field):
+            analysis[field] = profile.resume[field]
     profile.resume = {**profile.resume, **analysis}
     profile.save(update_fields=["resume", "updated_at"])
 
@@ -104,6 +151,25 @@ def login_from_telegram(data: Mapping[str, str], request) -> User:
 def account_payload(user: User, *, is_new: bool = False) -> dict:
     profile = get_profile(user)
     refresh_resume_analysis(profile)
+    if isinstance(profile.resume, dict) and profile.resume_file:
+        resume = dict(profile.resume)
+        changed = False
+        if not resume.get("id"):
+            resume["id"] = f"upload-{profile.resume_file.name}"
+            changed = True
+        if resume.get("source") != "upload":
+            resume["source"] = "upload"
+            changed = True
+        if resume.get("hasFile") is not True:
+            resume["hasFile"] = True
+            changed = True
+        if changed:
+            profile.resume = resume
+            profile.save(update_fields=["resume", "updated_at"])
+    if isinstance(profile.resume, dict):
+        profile.resume, changed = normalize_resume_scoring_profile(profile.resume)
+        if changed:
+            profile.save(update_fields=["resume", "updated_at"])
     return {
         "user": {
             "id": user.pk,

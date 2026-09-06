@@ -14,6 +14,8 @@ if (Test-Path $EnvFile) {
 # local process and use the bundled SQLite/HTTP defaults.
 $env:DATABASE_URL = ""
 $env:USE_REDIS_SESSIONS = "0"
+$env:DJANGO_DEBUG = "1"
+$env:LOCAL_AUTH_BYPASS = "1"
 $PublicUrl = $env:JOBS_DEV_PUBLIC_URL
 if ([string]::IsNullOrWhiteSpace($PublicUrl)) {
     $env:SESSION_COOKIE_SECURE = "0"

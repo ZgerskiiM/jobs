@@ -3,6 +3,32 @@
 Production-вариант для обычного сервера — Docker Compose + PostgreSQL + Redis +
 Django API + Caddy. SSR для этого запуска не требуется.
 
+## GitHub Actions CI/CD (рекомендуется для стенда)
+
+Для стенда добавлен workflow `.github/workflows/staging.yml`. Он запускает проверки
+Python и frontend на pull request, а после push в `main` собирает API/web-образы,
+публикует их в GitHub Container Registry и выкладывает стенд по SSH. GitLab pipeline
+ниже можно оставить для старой инфраструктуры, но для новой выкладки он не нужен.
+
+В GitHub создайте Environment `staging` и добавьте Variables:
+
+- `DEPLOY_HOST` — DNS-имя или IP сервера;
+- `DEPLOY_USER` — пользователь с доступом к Docker без sudo;
+- `DEPLOY_PATH` — каталог проекта на сервере, например `/opt/jobs-dev-staging`;
+- `DEPLOY_URL` — внешний HTTPS-адрес стенда.
+
+В тот же Environment добавьте Secrets:
+
+- `SSH_PRIVATE_KEY` — отдельный deploy key пользователя стенда;
+- `SSH_KNOWN_HOSTS` — вывод `ssh-keyscan -H <host>` для этого сервера.
+
+На сервере один раз установите Docker Engine и Compose plugin, создайте `deploy/.env`
+и `backend/.env` по production-шаблонам, затем проверьте DNS, firewall и доступ
+пользователя к Docker. Workflow сам передаст Compose-файлы, войдёт в GHCR и выполнит
+migration/restart через `deploy/remote-deploy.sh`. После этого каждый push в `main`
+будет выкладывать новый стенд, а `workflow_dispatch` позволит запустить выкладку
+вручную.
+
 ## GitLab CI/CD
 
 Pipeline находится в `.gitlab-ci.yml`. Он выполняет тесты на merge request, собирает

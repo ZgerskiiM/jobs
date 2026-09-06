@@ -3,7 +3,11 @@ from pathlib import Path
 from typing import Any
 from html import unescape
 import json as jsonlib
+import mimetypes
 import re
+import sqlite3
+import subprocess
+import uuid
 import urllib.parse
 import urllib.request
 
@@ -11,9 +15,10 @@ from django.conf import settings
 from django.contrib.auth import authenticate, logout
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.http import HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_protect
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -24,7 +29,7 @@ from rest_framework.views import APIView
 from .models import Application, AuditLog, Profile, User
 from .resume_parser import analyze_resume
 from .serializers import EmailAuthSerializer, ProfilePatchSerializer, SavedJobSerializer
-from .services import account_payload, get_profile, login_from_telegram, telegram_payload_is_valid
+from .services import account_payload, get_profile, infer_target_role, login_from_telegram, normalize_resume_scoring_profile, telegram_payload_is_valid
 
 
 def error(message: str, code: int = status.HTTP_400_BAD_REQUEST) -> Response:
@@ -76,6 +81,153 @@ class HhVacanciesView(APIView):
             }
 
         return Response({"source": "hh", "vacancies": [mapped(item) for item in payload.get("items", [])], "meta": {"found": payload.get("found", 0), "page": payload.get("page", 0), "pages": payload.get("pages", 0), "updated_at": timezone.now().isoformat()}})
+
+
+class ExtensionDownloadView(APIView):
+    def get(self, request):
+        archive = settings.BASE_DIR.parent / "jobs-dev-zen-extension.zip"
+        if not archive.is_file():
+            raise Http404("Архив расширения не найден")
+        return FileResponse(
+            archive.open("rb"),
+            as_attachment=True,
+            filename="jobs-dev-zen-extension.zip",
+            content_type="application/zip",
+        )
+
+
+class ResumeFileView(APIView):
+    """Return the authenticated user's uploaded resume to the browser extension."""
+
+    def get(self, request):
+        profile = get_profile(request.user)
+        if not profile.resume_file:
+            raise Http404("Файл резюме не найден")
+        filename = Path(profile.resume_file.name).name
+        response = FileResponse(profile.resume_file.open("rb"), as_attachment=True, filename=filename, content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
+        return response
+
+
+def _stable_job_id(source_key: str, external_id: str) -> int:
+    # Keep this identical to VacancyDataContext.hash(), which is the public id
+    # stored by the frontend application tracker.
+    value = f"{source_key}:{external_id}"
+    result = 0
+    for char in value:
+        result = ((result * 31) + ord(char)) & 0xFFFFFFFF
+    result &= 0x7FFFFFFF
+    return result or 1
+
+
+def _catalog_records() -> list[dict[str, Any]]:
+    """Read the generated catalog, with a SQLite fallback for local installs."""
+    catalog_path = Path(getattr(settings, "VACANCY_CATALOG_PATH", ""))
+    if catalog_path.is_file():
+        try:
+            payload = jsonlib.loads(catalog_path.read_text(encoding="utf-8"))
+            return [item for item in payload.get("vacancies", []) if isinstance(item, dict)]
+        except (OSError, ValueError):
+            pass
+    db_path = Path(getattr(settings, "JOB_TRACKER_DB_PATH", ""))
+    if db_path.is_file():
+        try:
+            with sqlite3.connect(db_path) as db:
+                rows = db.execute("SELECT external_id AS id, company, title, location, workplace_type, description, url, posted_at, source_key FROM jobs WHERE active = 1 AND stale = 0").fetchall()
+            fields = ("id", "company", "title", "location", "workplace_type", "description", "url", "posted_at", "source_key")
+            return [dict(zip(fields, row)) for row in rows]
+        except sqlite3.Error:
+            pass
+    return []
+
+
+def _canonical_url(value: str) -> str:
+    try:
+        parsed = urllib.parse.urlsplit(str(value).strip())
+        return urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/"), "", ""))
+    except ValueError:
+        return str(value).strip().rstrip("/").lower()
+
+
+def _words(value: str) -> set[str]:
+    return {word for word in re.findall(r"[a-zа-яё0-9+#.]{3,}", str(value or "").casefold()) if word not in {"the", "for", "and", "или", "для"}}
+
+
+def _resolve_catalog_vacancy(page_url: str, title: str, company: str) -> tuple[dict[str, Any] | None, str]:
+    page = _canonical_url(page_url)
+    title_words = _words(title)
+    best: tuple[float, dict[str, Any] | None] = (0.0, None)
+    for item in _catalog_records():
+        candidate_url = _canonical_url(str(item.get("url", "")))
+        if page and candidate_url and page == candidate_url:
+            return item, "url"
+        candidate_words = _words(item.get("title", ""))
+        title_score = len(title_words & candidate_words) / max(1, len(title_words | candidate_words))
+        company_score = 1.0 if company and str(company).casefold() in str(item.get("company", "")).casefold() else 0.0
+        host_score = 0.25 if page and candidate_url and urllib.parse.urlsplit(page).netloc == urllib.parse.urlsplit(candidate_url).netloc else 0.0
+        score = title_score * 0.75 + company_score * 0.2 + host_score * 0.05
+        if score > best[0]:
+            best = (score, item)
+    return (best[1], "title") if best[0] >= 0.62 else (None, "")
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class ExtensionApplicationView(APIView):
+    """Record a submit observed by the extension and resolve it to the catalog."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        origin = request.headers.get("Origin", "")
+        if origin and not re.match(r"^(?:moz|chrome|safari)-extension://", origin, re.IGNORECASE):
+            return error("Источник запроса не разрешён", status.HTTP_403_FORBIDDEN)
+        user_id = request.session.get("_auth_user_id")
+        if not user_id:
+            return error("Войди в jobs.dev в этом браузере", status.HTTP_401_UNAUTHORIZED)
+        try:
+            user = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            return error("Сессия jobs.dev истекла", status.HTTP_401_UNAUTHORIZED)
+        data = request.data if isinstance(request.data, dict) else {}
+        page_url = str(data.get("pageUrl", ""))[:2000]
+        title = str(data.get("title", ""))[:300]
+        company = str(data.get("company", ""))[:200]
+        if not page_url:
+            return error("Расширение не передало адрес вакансии")
+        vacancy, match_kind = _resolve_catalog_vacancy(page_url, title, company)
+        if not vacancy:
+            return Response({"matched": False, "message": "Вакансия не найдена в каталоге — добавь отклик вручную", "pageUrl": page_url})
+        source_key = str(vacancy.get("source_key") or "catalog")
+        external_id = str(vacancy.get("id") or "")
+        job_id = _stable_job_id(source_key, external_id)
+        applied_at = timezone.localtime().strftime("%d.%m.%Y")
+        payload = {
+            "id": job_id,
+            "title": vacancy.get("title") or title or "Вакансия",
+            "company": vacancy.get("company") or company or "Работодатель",
+            "logo": "",
+            "color": "#33ff77",
+            "salary": "По договорённости",
+            "level": "Специалист",
+            "location": vacancy.get("location") or "Не указано",
+            "url": vacancy.get("url") or page_url,
+            "appliedAt": applied_at,
+            "status": "sent",
+            "updatedDaysAgo": 0,
+            "deadline": "",
+            "note": "Отклик отправлен через расширение jobs.dev",
+            "contact": "",
+            "tags": vacancy.get("technologies") or [],
+            "timeline": [{"date": applied_at, "label": "Отклик отправлен через расширение"}],
+            "notificationsOn": True,
+            "sourceKey": source_key,
+            "externalId": external_id,
+            "detectedBy": "extension",
+            "submittedUrl": page_url,
+        }
+        application, _ = Application.objects.update_or_create(user=user, job_id=job_id, defaults={"payload": payload})
+        AuditLog.objects.create(actor=user, action="application.detected_by_extension", object_type="application", object_id=str(application.pk), metadata={"match": match_kind, "url": page_url[:500]})
+        return Response({"matched": True, "application": payload, "match": match_kind})
 
 
 class MeView(APIView):
@@ -230,12 +382,24 @@ class ResumeView(APIView):
         profile = get_profile(request.user)
         if not profile.resume:
             return error("Сначала загрузите резюме")
-        skills = request.data.get("skills")
-        if not isinstance(skills, list):
-            return error("Некорректный список навыков")
-        profile.resume = {**profile.resume, "skills": skills}
+        changes = {}
+        if "skills" in request.data:
+            if not isinstance(request.data["skills"], list):
+                return error("Некорректный список навыков")
+            changes["skills"] = request.data["skills"]
+        if "targetRole" in request.data:
+            target_role = str(request.data["targetRole"])
+            if target_role not in {"JAVA_BACKEND", "DEVOPS", "ONE_C_DEVELOPER", "UNKNOWN"}:
+                return error("Неизвестный профиль сопоставления")
+            changes["targetRole"] = target_role
+        for field in ("fullName", "contactEmail", "contactPhone", "contactTelegram"):
+            if field in request.data:
+                changes[field] = str(request.data[field])[:250]
+        if not changes:
+            return error("Нет данных для обновления")
+        profile.resume = {**profile.resume, **changes}
         profile.save(update_fields=["resume", "updated_at"])
-        return Response({"resume": profile.resume})
+        return Response({"resume": profile.resume, "resumes": [profile.resume]})
 
     def post(self, request):
         upload = request.FILES.get("resume")
@@ -250,14 +414,15 @@ class ResumeView(APIView):
         except ValueError as exc:
             return error(str(exc))
         now = timezone.localtime().strftime("%d %b %Y").lstrip("0")
-        resume = {"fileName": filename, "uploadedAt": now, **analysis}
+        resume = {"id": f"upload-{uuid.uuid4().hex}", "source": "upload", "hasFile": True, "fileName": filename, "uploadedAt": now, **analysis}
+        resume["targetRole"] = infer_target_role(resume)
         profile = get_profile(request.user)
         if profile.resume_file:
             profile.resume_file.delete(save=False)
         profile.resume_file.save(filename, ContentFile(data), save=False)
         profile.resume = resume
         profile.save()
-        return Response({"resume": resume})
+        return Response({"resume": resume, "resumes": [resume]})
 
     def delete(self, request):
         profile = get_profile(request.user)
@@ -265,6 +430,36 @@ class ResumeView(APIView):
         profile.resume = None
         profile.save(update_fields=["resume", "resume_file", "updated_at"])
         return Response({"resume": None})
+
+
+class ScoringRankView(APIView):
+    """Expose the same taxonomy-driven scorer used by the production Worker."""
+
+    def post(self, request):
+        items = request.data.get("items") if isinstance(request.data, dict) else None
+        if not isinstance(items, list):
+            return error("Ожидался список вакансий")
+        profile = get_profile(request.user)
+        resume = profile.resume if isinstance(profile.resume, dict) else {}
+        resume, changed = normalize_resume_scoring_profile(resume)
+        if changed:
+            profile.resume = resume
+            profile.save(update_fields=["resume", "updated_at"])
+        payload = {
+            "account": {"resume": resume, "onboarding": profile.onboarding or {}},
+            "items": items,
+            "compact": bool(request.data.get("compact")),
+        }
+        bridge = settings.BASE_DIR.parent / "frontend" / "scripts" / "scoring-api.mjs"
+        try:
+            completed = subprocess.run(
+                ["node", str(bridge)], input=jsonlib.dumps(payload), text=True,
+                encoding="utf-8", capture_output=True, timeout=60,
+                cwd=settings.BASE_DIR.parent, check=True,
+            )
+            return Response(jsonlib.loads(completed.stdout))
+        except (OSError, subprocess.SubprocessError, jsonlib.JSONDecodeError) as exc:
+            return error(f"Не удалось рассчитать соответствие: {exc}", 502)
 
 
 class ApplicationsView(APIView):

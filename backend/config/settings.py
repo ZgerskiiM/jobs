@@ -49,6 +49,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.accounts.middleware.LocalAuthBypassMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -111,12 +112,22 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
 }
 
+LOCAL_AUTH_BYPASS = env_bool("LOCAL_AUTH_BYPASS", False)
+LOCAL_AUTH_EMAIL = os.getenv("LOCAL_AUTH_EMAIL", "local@jobs.dev").casefold()
+LOCAL_AUTH_NAME = os.getenv("LOCAL_AUTH_NAME", "Local Developer")
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_AUTH_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_AUTH_BOT_USERNAME", "")
 TELEGRAM_LOGIN_MAX_AGE = int(os.getenv("TELEGRAM_LOGIN_MAX_AGE", "86400"))
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:8443").rstrip("/")
 HH_API_TOKEN = os.getenv("HH_API_TOKEN", "")
 HH_USER_AGENT = os.getenv("HH_USER_AGENT", "jobs.dev/1.0 (support@jobs.dev)")
+
+# The generated catalog is shared with the frontend in local installs. In
+# production, point this at the artifact produced by the vacancy exporter (or
+# at a mounted jobs.sqlite3 file).
+VACANCY_CATALOG_PATH = os.getenv("VACANCY_CATALOG_PATH", str(BASE_DIR.parent / "frontend" / "public" / "vacancies.json"))
+JOB_TRACKER_DB_PATH = os.getenv("JOB_TRACKER_DB_PATH", str(BASE_DIR.parent / "data" / "jobs.sqlite3"))
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 CELERY_BROKER_URL = REDIS_URL

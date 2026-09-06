@@ -34,6 +34,16 @@ function BellIcon({ on }: { on: boolean }) {
   );
 }
 
+function canonicalUrl(value?: string) {
+  if (!value) return "";
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin.toLowerCase()}${parsed.pathname.replace(/\/$/, "")}`;
+  } catch {
+    return value.trim().replace(/\/$/, "").toLowerCase();
+  }
+}
+
 function AppCard({
   app,
   onStatusChange,
@@ -49,6 +59,7 @@ function AppCard({
   onDeadlineChange: (id: number, deadline: string) => void;
   onToggleNotif: (id: number) => void;
 }) {
+  const { jobs } = useVacancyData();
   const [expanded, setExpanded] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [noteVal, setNoteVal] = useState(app.note);
@@ -58,6 +69,10 @@ function AppCard({
 
   const isStale = app.updatedDaysAgo >= 7 && app.status !== "offer" && app.status !== "rejected";
   const m = STATUS_META[app.status];
+  const linkedJob = jobs.find((job) =>
+    (job.url && canonicalUrl(job.url) === canonicalUrl(app.submittedUrl || app.url))
+    || (job.id === app.id && app.detectedBy === "extension")
+  );
 
   return (
     <div className={`rounded-sm border transition-colors ${isStale ? "border-[rgba(251,191,36,0.25)] bg-[rgba(251,191,36,0.02)]" : "border-[rgba(51,255,119,0.1)] bg-[#0e1018]"}`}>
@@ -87,7 +102,13 @@ function AppCard({
           {/* Title row */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="font-sans font-semibold text-sm text-[#e8eaf0]">{app.title}</div>
+              {linkedJob ? (
+                <Link to={`/jobs/${linkedJob.id}`} className="font-sans font-semibold text-sm text-[#e8eaf0] hover:text-[#33ff77] transition-colors" title="открыть вакансию на jobs.dev">
+                  {app.title}
+                </Link>
+              ) : (
+                <div className="font-sans font-semibold text-sm text-[#e8eaf0]">{app.title}</div>
+              )}
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className="font-mono text-xs text-[#5a6070]">{app.company}</span>
                 <span className="text-[#3a404f]">·</span>
@@ -262,10 +283,10 @@ function AppCard({
           </button>
         ))}
         <a
-          href={app.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto flex items-center gap-1 font-mono text-[10px] text-[#5a6070] hover:text-[#e8eaf0] border border-[rgba(58,64,79,0.5)] hover:border-[rgba(58,64,79,0.9)] px-2.5 py-1 rounded-sm transition-all"
+          href={linkedJob ? `/jobs/${linkedJob.id}` : app.url}
+          target={linkedJob ? undefined : "_blank"}
+          rel={linkedJob ? undefined : "noopener noreferrer"}
+          className={`ml-auto flex items-center gap-1 font-mono text-[10px] border px-2.5 py-1 rounded-sm transition-all ${linkedJob ? "text-[#33ff77] border-[rgba(51,255,119,0.3)] hover:border-[rgba(51,255,119,0.6)]" : "text-[#5a6070] hover:text-[#e8eaf0] border-[rgba(58,64,79,0.5)] hover:border-[rgba(58,64,79,0.9)]"}`}
         >
           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />

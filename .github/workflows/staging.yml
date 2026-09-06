@@ -1,0 +1,165 @@
+name: Staging CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate:
+    name: Validate backend and frontend
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key-with-more-than-32-characters
+      DJANGO_DEBUG: "1"
+      LOCAL_AUTH_BYPASS: "0"
+      DATABASE_URL: ""
+      USE_REDIS_SESSIONS: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Backend tests
+        run: |
+          python -m unittest discover -s tests -v
+          python backend/manage.py check
+          python backend/manage.py test
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend tests and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+  publish:
+    name: Build and publish images
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    outputs:
+      image_namespace: ${{ steps.images.outputs.namespace }}
+      image_tag: ${{ steps.images.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image names
+        id: images
+        shell: bash
+        run: |
+          echo "namespace=ghcr.io/$(echo \"${GITHUB_REPOSITORY}\" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.namespace }}/api:${{ steps.images.outputs.tag }}
+            ${{ steps.images.outputs.namespace }}/api:staging
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.namespace }}/web:${{ steps.images.outputs.tag }}
+            ${{ steps.images.outputs.namespace }}/web:staging
+
+  deploy:
+    name: Deploy staging over SSH
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: staging
+      url: ${{ vars.DEPLOY_URL }}
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+      IMAGE_NAMESPACE: ${{ needs.publish.outputs.image_namespace }}
+      IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+    steps:
+      - name: Checkout deployment files
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "Missing staging variable DEPLOY_HOST" >&2; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "Missing staging variable DEPLOY_USER" >&2; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "Missing staging variable DEPLOY_PATH" >&2; exit 1; }
+          test -n "$DEPLOY_URL" || { echo "Missing staging variable DEPLOY_URL" >&2; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "Missing staging secret SSH_PRIVATE_KEY" >&2; exit 1; }
+          test -n "$SSH_KNOWN_HOSTS" || { echo "Missing staging secret SSH_KNOWN_HOSTS" >&2; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload Compose deployment files
+        shell: bash
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh "$remote" "mkdir -p '$DEPLOY_PATH/deploy'"
+          scp docker-compose.yml docker-compose.prod.yml "$remote:$DEPLOY_PATH/"
+          scp deploy/Caddyfile deploy/remote-deploy.sh "$remote:$DEPLOY_PATH/deploy/"
+
+      - name: Log in to GHCR on staging
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          printf '%s' "$GHCR_TOKEN" | ssh "$remote" "docker login ghcr.io --username '$GITHUB_ACTOR' --password-stdin"
+
+      - name: Restart staging
+        shell: bash
+        run: |
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          api_image="$IMAGE_NAMESPACE/api:$IMAGE_TAG"
+          web_image="$IMAGE_NAMESPACE/web:$IMAGE_TAG"
+          ssh "$remote" "cd '$DEPLOY_PATH' && API_IMAGE='$api_image' WEB_IMAGE='$web_image' bash deploy/remote-deploy.sh"
+
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 "$DEPLOY_URL/healthz/"
+          curl --fail --silent --show-error "$DEPLOY_URL/api/auth/config/"
