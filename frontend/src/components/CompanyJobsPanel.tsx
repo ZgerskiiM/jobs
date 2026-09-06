@@ -54,6 +54,13 @@ export default function CompanyJobsPanel({ company, jobs, onClose }: Props) {
         {/* About */}
         <div className="px-6 py-4 border-b border-[rgba(51,255,119,0.06)]">
           <p className="font-sans text-sm text-[#5a6070] leading-relaxed">{company.about}</p>
+          <div className="flex flex-wrap gap-1.5 mt-3" aria-label="Бизнес-направления">
+            {(company.businessDomains || [company.industry]).map((domain) => (
+              <span key={domain} className="font-mono text-[10px] px-2 py-0.5 rounded-sm bg-[rgba(0,212,255,0.06)] border border-[rgba(0,212,255,0.18)] text-[#7dcae0]">
+                {domain}
+              </span>
+            ))}
+          </div>
           <div className="flex items-center gap-3 mt-4">
             <a
               href={company.site}

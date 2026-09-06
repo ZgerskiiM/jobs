@@ -119,6 +119,16 @@ export default function CompanyPage() {
             </div>
             <p className="font-sans text-sm text-[#b0b6c4] leading-relaxed max-w-2xl mb-6">{company.about}</p>
 
+            {(company.businessDomains || [company.industry]).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-6" aria-label="Бизнес-направления">
+                {(company.businessDomains || [company.industry]).map((domain) => (
+                  <span key={domain} className="font-mono text-[10px] px-2.5 py-1 rounded-sm bg-[rgba(0,212,255,0.06)] border border-[rgba(0,212,255,0.18)] text-[#7dcae0]">
+                    {domain}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {company.vacancyStatus === "external" && (
               <div className="tag cyan-badge inline-flex mb-6">вакансии на сайте компании</div>
             )}

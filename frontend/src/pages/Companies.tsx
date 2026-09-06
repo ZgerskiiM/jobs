@@ -21,6 +21,7 @@ export default function Companies() {
         search.length === 0 ||
         c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.about.toLowerCase().includes(search.toLowerCase()) ||
+        (c.businessDomains || []).some((domain) => domain.toLowerCase().includes(search.toLowerCase())) ||
         c.tech_stack.some((t) => t.toLowerCase().includes(search.toLowerCase()));
       const matchIndustry = industry === "Все" || c.industry === industry;
       const matchStack = activeStack.length === 0 || activeStack.every((t) => c.tech_stack.includes(t));
@@ -171,9 +172,17 @@ export default function Companies() {
                 </div>
               </div>
 
-                <p className="font-sans text-xs text-[#5a6070] leading-relaxed mb-4 flex-1 line-clamp-3">
+                <p className="font-sans text-xs text-[#5a6070] leading-relaxed mb-3 flex-1 line-clamp-3">
                   {co.about}
                 </p>
+
+                <div className="flex flex-wrap gap-1.5 mb-4" aria-label="Бизнес-направления">
+                  {(co.businessDomains || [co.industry]).slice(0, 4).map((domain) => (
+                    <span key={domain} className="font-mono text-[10px] px-2 py-0.5 rounded-sm bg-[rgba(0,212,255,0.06)] border border-[rgba(0,212,255,0.18)] text-[#7dcae0]">
+                      {domain}
+                    </span>
+                  ))}
+                </div>
 
                 {co.vacancyStatus === "external" && (
                   <div className="tag cyan-badge mb-4 self-start">вакансии на сайте компании</div>

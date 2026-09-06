@@ -44,6 +44,7 @@ export interface Company {
   industry: string;
   size: string;
   about: string;
+  businessDomains?: string[];
   founded?: string;
   hq?: string;
   tech_stack: string[];
@@ -54,6 +55,55 @@ export interface Company {
   hiringInsights: HiringInsight[];
   vacancyStatus?: "imported" | "external";
 }
+
+/** Curated company profiles used to turn the live vacancy registry into a useful catalogue. */
+export const COMPANY_PROFILES: Record<string, { about: string; businessDomains: string[]; industry: string }> = {
+  "Авиасейлс": { about: "Метапоиск авиабилетов и travel-tech сервисы для планирования поездок.", businessDomains: ["Travel tech", "Метапоиск", "Мобильные сервисы"], industry: "Travel tech" },
+  "Авито": { about: "Платформа объявлений, которая соединяет покупателей и продавцов и развивает сервисы для бизнеса.", businessDomains: ["Marketplace", "Финтех", "Логистика"], industry: "Marketplace" },
+  "2ГИС": { about: "Карты, навигация и справочник организаций с геосервисами для пользователей и бизнеса.", businessDomains: ["Карты и навигация", "Геоданные", "Реклама"], industry: "Maps" },
+  "Dodo Engineering": { about: "Технологическая команда Dodo Brands: продукты для ресторанов, доставки и управления сетью пиццерий.", businessDomains: ["Foodtech", "Доставка", "Retail tech"], industry: "Foodtech" },
+  "Точка Банк": { about: "Цифровой банк для предпринимателей и компаний с онлайн-финансами и бизнес-сервисами.", businessDomains: ["Fintech", "Банкинг", "B2B-сервисы"], industry: "Fintech" },
+  "Лаборатория Касперского": { about: "Международная компания по кибербезопасности: защита пользователей, бизнеса и инфраструктуры.", businessDomains: ["Кибербезопасность", "Антивирусы", "Threat intelligence"], industry: "Security" },
+  "Alfa Digital": { about: "Технологическая команда Альфа-Банка, создающая цифровые продукты и платформы для клиентов.", businessDomains: ["Fintech", "Банкинг", "Digital products"], industry: "Fintech" },
+  "Selectel": { about: "Провайдер облачной и выделенной IT-инфраструктуры: серверы, хранилища, базы данных и Kubernetes.", businessDomains: ["Cloud", "ЦОД и серверы", "Data platform"], industry: "Cloud" },
+  "Ozon": { about: "E-commerce-платформа с маркетплейсом, логистикой, финансовыми и рекламными сервисами.", businessDomains: ["E-commerce", "Marketplace", "Логистика", "Fintech"], industry: "E-commerce" },
+  "Райффайзен Банк": { about: "Банк с цифровыми продуктами для частных лиц и бизнеса: платежи, кредитование и инвестиции.", businessDomains: ["Fintech", "Банкинг", "Платежи"], industry: "Fintech" },
+  "Т-Банк": { about: "Онлайн-банк и финансовая экосистема с продуктами для частных лиц, бизнеса и инвестиций.", businessDomains: ["Fintech", "Банкинг", "Инвестиции", "E-commerce"], industry: "Fintech" },
+  "Lamoda": { about: "Онлайн-платформа моды и lifestyle с каталогом товаров, собственными сервисами и логистикой.", businessDomains: ["Fashion tech", "E-commerce", "Логистика"], industry: "E-commerce" },
+  "HeadHunter": { about: "Платформа поиска работы и подбора сотрудников, которая развивает HR-tech продукты для рынка труда.", businessDomains: ["HR tech", "Marketplace", "SaaS"], industry: "HR tech" },
+  "Бюро 1440": { about: "Космическая технологическая компания, создающая спутниковую связь и низкоорбитальную группировку.", businessDomains: ["Space tech", "Телеком", "Спутниковая связь"], industry: "Space tech" },
+  "Альфа-Банк": { about: "Универсальный частный банк с цифровыми продуктами для людей, предпринимателей и компаний.", businessDomains: ["Fintech", "Банкинг", "Платежи"], industry: "Fintech" },
+  "ВкусВилл": { about: "Розничная сеть продуктов питания с цифровыми сервисами, доставкой и собственной data-инфраструктурой.", businessDomains: ["Retail", "Foodtech", "Доставка"], industry: "Retail" },
+  "Positive Technologies": { about: "Разработчик решений для кибербезопасности, тестирования защищённости и мониторинга атак.", businessDomains: ["Кибербезопасность", "AppSec", "Threat intelligence"], industry: "Security" },
+  "Циан": { about: "Цифровая платформа для поиска недвижимости, сделок и сервисов вокруг рынка жилья.", businessDomains: ["Proptech", "Marketplace", "Финтех"], industry: "Proptech" },
+  "X5 Tech": { about: "Технологический центр X5 Group: цифровые продукты для магазинов, покупателей, логистики и аналитики.", businessDomains: ["Retail tech", "Логистика", "Data & AI"], industry: "Retail tech" },
+  "YADRO": { about: "Российский разработчик вычислительной техники, систем хранения данных и корпоративной IT-инфраструктуры.", businessDomains: ["Hardware", "Data storage", "Enterprise IT"], industry: "Enterprise IT" },
+  "S7 Airlines": { about: "Авиакомпания и travel-бизнес, развивающие цифровые сервисы для пассажиров и операционной деятельности.", businessDomains: ["Авиация", "Travel tech", "Логистика"], industry: "Travel tech" },
+  "Cloud.ru": { about: "Облачная платформа для бизнеса с инфраструктурой, данными и инструментами искусственного интеллекта.", businessDomains: ["Cloud", "AI/ML", "Data platform"], industry: "Cloud" },
+  "Контур": { about: "Разработчик сервисов для бизнеса: бухгалтерия, документооборот, отчётность и электронные коммуникации.", businessDomains: ["B2B SaaS", "Fintech", "ЭДО"], industry: "B2B SaaS" },
+  "BI.ZONE": { about: "Эксперт по кибербезопасности: защита бизнеса, реагирование на инциденты и антифрод.", businessDomains: ["Кибербезопасность", "Антифрод", "SOC"], industry: "Security" },
+  "Okko": { about: "Онлайн-кинотеатр и медиаплатформа с видеоконтентом, подпиской и собственными digital-продуктами.", businessDomains: ["Streaming", "Медиа", "Entertainment tech"], industry: "Media" },
+  "Nexign": { about: "Разработчик телеком-платформ и BSS-решений для операторов связи и цифровых сервисов.", businessDomains: ["Telecom", "BSS/OSS", "Enterprise software"], industry: "Telecom" },
+  "Axenix": { about: "IT-консалтинг и разработка корпоративных решений для данных, интеграции и цифровой трансформации.", businessDomains: ["IT consulting", "Data & AI", "Enterprise software"], industry: "IT consulting" },
+  "Северсталь": { about: "Металлургическая компания, которая применяет промышленную автоматизацию, аналитику и цифровые платформы.", businessDomains: ["Металлургия", "Industrial tech", "Data & AI"], industry: "Industry" },
+  "Яндекс": { about: "Технологическая компания с сервисами поиска, рекламы, облака, AI, транспорта, еды и электронной коммерции.", businessDomains: ["Search и реклама", "Cloud", "AI/ML", "Mobility", "E-commerce"], industry: "Tech" },
+  "Холдинг Т1": { about: "IT-холдинг, создающий интеграционные, облачные и инженерные решения для крупного бизнеса.", businessDomains: ["IT-интеграция", "Cloud", "Кибербезопасность"], industry: "Enterprise IT" },
+  "Росатом": { about: "Госкорпорация атомной отрасли с направлениями энергетики, инженерии, науки и цифровых продуктов.", businessDomains: ["Атомная энергетика", "Инжиниринг", "Industrial tech"], industry: "Industry" },
+  "Мир Plat.Form": { about: "Платёжная технологическая платформа для банков, бизнеса и цифровых финансовых сервисов.", businessDomains: ["Fintech", "Платежи", "B2B-сервисы"], industry: "Fintech" },
+  "Инфосистемы Джет": { about: "IT-интегратор и разработчик решений для инфраструктуры, данных, облаков и информационной безопасности.", businessDomains: ["IT-интеграция", "Data platform", "Кибербезопасность"], industry: "IT consulting" },
+  "СИБУР Цифровой": { about: "Цифровое направление СИБУРа: автоматизация производства, промышленная аналитика и корпоративные платформы.", businessDomains: ["Химическая промышленность", "Industrial tech", "Data & AI"], industry: "Industry" },
+  "Центр Финансовых Технологий": { about: "Разработчик банковского ПО и платёжных решений для финансовых организаций.", businessDomains: ["Fintech", "Банковское ПО", "Платежи"], industry: "Fintech" },
+  "IT_ONE": { about: "Технологическая компания, создающая корпоративные платформы, решения для данных и заказную разработку.", businessDomains: ["Enterprise IT", "Data & AI", "IT consulting"], industry: "Enterprise IT" },
+  "SberDevices": { about: "Команда устройств и голосовых технологий экосистемы Сбера: умный дом, ассистенты и consumer electronics.", businessDomains: ["AI/ML", "Умный дом", "Hardware"], industry: "Tech" },
+  "ecom.tech (ex. Samokat)": { about: "Технологическая команда e-commerce и быстрой доставки: клиентские продукты, dark store и логистика.", businessDomains: ["E-commerce", "Foodtech", "Логистика"], industry: "E-commerce" },
+  "SM Lab": { about: "Технологическое направление Спортмастера, развивающее цифровые продукты ритейла и омниканальные сервисы.", businessDomains: ["Retail tech", "E-commerce", "Логистика"], industry: "Retail tech" },
+  "ИнфоТеКС": { about: "Разработчик средств защиты информации, криптографии и доверенной IT-инфраструктуры.", businessDomains: ["Кибербезопасность", "Криптография", "Enterprise IT"], industry: "Security" },
+  "Норникель Спутник": { about: "Цифровая команда Норникеля, создающая промышленные, производственные и спутниковые технологии.", businessDomains: ["Mining tech", "Industrial tech", "Space tech"], industry: "Industry" },
+  "Лемана Тех": { about: "Технологическая команда ритейла товаров для дома и строительства: e-commerce, supply chain и магазины.", businessDomains: ["Retail tech", "E-commerce", "Supply chain"], industry: "Retail tech" },
+  "Сбер": { about: "Крупная финансовая и технологическая экосистема: банкинг, AI, облако, цифровые сервисы и устройства.", businessDomains: ["Fintech", "AI/ML", "Cloud", "Digital ecosystem"], industry: "Fintech" },
+  "АльфаСтрахование": { about: "Страховая компания с цифровыми продуктами для частных лиц и бизнеса.", businessDomains: ["Insurtech", "Fintech", "B2C-сервисы"], industry: "Insurtech" },
+  "Газпром нефть": { about: "Энергетическая компания с направлениями добычи, переработки, логистики и промышленной цифровизации.", businessDomains: ["Energy", "Industrial tech", "Логистика"], industry: "Energy" },
+};
 
 export interface CompanyReview {
   id: number;

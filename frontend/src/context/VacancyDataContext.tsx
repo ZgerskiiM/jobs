@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import type { Company, CompactVacancyFeatures, Job } from "../data";
+import { COMPANY_PROFILES, type Company, type CompactVacancyFeatures, type Job } from "../data";
 
 type SourceVacancy = {
   id: string | number;
@@ -227,6 +227,7 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
     const sourceJob = sourceByCompany.get(id);
     let site = item.career_url || sourceJob?.url || "#";
     const name = item.name;
+    const profile = COMPANY_PROFILES[name];
     const color = COLORS[hash(name) % COLORS.length];
     try { site = new URL(site).origin; } catch { /* keep the career URL when it is not a valid URL */ }
     return {
@@ -238,9 +239,10 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
       logo: initials(name),
       logoUrl: site === "#" ? undefined : remoteLogoUrl(site, name),
       color,
-      industry: "Работодатель",
+      industry: profile?.industry || "Работодатель",
       size: "",
-      about: companyJobs.length > 0 ? `${companyJobs.length} актуальных вакансий от работодателя.` : "Вакансии доступны на сайте компании.",
+      about: profile?.about || (companyJobs.length > 0 ? `${companyJobs.length} актуальных вакансий от работодателя.` : "Вакансии доступны на сайте компании."),
+      businessDomains: profile?.businessDomains || ["IT и цифровые продукты"],
       tech_stack: [...new Set(companyJobs.flatMap((job) => job.tags))].slice(0, 12),
       culture: [],
       perks: [],
@@ -257,6 +259,7 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
     .map(([id, companyJobs]) => {
       const first = companyJobs[0];
       const sourceJob = sourceByCompany.get(id);
+      const profile = COMPANY_PROFILES[first.company];
       let site = sourceJob?.url || "#";
       try { site = new URL(site).origin; } catch { /* source URL is already the best available value */ }
       return {
@@ -268,9 +271,10 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
         logo: first.logo,
         logoUrl: first.logoUrl,
         color: first.logoColor,
-        industry: "Работодатель",
+        industry: profile?.industry || "Работодатель",
         size: "",
-        about: `${companyJobs.length} актуальных вакансий от работодателя.`,
+        about: profile?.about || `${companyJobs.length} актуальных вакансий от работодателя.`,
+        businessDomains: profile?.businessDomains || ["IT и цифровые продукты"],
         tech_stack: [...new Set(companyJobs.flatMap((job) => job.tags))].slice(0, 12),
         culture: [], perks: [], rating: { overall: 0, wlb: 0, growth: 0, management: 0 }, reviews: [], hiringInsights: [],
         vacancyStatus: "imported" as const,
