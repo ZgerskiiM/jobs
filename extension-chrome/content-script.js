@@ -188,7 +188,9 @@
     host.setAttribute("aria-live", "polite");
     host.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;width:330px;background:#0e1018;border:1px solid rgba(51,255,119,.4);border-radius:4px;color:#e8eaf0;font:12px/1.45 Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)";
     const shadow = host.attachShadow({ mode: "open" });
-    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:#33ff77;font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(51,255,119,.5);border-radius:3px;background:#33ff77;color:#07080e;cursor:pointer;font:11px "Courier New",monospace}button.test-apply{border-color:rgba(0,212,255,.45);background:transparent;color:#00d4ff}button.secondary{display:inline-block;margin-left:8px;border-color:rgba(58,64,79,.7);background:transparent;color:#7d8494}button:disabled{cursor:wait;opacity:.5}button:focus-visible{outline:2px solid #00d4ff;outline-offset:2px}</style><section><strong>// jobs.dev</strong><p>Похоже, это страница вакансии. Заполнить форму данными активного резюме?</p><button class="accept" type="button">заполнить из jobs.dev →</button><button class="test-apply" data-jobs-dev-test-application="true" type="button">тест: отметить отклик (без отправки)</button><button class="secondary close" type="button">не сейчас</button></section>`;
+    const resumeOptions = resumes.map((resume) => `<option value="${String(resume.id).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"${resume.id === (account.resume?.id || resumes.find((item) => item.isActive)?.id) ? " selected" : ""}>${String(resume.position || resume.fileName || "Резюме").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</option>`).join("");
+    const resumePicker = resumes.length > 1 ? `<label class="resume-label" for="jobs-dev-resume-choice">резюме для заполнения</label><select id="jobs-dev-resume-choice" class="resume-choice">${resumeOptions}</select>` : "";
+    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:#33ff77;font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}.resume-label{display:block;margin-top:10px;color:#7d8494;font:10px "Courier New",monospace;text-transform:uppercase;letter-spacing:.06em}.resume-choice{display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:#07080e;color:#e8eaf0;font:11px "Courier New",monospace}button{display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(51,255,119,.5);border-radius:3px;background:#33ff77;color:#07080e;cursor:pointer;font:11px "Courier New",monospace}button.test-apply{border-color:rgba(0,212,255,.45);background:transparent;color:#00d4ff}button.secondary{display:inline-block;margin-left:8px;border-color:rgba(58,64,79,.7);background:transparent;color:#7d8494}button:disabled{cursor:wait;opacity:.5}button:focus-visible,select:focus-visible{outline:2px solid #00d4ff;outline-offset:2px}</style><section><strong>// jobs.dev</strong><p>${resumes.length > 1 ? `В профиле ${resumes.length} резюме. Выбери, чем заполнить форму.` : "Похоже, это страница вакансии. Заполнить форму данными активного резюме?"}</p>${resumePicker}<button class="accept" type="button">заполнить из jobs.dev →</button><button class="test-apply" data-jobs-dev-test-application="true" type="button">тест: отметить отклик (без отправки)</button><button class="secondary close" type="button">не сейчас</button></section>`;
     document.body.append(host);
     const accept = shadow.querySelector(".accept");
     const testApply = shadow.querySelector(".test-apply");
@@ -197,7 +199,8 @@
     accept.addEventListener("click", async () => {
       accept.disabled = true;
       accept.textContent = "получаем резюме...";
-      const result = await autofillFromOffer(account);
+      const choice = shadow.querySelector(".resume-choice");
+      const result = await autofillFromOffer(account, choice?.value || "");
       if (!result.ok) {
         accept.disabled = false;
         accept.textContent = "повторить заполнение →";
@@ -219,9 +222,9 @@
     });
   }
 
-  async function autofillFromOffer(account) {
+  async function autofillFromOffer(account, requestedResumeId = "") {
     const resumes = account?.resumes?.length ? account.resumes : account?.resume ? [account.resume] : [];
-    const resume = account?.resume || resumes.find((item) => item.isActive) || resumes[0];
+    const resume = resumes.find((item) => item.id === requestedResumeId) || account?.resume || resumes.find((item) => item.isActive) || resumes[0];
     if (!resume) return { ok: false, error: "В профиле jobs.dev пока нет резюме" };
     const preparedFile = await extensionApi.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, hasFile: resume.hasFile, fileName: resume.fileName });
     const response = await fillResume({

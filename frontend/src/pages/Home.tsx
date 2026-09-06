@@ -468,8 +468,10 @@ export default function Home() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                       </svg>
                     </button>
-                    <button
-                      onClick={() => user ? setApplyJob(job) : openAuthModal()}
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="px-3 py-1.5 font-mono text-xs rounded-sm transition-all"
                       style={{
                         background: "rgba(51,255,119,0.1)",
@@ -477,8 +479,8 @@ export default function Home() {
                         color: "#33ff77",
                       }}
                     >
-                      откликнуться →
-                    </button>
+                      откликнуться ↗
+                    </a>
                   </div>
                 </div>
               </div>
