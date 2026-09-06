@@ -29,3 +29,24 @@ test('candidate profile does not silently default an unrelated resume to Java', 
   assert.equal(profile.targetProfile, 'UNKNOWN');
   assert.equal(profile.targetRole, 'UNKNOWN');
 });
+
+test('reports vacancy requirements missing from the candidate resume', () => {
+  const result = engine.score({
+    targetRole: 'BACKEND',
+    targetSeniority: 'SENIOR',
+    experienceYears: 5,
+    requirements: [{ concept: 'JAVA', importance: 'MUST_HAVE' }],
+  }, {
+    vacancyId: 'fixture:missing-vacancy-requirements',
+    role: { primary: 'BACKEND', match: 1, confidence: 1 },
+    seniority: { level: 'SENIOR', confidence: 1 },
+    minExperienceYears: 3,
+    concepts: {
+      JAVA: { concept: 'JAVA', match: 1, contextMultiplier: 1, confidence: 1, mentions: 1 },
+      KAFKA: { concept: 'KAFKA', match: 1, contextMultiplier: 1, confidence: 1, mentions: 1 },
+      CLICKHOUSE: { concept: 'CLICKHOUSE', match: 1, contextMultiplier: 1, confidence: 1, mentions: 1 },
+    },
+    negativeSignals: [],
+  });
+  assert.deepEqual(result.vacancyMissing, ['KAFKA', 'CLICKHOUSE']);
+});

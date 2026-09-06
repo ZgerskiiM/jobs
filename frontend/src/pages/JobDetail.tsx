@@ -262,7 +262,6 @@ export default function JobDetail() {
             >
               откликнуться →
             </a>
-            <p className="font-sans text-[10px] text-[#3a404f] text-center">откроем страницу вакансии работодателя</p>
             {user && (
               <button
                 onClick={() => toggleSavedJob(job.id)}
@@ -292,9 +291,9 @@ export default function JobDetail() {
                 <div className="h-full rounded-full bg-[#33ff77]" style={{ width: `${vacancyScore.score}%` }} />
               </div>
               <div className="font-sans text-xs text-[#a0a7b5] leading-relaxed mb-3">{vacancyScore.summary}</div>
-              {vacancyScore.missingImportant.length > 0 && (
+              {(vacancyScore.vacancyMissing ?? []).length > 0 && (
                 <div className="font-mono text-[10px] text-[#fbbf24] leading-relaxed">
-                  не хватает: {vacancyScore.missingImportant.slice(0, 5).join(", ")}
+                  не хватает в резюме: {(vacancyScore.vacancyMissing ?? []).slice(0, 5).join(", ")}
                 </div>
               )}
               {vacancyScore.matched.length > 0 && (

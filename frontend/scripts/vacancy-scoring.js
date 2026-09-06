@@ -326,6 +326,28 @@ function scoringVacancyRequirementCoverage(profile, features) {
   return total && candidateConcepts.size ? covered / total : null
 }
 
+function scoringCandidateSupportsVacancyConcept(candidateConcepts, vacancyConcept) {
+  if (candidateConcepts.has(vacancyConcept)) return true
+  if ([...candidateConcepts].some((candidate) => vacancyConcept.startsWith(`${candidate}_`) && /_\d+$/.test(vacancyConcept))) return true
+  return [...candidateConcepts].some((candidate) => {
+    const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === candidate)
+    return (config?.related || []).some((item) => String(item.concept || '').toUpperCase() === vacancyConcept)
+  })
+}
+
+function scoringVacancyMissing(profile, features) {
+  const candidateConcepts = new Set((profile.requirements || []).map((item) => String(item.concept || '').toUpperCase()))
+  return Object.entries(features.concepts || {})
+    .filter(([concept, extracted]) => Number(extracted.match || 0) >= 0.5 && !scoringCandidateSupportsVacancyConcept(candidateConcepts, concept))
+    .map(([concept, extracted]) => {
+      const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === concept)
+      return { concept, weight: Number(config?.weight || 0), mentions: Number(extracted.mentions || 0) }
+    })
+    .filter((item) => item.weight >= 4)
+    .sort((left, right) => right.weight - left.weight || right.mentions - left.mentions || left.concept.localeCompare(right.concept))
+    .map((item) => item.concept)
+}
+
 function scoringConfidence(profile, features, coverage, experience, seniority) {
   const weights = SCORING_CONFIG.scoring?.componentWeights || {}
   let confidence = 0
@@ -418,6 +440,7 @@ function scoringScore(profile, features) {
   score = Math.max(0, Math.min(100, score))
   const confidence = scoringConfidence(profile, features, vacancyRequirementCoverage, experienceMatch, seniorityMatch)
   const eligibility = scoringEligibility(profile, features, gatesApplied)
+  const vacancyMissing = scoringVacancyMissing(profile, features)
   const band = (SCORING_CONFIG.outputBands || []).find((item) => score >= Number(item.min) && score <= Number(item.max)) || SCORING_CONFIG.outputBands?.at(-1) || { code: 'WEAK_MATCH', labelRu: 'Слабое совпадение' }
   return {
     vacancyId: features.vacancyId,
@@ -434,6 +457,7 @@ function scoringScore(profile, features) {
     matched,
     partialMatches,
     missingImportant,
+    vacancyMissing,
     negativeSignals,
     gatesApplied,
     experienceMatch,

@@ -41,6 +41,7 @@ export interface VacancyScore {
   matched: Array<{ required: string; found: string; coefficient: number }>;
   partialMatches: Array<{ required: string; found: string; coefficient: number }>;
   missingImportant: string[]; negativeSignals: Array<{ id: string; penalty: number; primaryRoleConflict: boolean; matchedText: string }>;
+  vacancyMissing?: string[];
   gatesApplied: Array<{ id: string; maxScore: number; reason: string }>;
   experienceMatch: { candidateYears: number | null; vacancyMinYears: number | null; coefficient: number | null };
   seniorityMatch: { candidate: string; vacancy: string; coefficient: number | null };
