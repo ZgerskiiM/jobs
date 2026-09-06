@@ -75,7 +75,8 @@ class Resume(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-is_active", "-updated_at", "-id"]
+        # Selecting an active resume must not reshuffle the user's list.
+        ordering = ["created_at", "id"]
 
 
 class Application(models.Model):

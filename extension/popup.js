@@ -38,7 +38,7 @@ function renderResumes() {
     return;
   }
   for (const resume of resumes) {
-    const label = resume.fullName || resume.position || resume.fileName || "Резюме";
+    const label = resume.position || resume.fileName || "Резюме";
     resumeSelect.add(new Option(label, resume.id));
   }
   const active = account.resume?.id || resumes.find((item) => item.isActive)?.id || resumes[0].id;
@@ -51,9 +51,13 @@ function renderResumes() {
 function updateMeta() {
   const resume = selectedResume();
   if (!resume) return;
-  const contacts = [resume.contactEmail, resume.contactPhone].filter(Boolean).join(" · ");
-  const fileStatus = resume.hasFile === false ? "файл отсутствует — загрузи заново в профиле" : "файл сохранён";
-  resumeMeta.textContent = [resume.position, resume.experience, contacts, fileStatus].filter(Boolean).join(" · ") || "данные готовы к подстановке";
+  if (resume.experienceYears != null) {
+    const years = Math.max(0, Math.floor(Number(resume.experienceYears)));
+    const months = resume.experienceMonths ?? Math.round((Number(resume.experienceYears) - years) * 12);
+    resumeMeta.textContent = months > 0 ? `${years} лет ${months} мес.` : `${years} лет`;
+  } else {
+    resumeMeta.textContent = resume.experience || "опыт не указан";
+  }
 }
 
 async function fetchAccount() {

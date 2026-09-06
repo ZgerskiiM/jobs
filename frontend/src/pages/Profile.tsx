@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, Link } from "react-router";
 import { useAuth, OnboardingData, UserSettings, ResumeSkill, type ResumeData, type ResumeTargetRole } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
+import LogoBadge from "../components/LogoBadge";
 import { type Job } from "../data";
 import { useVacancyData } from "../context/VacancyDataContext";
 import { accountApi } from "../api";
@@ -86,6 +87,13 @@ function SavedBadge() {
       сохранено
     </span>
   );
+}
+
+function resumeExperienceLabel(item: Pick<ResumeData, "experience" | "experienceYears" | "experienceMonths">) {
+  if (item.experienceYears == null) return item.experience || "опыт не найден";
+  const years = Math.max(0, Math.floor(item.experienceYears));
+  const months = item.experienceMonths ?? Math.round((item.experienceYears - years) * 12);
+  return months > 0 ? `${years} лет ${months} мес.` : `${years} лет`;
 }
 
 export default function Profile() {
@@ -222,12 +230,12 @@ export default function Profile() {
     }
   };
 
-  const handleDeleteResume = async () => {
-    if (!resumeData) return;
-    if (!window.confirm(`Удалить резюме «${resumeData.fileName}»?`)) return;
+  const handleDeleteResume = async (target: ResumeData | null = resumeData) => {
+    if (!target) return;
+    if (!window.confirm(`Удалить резюме «${target.position || target.fileName}»?`)) return;
     setResumeError(null);
     try {
-      await deleteResume(resumeData.id);
+      await deleteResume(target.id);
       setShowMatches(false);
     } catch (requestError) {
       setResumeError(requestError instanceof Error ? requestError.message : "Не удалось удалить резюме");
@@ -547,19 +555,26 @@ export default function Profile() {
               </div>
               <div className="divide-y divide-[rgba(51,255,119,0.05)]">
                 {resumes.map((item) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    aria-pressed={item.id === resumeData?.id}
-                    onClick={() => { setResumeError(null); void selectResume(item.id); }}
-                    className={`w-full text-left px-4 py-3 flex items-center justify-between gap-4 transition-colors ${item.id === resumeData?.id ? "bg-[rgba(51,255,119,0.07)]" : "bg-[#0e1018] hover:bg-[#141620]"}`}
-                  >
-                    <span className="min-w-0">
+                  <div key={item.id} className={`px-4 py-3 flex items-center gap-3 transition-colors ${item.id === resumeData?.id ? "bg-[rgba(51,255,119,0.07)]" : "bg-[#0e1018]"}`}>
+                    <button
+                      type="button"
+                      aria-pressed={item.id === resumeData?.id}
+                      onClick={() => { setResumeError(null); void selectResume(item.id); }}
+                      className="min-w-0 flex-1 text-left py-1 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#33ff77]"
+                    >
                       <span className={`block truncate font-sans text-sm ${item.id === resumeData?.id ? "text-white" : "text-[#e8eaf0]"}`}>{item.position || item.fileName}</span>
-                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{item.source === "hh" ? "HH.ru" : item.fileName} · {item.targetRole === "DEVOPS" ? "DevOps / SRE" : item.targetRole === "ONE_C_DEVELOPER" ? "1С-разработчик" : item.targetRole === "JAVA_BACKEND" ? "Java Backend" : "специализация не определена"} · {item.experience || "опыт не найден"} · {item.hasFile === false ? "файл отсутствует" : "файл сохранён"}</span>
-                    </span>
+                      <span className="block truncate font-mono text-[10px] text-[#5a6070] mt-0.5">{resumeExperienceLabel(item)}</span>
+                    </button>
                     <span className={`font-mono text-[10px] shrink-0 ${item.id === resumeData?.id ? "text-[#33ff77]" : "text-[#3a404f]"}`}>{item.id === resumeData?.id ? "активно" : "выбрать"}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteResume(item)}
+                      aria-label={`Удалить резюме ${item.position || item.fileName}`}
+                      className="font-mono text-[10px] text-[#5a6070] hover:text-[#ff3e78] transition-colors min-h-11 px-2 shrink-0"
+                    >
+                      удалить
+                    </button>
+                  </div>
                 ))}
               </div>
               <div className="px-4 py-3 bg-[#0a0b12] flex flex-wrap items-center gap-3">
@@ -628,7 +643,7 @@ export default function Profile() {
                   <div>
                     <div className="font-sans text-sm text-white font-medium">{resumeData.position || "Резюме загружено"}</div>
                     <div className="font-mono text-xs text-[#5a6070]">
-                      {[resumeData.fileName, resumeData.source === "hh" ? "импортировано с HH.ru" : resumeData.uploadedAt, resumeData.experience && `${resumeData.experience} опыта`, resumeData.hasFile === false ? "файл отсутствует — загрузи заново" : "файл сохранён"].filter(Boolean).join(" · ")}
+                      {[resumeData.fileName, resumeData.source === "hh" ? "импортировано с HH.ru" : resumeData.uploadedAt, `${resumeExperienceLabel(resumeData)} опыта`, resumeData.hasFile === false ? "файл отсутствует — загрузи заново" : "файл сохранён"].filter(Boolean).join(" · ")}
                     </div>
                     {resumeData.sourceUrl && <a href={resumeData.sourceUrl} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-[#00d4ff] hover:text-white">открыть на HH.ru ↗</a>}
                   </div>
@@ -915,12 +930,7 @@ export default function Profile() {
             .map((job) => (
               <div key={job.id} className="card-surface rounded-sm px-5 py-4 flex items-center gap-4 group">
                 <Link to={`/jobs/${job.id}`} className="shrink-0">
-                  <div
-                    className="w-10 h-10 flex items-center justify-center rounded font-mono font-medium shrink-0 text-sm"
-                    style={{ background: `${job.logoColor}18`, border: `1px solid ${job.logoColor}40`, color: job.logoColor }}
-                  >
-                    {job.logo}
-                  </div>
+                  <LogoBadge logo={job.logo} logoUrl={job.logoUrl} color={job.logoColor} className="w-10 h-10 rounded text-sm" loading="lazy" />
                 </Link>
                 <Link to={`/jobs/${job.id}`} className="flex-1 min-w-0">
                   <div className="font-sans font-semibold text-sm text-[#e8eaf0] group-hover:text-white transition-colors">{job.title}</div>

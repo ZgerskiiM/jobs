@@ -96,7 +96,11 @@ function AppCard({
 
       {/* Main info */}
       <div className="flex items-start gap-3 px-5 pt-4 pb-3">
-        <LogoBadge logo={app.logo} color={app.color} />
+        <LogoBadge
+          logo={app.logo || linkedJob?.logo || app.company.slice(0, 2).toUpperCase()}
+          logoUrl={linkedJob?.logoUrl}
+          color={app.color || linkedJob?.logoColor || "#33ff77"}
+        />
 
         <div className="flex-1 min-w-0">
           {/* Title row */}

@@ -9,7 +9,7 @@ import zipfile
 
 
 SUPPORTED_RESUME_SUFFIXES = {".pdf", ".docx"}
-RESUME_ANALYSIS_VERSION = 3
+RESUME_ANALYSIS_VERSION = 4
 
 # Keep the output stable even when candidates use an alias or a different case.
 # The list is intentionally explicit: extracting arbitrary capitalised words
@@ -111,6 +111,7 @@ _POSITION_TERMS = re.compile(
     re.IGNORECASE,
 )
 _EXPERIENCE_RE = re.compile(r"(?<!\d)(\d{1,2}(?:[.,]\d+)?)\s*(лет|года|год|years?|yrs?)\b", re.IGNORECASE)
+_EXPERIENCE_MONTHS_RE = re.compile(r"(?<!\d)(\d{1,2})\s*(?:месяц(?:а|ев)?|months?)\b", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"(?<![\w.+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}(?![\w.-])", re.IGNORECASE)
 _PHONE_RE = re.compile(r"(?<!\w)(?:\+?\s*[78])(?:[^\d\n]{0,4}\d){9,10}(?!\w)")
 _TELEGRAM_URL_RE = re.compile(r"(?:https?://)?(?:www\.)?t\.me/([A-Z0-9_]{5,32})", re.IGNORECASE)
@@ -286,6 +287,28 @@ def extract_experience(text: str) -> str:
     return f"{value} {unit}"
 
 
+def extract_experience_duration(text: str) -> tuple[float | None, int | None]:
+    """Return total experience as years and the explicit remaining months."""
+    source_lines = [
+        line
+        for line in text.splitlines()
+        if re.search(r"(?:опыт|experience)", line, re.IGNORECASE)
+    ]
+    source = "\n".join(source_lines) if source_lines else "\n".join(
+        line
+        for line in text.splitlines()
+        if not re.search(r"(?:мужчин|женщин|родил|born|возраст)", line, re.IGNORECASE)
+    )
+    year_match = _EXPERIENCE_RE.search(source)
+    if not year_match:
+        return None, None
+    years = float(year_match.group(1).replace(",", "."))
+    tail = source[year_match.end(): year_match.end() + 40]
+    month_match = _EXPERIENCE_MONTHS_RE.search(tail)
+    months = int(month_match.group(1)) if month_match else 0
+    return round(years + months / 12, 2), (months or None)
+
+
 def extract_position(text: str) -> str:
     for raw_line in text.splitlines()[:30]:
         line = re.sub(r"\s+", " ", raw_line).strip(" -•\t")
@@ -299,9 +322,12 @@ def extract_position(text: str) -> str:
 def analyze_resume(data: bytes, filename: str) -> dict[str, object]:
     suffix = Path(filename).suffix.casefold()
     text = extract_resume_text(data, suffix)
+    experience_years, experience_months = extract_experience_duration(text)
     return {
         "analysisVersion": RESUME_ANALYSIS_VERSION,
         "experience": extract_experience(text),
+        "experienceYears": experience_years,
+        "experienceMonths": experience_months,
         "position": extract_position(text),
         "fullName": extract_full_name(text, filename),
         "contactEmail": extract_email(text),

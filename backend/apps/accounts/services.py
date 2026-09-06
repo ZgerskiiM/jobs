@@ -118,7 +118,7 @@ def resume_payload(record: Resume) -> dict:
 def get_resume_records(user: User, profile: Profile | None = None) -> list[Resume]:
     profile = profile or get_profile(user)
     ensure_legacy_resume_record(profile)
-    return list(Resume.objects.filter(user=user))
+    return list(Resume.objects.filter(user=user).order_by("created_at", "id"))
 
 
 def get_active_resume_record(user: User, profile: Profile | None = None) -> Resume | None:

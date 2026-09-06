@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 32" role="img" aria-label="jobs.dev">
+  <rect width="128" height="32" rx="3" fill="#07080e"/>
+  <path d="M11 8l7 8-7 8" fill="none" stroke="#33ff77" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="27" y="21" fill="#e8eaf0" font-family="Courier New, monospace" font-size="15">jobs<tspan fill="#33ff77">.dev</tspan></text>
+</svg>

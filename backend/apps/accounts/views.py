@@ -228,7 +228,7 @@ class ExtensionApplicationView(APIView):
             "status": "sent",
             "updatedDaysAgo": 0,
             "deadline": "",
-            "note": "Отклик отправлен через расширение jobs.dev",
+            "note": "",
             "contact": "",
             "tags": vacancy.get("technologies") or [],
             "timeline": [{"date": applied_at, "label": "Отклик отправлен через расширение"}],
@@ -462,7 +462,7 @@ class ResumeView(APIView):
                 target.file.delete(save=False)
             target.delete()
             if was_active:
-                next_record = Resume.objects.filter(user=request.user).first()
+                next_record = Resume.objects.filter(user=request.user).order_by("created_at", "id").first()
                 if next_record:
                     next_record.is_active = True
                     next_record.save(update_fields=["is_active", "updated_at"])

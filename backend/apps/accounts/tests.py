@@ -235,9 +235,10 @@ class AccountApiTests(TestCase):
         self.assertEqual({skill["name"] for skill in skills}, {"Go", "Kubernetes", "PostgreSQL", "JavaScript", "GCP"})
 
     def test_experience_ignores_age_and_prefers_work_experience(self):
-        from .resume_parser import extract_experience
+        from .resume_parser import extract_experience, extract_experience_duration
 
         self.assertEqual(extract_experience("Мужчина, 23 года\nОпыт работы — 4 года 3 месяца"), "4 года")
+        self.assertEqual(extract_experience_duration("Мужчина, 23 года\nОпыт работы — 4 года 3 месяца"), (4.25, 3))
 
     def test_old_resume_analysis_is_refreshed_when_account_is_loaded(self):
         from django.core.files.base import ContentFile
@@ -257,7 +258,7 @@ class AccountApiTests(TestCase):
 
         payload = account_payload(user)
 
-        self.assertEqual(payload["resume"]["analysisVersion"], 3)
+        self.assertEqual(payload["resume"]["analysisVersion"], 4)
         self.assertEqual(payload["resume"]["position"], "Java Backend Developer")
         self.assertEqual(payload["resume"]["experience"], "4 года")
         self.assertEqual({skill["name"] for skill in payload["resume"]["skills"]}, {"Java", "Spring", "Spring Boot", "PostgreSQL"})
