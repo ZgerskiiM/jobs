@@ -16,6 +16,7 @@ Python и frontend на pull request, а после push в `main` собира�
 - `DEPLOY_USER` — пользователь с доступом к Docker без sudo;
 - `DEPLOY_PATH` — каталог проекта на сервере, например `/opt/jobs-dev-staging`;
 - `DEPLOY_URL` — внешний HTTPS-адрес стенда.
+- `DEPLOY_MODE` — `http` для временного запуска по IP:8080 или `https` для домена с Caddy;
 
 В тот же Environment добавьте Secrets:
 
@@ -28,6 +29,11 @@ Python и frontend на pull request, а после push в `main` собира�
 migration/restart через `deploy/remote-deploy.sh`. После этого каждый push в `main`
 будет выкладывать новый стенд, а `workflow_dispatch` позволит запустить выкладку
 вручную.
+
+Для временного стенда без домена используйте `DEPLOY_MODE=http` и
+`DEPLOY_URL=http://<server-ip>:8080`. В этом режиме Caddy и TLS не запускаются;
+web-контейнер публикуется напрямую на порту 8080. После появления домена переключите
+режим на `https`, укажите HTTPS-адрес и подготовьте настройки Caddy.
 
 ## GitLab CI/CD
 

@@ -5,15 +5,31 @@ set -euo pipefail
 : "${WEB_IMAGE:?WEB_IMAGE is required}"
 
 ENV_FILE="${ENV_FILE:-deploy/.env}"
-COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml)
+DEPLOY_MODE="${DEPLOY_MODE:-https}"
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml)
+SERVICES=(db redis api worker web)
+
+case "$DEPLOY_MODE" in
+  http)
+    echo "Deploying HTTP staging on the web container port."
+    ;;
+  https)
+    COMPOSE+=( -f docker-compose.prod.yml )
+    SERVICES+=( caddy )
+    ;;
+  *)
+    echo "DEPLOY_MODE must be http or https." >&2
+    exit 1
+    ;;
+esac
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE on the deployment host." >&2
   exit 1
 fi
 
-"${COMPOSE[@]}" pull db redis api worker web caddy
-"${COMPOSE[@]}" up -d --no-build db redis api worker web caddy
+"${COMPOSE[@]}" pull "${SERVICES[@]}"
+"${COMPOSE[@]}" up -d --no-build "${SERVICES[@]}"
 
 for attempt in $(seq 1 30); do
   if "${COMPOSE[@]}" exec -T api python manage.py check >/dev/null 2>&1; then

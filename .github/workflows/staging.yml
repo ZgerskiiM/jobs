@@ -111,6 +111,7 @@ jobs:
       DEPLOY_USER: ${{ vars.DEPLOY_USER }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+      DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'http' }}
       IMAGE_NAMESPACE: ${{ needs.publish.outputs.image_namespace }}
       IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
     steps:
@@ -157,7 +158,7 @@ jobs:
           remote="$DEPLOY_USER@$DEPLOY_HOST"
           api_image="$IMAGE_NAMESPACE/api:$IMAGE_TAG"
           web_image="$IMAGE_NAMESPACE/web:$IMAGE_TAG"
-          ssh "$remote" "cd '$DEPLOY_PATH' && API_IMAGE='$api_image' WEB_IMAGE='$web_image' bash deploy/remote-deploy.sh"
+          ssh "$remote" "cd '$DEPLOY_PATH' && DEPLOY_MODE='$DEPLOY_MODE' API_IMAGE='$api_image' WEB_IMAGE='$web_image' bash deploy/remote-deploy.sh"
 
       - name: Smoke test
         run: |
