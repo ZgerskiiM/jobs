@@ -91,7 +91,11 @@ class ExtensionDownloadView(APIView):
 
     def get(self, request, browser="firefox"):
         archive_name, download_name = self.archives.get(browser, self.archives["firefox"])
-        archive = settings.BASE_DIR.parent / archive_name
+        # The Docker image stores the archives in /app (BASE_DIR), while local
+        # development keeps them next to the backend directory.
+        archive = settings.BASE_DIR / archive_name
+        if not archive.is_file():
+            archive = settings.BASE_DIR.parent / archive_name
         if not archive.is_file():
             raise Http404("Архив расширения не найден")
         return FileResponse(
