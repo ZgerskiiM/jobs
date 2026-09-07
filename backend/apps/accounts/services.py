@@ -216,7 +216,7 @@ def telegram_oidc_validate_id_token(id_token: str, *, nonce: str) -> dict[str, o
     algorithm = header.get("alg")
     if algorithm not in {"RS256", "ES256", "EdDSA", "ES256K"}:
         raise ValueError("Неподдерживаемый алгоритм подписи Telegram")
-    signing_key = jwt.PyJWKClient(settings.TELEGRAM_OIDC_JWKS_URL).get_signing_key_from_jwt(id_token)
+    signing_key = jwt.PyJWKClient(settings.TELEGRAM_OIDC_JWKS_URL, timeout=15).get_signing_key_from_jwt(id_token)
     claims = jwt.decode(
         id_token,
         signing_key.key,
