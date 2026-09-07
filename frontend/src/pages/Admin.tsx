@@ -55,7 +55,7 @@ export default function Admin() {
       <div className="flex items-end justify-between gap-4 flex-wrap mb-10">
         <div>
           <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-3">// контроль проекта</div>
-          <h1 className="font-mono text-3xl md:text-5xl text-white font-medium leading-tight">Статистика<br /><span className="text-[#33ff77] neon-glow">jobs.dev</span></h1>
+          <h1 className="font-mono text-3xl md:text-5xl text-white font-medium leading-tight">Статистика<br /><span className="text-white">de<span className="text-[#33ff77] neon-glow">vv</span>er</span></h1>
         </div>
         {stats && <div className="font-mono text-[10px] text-[#5a6070]">обновлено {new Date(stats.snapshotAt).toLocaleString("ru-RU")}</div>}
       </div>

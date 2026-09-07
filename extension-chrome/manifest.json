@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "jobs.dev — быстрый отклик для Chrome",
-  "version": "0.4.7",
-  "description": "Заполняет формы отклика и отмечает отправленные отклики в jobs.dev.",
+  "name": "devver — быстрый отклик для Chrome",
+  "version": "0.4.8",
+  "description": "Заполняет формы отклика и отмечает отправленные отклики в devver.",
   "permissions": [
     "activeTab",
     "tabs",
     "scripting"
   ],
   "action": {
-    "default_title": "Заполнить отклик из jobs.dev",
+    "default_title": "Заполнить отклик из devver",
     "default_popup": "popup.html"
   },
   "content_scripts": [

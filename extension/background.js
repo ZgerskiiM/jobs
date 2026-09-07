@@ -1,5 +1,5 @@
 const extensionApi = globalThis.browser || globalThis.chrome;
-const API_ORIGIN = "http://139.100.233.153:8080";
+const API_ORIGIN = "https://devver.ru";
 const CHUNK_SIZE = 256 * 1024;
 const pendingFiles = new Map();
 const API_TIMEOUT_MS = 8000;
@@ -23,11 +23,11 @@ extensionApi.runtime.onMessage.addListener(async (message) => {
     try {
       const response = await fetchWithTimeout(`${API_ORIGIN}/api/auth/me/`, { credentials: "include" });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) return { ok: false, error: body.message || "Войди в jobs.dev в этом браузере" };
+      if (!response.ok) return { ok: false, error: body.message || "Войди в devver в этом браузере" };
       return { ok: true, account: body };
     } catch (error) {
-      if (error?.name === "AbortError") return { ok: false, error: "jobs.dev не ответил вовремя — нажми «проверить авторизацию» ещё раз" };
-      return { ok: false, error: "Не удалось загрузить профиль jobs.dev" };
+      if (error?.name === "AbortError") return { ok: false, error: "devver не ответил вовремя — нажми «проверить авторизацию» ещё раз" };
+      return { ok: false, error: "Не удалось загрузить профиль devver" };
     }
   }
 
@@ -48,8 +48,8 @@ extensionApi.runtime.onMessage.addListener(async (message) => {
       if (!response.ok) return { ok: false, error: body.message || ("Не удалось сохранить отклик (HTTP " + response.status + ")") };
       return { ok: true, ...body };
     } catch (error) {
-      if (error?.name === "AbortError") return { ok: false, error: "jobs.dev не ответил вовремя — отклик можно добавить вручную" };
-      return { ok: false, error: "Не удалось связаться с jobs.dev — отклик можно добавить вручную" };
+      if (error?.name === "AbortError") return { ok: false, error: "devver не ответил вовремя — отклик можно добавить вручную" };
+      return { ok: false, error: "Не удалось связаться с devver — отклик можно добавить вручную" };
     }
   }
 
@@ -57,15 +57,15 @@ extensionApi.runtime.onMessage.addListener(async (message) => {
     if (!message.resumeId || message.source === "hh" || message.hasFile === false) return { ok: false, error: "У этого резюме нет сохранённого файла — загрузи его заново в профиле" };
     try {
       const response = await fetchWithTimeout(`${API_ORIGIN}/api/profile/resume/file/?id=${encodeURIComponent(message.resumeId)}`, { credentials: "include" }, 15000);
-      if (!response.ok) return { ok: false, error: `Не удалось получить файл с jobs.dev (HTTP ${response.status})` };
+      if (!response.ok) return { ok: false, error: `Не удалось получить файл с devver (HTTP ${response.status})` };
       const requestId = crypto.randomUUID();
       const bytes = new Uint8Array(await response.arrayBuffer());
       pendingFiles.set(requestId, { bytes, fileName: message.fileName || "resume.pdf", type: response.headers.get("content-type") || "application/pdf" });
       expireFile(requestId);
       return { ok: true, requestId, size: bytes.byteLength };
     } catch (error) {
-      if (error?.name === "AbortError") return { ok: false, error: "jobs.dev не ответил вовремя — повтори заполнение" };
-      return { ok: false, error: "Не удалось получить файл с jobs.dev" };
+      if (error?.name === "AbortError") return { ok: false, error: "devver не ответил вовремя — повтори заполнение" };
+      return { ok: false, error: "Не удалось получить файл с devver" };
     }
   }
 

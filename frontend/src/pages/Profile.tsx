@@ -117,7 +117,7 @@ export default function Profile() {
   const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
   const [extensionDownloading, setExtensionDownloading] = useState<"firefox" | "chrome" | null>(null);
-  const [extensionPickerOpen, setExtensionPickerOpen] = useState(false);
+  const [extensionBrowser, setExtensionBrowser] = useState<"firefox" | "chrome">("chrome");
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const resumeFileRef = useRef<HTMLInputElement>(null);
@@ -149,7 +149,6 @@ export default function Profile() {
   const openResumePicker = () => resumeFileRef.current?.click();
 
   const handleExtensionDownload = async (browser: "firefox" | "chrome") => {
-    setExtensionPickerOpen(false);
     setExtensionError(null);
     setExtensionDownloading(browser);
     try {
@@ -571,23 +570,24 @@ export default function Profile() {
                 <div className="font-sans text-sm text-[#e8eaf0]">Расширение готово к установке</div>
                 <div className="font-mono text-[10px] text-[#5a6070] mt-1">{extensionVersion ? `актуальная версия ${extensionVersion}` : "проверяем актуальную версию..."}</div>
               </div>
-              <button type="button" onClick={() => setExtensionPickerOpen(true)} disabled={extensionDownloading !== null} className="px-5 py-2.5 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
+              <div className="flex items-center gap-2 flex-wrap">
+                <label htmlFor="extension-browser" className="sr-only">Браузер для расширения</label>
+                <select
+                  id="extension-browser"
+                  value={extensionBrowser}
+                  onChange={(event) => setExtensionBrowser(event.target.value as "firefox" | "chrome")}
+                  disabled={extensionDownloading !== null}
+                  className="min-h-11 bg-[#07080e] border border-[rgba(0,212,255,0.35)] rounded-sm px-3 font-mono text-xs text-[#e8eaf0] focus:border-[#00d4ff] focus:outline-none disabled:opacity-40"
+                >
+                  <option value="chrome">Chrome</option>
+                  <option value="firefox">Firefox / Zen</option>
+                </select>
+                <button type="button" onClick={() => void handleExtensionDownload(extensionBrowser)} disabled={extensionDownloading !== null} className="px-5 py-2.5 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
                 {extensionDownloading ? "готовим архив..." : "скачать расширение →"}
-              </button>
+                </button>
+              </div>
             </div>
             {extensionError && <div role="alert" className="px-5 pb-4 bg-[#0e1018] font-sans text-xs text-[#ff3e78]">{extensionError}</div>}
-            {extensionPickerOpen && (
-              <div className="px-5 pb-5 bg-[#0e1018]" role="dialog" aria-label="Выбор браузера для расширения">
-                <div className="border-t border-[rgba(0,212,255,0.1)] pt-4">
-                  <div className="font-mono text-[10px] text-[#5a6070] uppercase tracking-wider mb-3">выбери браузер</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button type="button" onClick={() => void handleExtensionDownload("chrome")} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] transition-all">Chrome</button>
-                    <button type="button" onClick={() => void handleExtensionDownload("firefox")} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] transition-all">Firefox / Zen</button>
-                    <button type="button" onClick={() => setExtensionPickerOpen(false)} className="px-3 py-2 min-h-11 font-mono text-xs text-[#5a6070] hover:text-[#e8eaf0] transition-colors">отмена</button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
           {resumeNotice && (
             <div role="status" className="mb-5 border border-[rgba(51,255,119,0.25)] bg-[rgba(51,255,119,0.06)] rounded-sm px-4 py-3 flex items-center justify-between gap-4">

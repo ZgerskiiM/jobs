@@ -1,16 +1,16 @@
 {
   "manifest_version": 2,
-  "name": "jobs.dev — быстрый отклик",
-  "version": "0.4.7",
-  "description": "Заполняет формы отклика и отмечает отправленные отклики в jobs.dev.",
+  "name": "devver — быстрый отклик",
+  "version": "0.4.8",
+  "description": "Заполняет формы отклика и отмечает отправленные отклики в devver.",
   "permissions": [
     "activeTab",
     "tabs",
     "<all_urls>",
-    "http://139.100.233.153:8080/*"
+    "https://devver.ru/*"
   ],
   "browser_action": {
-    "default_title": "Заполнить отклик из jobs.dev",
+    "default_title": "Заполнить отклик из devver",
     "default_popup": "popup.html"
   },
   "content_scripts": [

@@ -244,7 +244,7 @@ export default function ImportStep() {
         {/* Logo */}
         <div className="flex items-center gap-2 mb-8">
           <span className="font-mono text-[#33ff77] font-medium neon-glow">{">"}</span>
-          <span className="font-mono text-white font-medium">jobs<span className="text-[#33ff77]">.dev</span></span>
+          <span className="font-mono text-white font-medium">de<span className="text-[#33ff77]">vv</span>er</span>
         </div>
 
         <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-2">// импорт данных</div>

@@ -63,7 +63,7 @@
 
   function attachFile(input, bytes, fileName, type) {
     if (!input) return { ok: false, reason: "на странице не найдено поле для файла" };
-    if (!bytes) return { ok: false, reason: "расширение не получило файл с jobs.dev" };
+    if (!bytes) return { ok: false, reason: "расширение не получило файл с devver" };
     let transfer;
     let eventSent = false;
     try {
@@ -117,7 +117,7 @@
     host.setAttribute("aria-live", "polite");
     host.style.cssText = "position:fixed;right:18px;top:18px;z-index:2147483647;width:310px;background:#0e1018;border:1px solid rgba(51,255,119,.35);border-radius:4px;color:#e8eaf0;font:12px/1.45 Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)";
     const shadow = host.attachShadow({ mode: "open" });
-    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:${success ? "#33ff77" : "#ff3e78"};font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{margin-top:10px;padding:6px 9px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:transparent;color:#7d8494;cursor:pointer;font:11px "Courier New",monospace}button:hover{color:#e8eaf0;border-color:#33ff77}</style><section><strong>${success ? "// jobs.dev" : "// ошибка"}</strong><p>${message}</p><button type="button">закрыть</button></section>`;
+      shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:${success ? "#33ff77" : "#ff3e78"};font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{margin-top:10px;padding:6px 9px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:transparent;color:#7d8494;cursor:pointer;font:11px "Courier New",monospace}button:hover{color:#e8eaf0;border-color:#33ff77}</style><section><strong>${success ? "// devver" : "// ошибка"}</strong><p>${message}</p><button type="button">закрыть</button></section>`;
     shadow.querySelector("button").addEventListener("click", () => host.remove());
     document.body.append(host);
     window.setTimeout(() => host.remove(), 9000);
@@ -152,14 +152,14 @@
     if (!testOnly) lastTrackedSubmission = fingerprint;
     const result = await extensionApi.runtime.sendMessage({ type: "track-application", ...metadata, submittedAt: new Date().toISOString() });
     if (!result?.ok) {
-      const message = result?.error || "Отклик отправлен, но не удалось сохранить его в jobs.dev.";
+      const message = result?.error || "Отклик отправлен, но не удалось сохранить его в devver.";
       if (!testOnly) showPanel(message, false);
       return { ok: false, error: message };
     }
     if (result.matched) {
-      showPanel((testOnly ? "Тестовый отклик отмечен в jobs.dev: «" : "Отклик сохранён в jobs.dev: «") + (result.application?.title || metadata.title) + "». Открой раздел «Активность», чтобы отслеживать статус.");
+      showPanel((testOnly ? "Тестовый отклик отмечен в devver: «" : "Отклик сохранён в devver: «") + (result.application?.title || metadata.title) + "». Открой раздел «Активность», чтобы отслеживать статус.");
     } else {
-      const message = result.message || "Вакансия не найдена в каталоге jobs.dev — добавь её вручную.";
+      const message = result.message || "Вакансия не найдена в каталоге devver — добавь её вручную.";
       showPanel(testOnly ? "Тестовый отклик не сохранён: " + message : "Отклик отправлен. " + message, false);
     }
     return { ok: true, matched: Boolean(result.matched), application: result.application };
@@ -191,7 +191,7 @@
     const activeResumeId = String(account.resume?.id || resumes.find((item) => item.isActive)?.id || "");
     const resumeOptions = resumes.map((resume) => `<option value="${String(resume.id).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"${String(resume.id) === activeResumeId ? " selected" : ""}>${String(resume.position || resume.fileName || "Резюме").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</option>`).join("");
     const resumePicker = resumes.length > 1 ? `<label class="resume-label" for="jobs-dev-resume-choice">резюме для заполнения</label><select id="jobs-dev-resume-choice" class="resume-choice">${resumeOptions}</select>` : "";
-    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:#33ff77;font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}.resume-label{display:block;margin-top:10px;color:#7d8494;font:10px "Courier New",monospace;text-transform:uppercase;letter-spacing:.06em}.resume-choice{display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:#07080e;color:#e8eaf0;font:11px "Courier New",monospace}button{display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(51,255,119,.5);border-radius:3px;background:#33ff77;color:#07080e;cursor:pointer;font:11px "Courier New",monospace}button.test-apply{border-color:rgba(0,212,255,.45);background:transparent;color:#00d4ff}button.secondary{display:inline-block;margin-left:8px;border-color:rgba(58,64,79,.7);background:transparent;color:#7d8494}button:disabled{cursor:wait;opacity:.5}button:focus-visible,select:focus-visible{outline:2px solid #00d4ff;outline-offset:2px}</style><section><strong>// jobs.dev</strong><p>${resumes.length > 1 ? `В профиле ${resumes.length} резюме. Выбери, чем заполнить форму.` : "Похоже, это страница вакансии. Заполнить форму данными активного резюме?"}</p>${resumePicker}<button class="accept" type="button">заполнить из jobs.dev →</button><button class="test-apply" data-jobs-dev-test-application="true" type="button">тест: отметить отклик (без отправки)</button><button class="secondary close" type="button">не сейчас</button></section>`;
+    shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:#33ff77;font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}.resume-label{display:block;margin-top:10px;color:#7d8494;font:10px "Courier New",monospace;text-transform:uppercase;letter-spacing:.06em}.resume-choice{display:block;width:100%;margin-top:4px;padding:7px 8px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:#07080e;color:#e8eaf0;font:11px "Courier New",monospace}button{display:block;margin-top:10px;padding:8px 10px;border:1px solid rgba(51,255,119,.5);border-radius:3px;background:#33ff77;color:#07080e;cursor:pointer;font:11px "Courier New",monospace}button.test-apply{border-color:rgba(0,212,255,.45);background:transparent;color:#00d4ff}button.secondary{display:inline-block;margin-left:8px;border-color:rgba(58,64,79,.7);background:transparent;color:#7d8494}button:disabled{cursor:wait;opacity:.5}button:focus-visible,select:focus-visible{outline:2px solid #00d4ff;outline-offset:2px}</style><section><strong>// devver</strong><p>${resumes.length > 1 ? `В профиле ${resumes.length} резюме. Выбери, чем заполнить форму.` : "Похоже, это страница вакансии. Заполнить форму данными активного резюме?"}</p>${resumePicker}<button class="accept" type="button">заполнить из devver →</button><button class="test-apply" data-jobs-dev-test-application="true" type="button">тест: отметить отклик (без отправки)</button><button class="secondary close" type="button">не сейчас</button></section>`;
     document.body.append(host);
     const accept = shadow.querySelector(".accept");
     const testApply = shadow.querySelector(".test-apply");
@@ -226,7 +226,7 @@
   async function autofillFromOffer(account, requestedResumeId = "") {
     const resumes = account?.resumes?.length ? account.resumes : account?.resume ? [account.resume] : [];
     const resume = resumes.find((item) => String(item.id) === String(requestedResumeId)) || account?.resume || resumes.find((item) => item.isActive) || resumes[0];
-    if (!resume) return { ok: false, error: "В профиле jobs.dev пока нет резюме" };
+    if (!resume) return { ok: false, error: "В профиле devver пока нет резюме" };
     const preparedFile = await extensionApi.runtime.sendMessage({ type: "prepare-file", resumeId: resume.id, source: resume.source, hasFile: resume.hasFile, fileName: resume.fileName });
     const response = await fillResume({
       type: "fill-resume",

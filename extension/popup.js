@@ -14,7 +14,7 @@ const profileLink = document.getElementById("profile-link");
 let activeTab = null;
 let account = null;
 async function loadApiOrigin() {
-  profileLink.href = "http://139.100.233.153:8080/profile";
+  profileLink.href = "https://devver.ru/profile";
 }
 
 function setResult(message, kind = "") {
@@ -34,7 +34,7 @@ function renderResumes() {
     resumeSelect.add(new Option("сначала загрузите резюме", ""));
     resumeSelect.disabled = true;
     fillButton.disabled = true;
-    resumeMeta.textContent = "В профиле jobs.dev пока нет резюме.";
+    resumeMeta.textContent = "В профиле devver пока нет резюме.";
     return;
   }
   for (const resume of resumes) {
@@ -62,7 +62,7 @@ function updateMeta() {
 
 async function fetchAccount() {
   const response = await api.runtime.sendMessage({ type: "get-account" });
-  if (!response?.ok) throw new Error(response?.error || "Войди в jobs.dev в этом браузере");
+  if (!response?.ok) throw new Error(response?.error || "Войди в devver в этом браузере");
   return response.account;
 }
 
@@ -70,11 +70,11 @@ function showAuthState(error = "") {
   account = null;
   authPanel.hidden = false;
   resumePanel.hidden = true;
-  resumeSelect.replaceChildren(new Option("войдите в jobs.dev", ""));
+  resumeSelect.replaceChildren(new Option("войдите в devver", ""));
   resumeSelect.disabled = true;
   resumeMeta.textContent = "";
   fillButton.disabled = true;
-  pageStatus.textContent = error || "Войди в jobs.dev, чтобы использовать резюме";
+  pageStatus.textContent = error || "Войди в devver, чтобы использовать резюме";
   pageStatus.className = "muted";
 }
 
@@ -93,7 +93,7 @@ async function checkAuthorization() {
   try {
     showAccountState(await fetchAccount());
   } catch (error) {
-    showAuthState(error instanceof Error ? error.message : "Войди в jobs.dev в этом браузере");
+    showAuthState(error instanceof Error ? error.message : "Войди в devver в этом браузере");
   } finally {
     checkAuthButton.disabled = false;
     checkAuthButton.textContent = "я уже вошёл — проверить";
@@ -129,7 +129,7 @@ async function fillCurrentPage() {
 
 resumeSelect.addEventListener("change", updateMeta);
 fillButton.addEventListener("click", () => void fillCurrentPage());
-loginButton.addEventListener("click", () => void api.tabs.create({ url: "http://139.100.233.153:8080/?extension_login=1" }));
+loginButton.addEventListener("click", () => void api.tabs.create({ url: "https://devver.ru/?extension_login=1" }));
 checkAuthButton.addEventListener("click", () => void checkAuthorization());
 
 async function init() {

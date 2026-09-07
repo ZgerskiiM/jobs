@@ -56,7 +56,7 @@ export default function AuthModal() {
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-[rgba(51,255,119,0.08)]">
             <div>
-              <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-1">// jobs.dev</div>
+              <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-1">// devver</div>
               <h2 className="font-mono text-lg text-white font-medium">
                 {step === "choose" ? "Вход / регистрация" : (isLogin ? "Вход" : "Регистрация")}
               </h2>

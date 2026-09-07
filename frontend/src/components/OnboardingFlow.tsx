@@ -86,7 +86,7 @@ export default function OnboardingFlow() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(51,255,119,0.08)]">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[#33ff77] font-medium">{">"}</span>
-          <span className="font-mono text-white font-medium text-sm">jobs<span className="text-[#33ff77]">.dev</span></span>
+          <span className="font-mono text-white font-medium text-sm">de<span className="text-[#33ff77]">vv</span>er</span>
         </div>
         <button
           onClick={skipOnboarding}

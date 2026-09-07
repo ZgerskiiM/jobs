@@ -107,7 +107,7 @@ function AppCard({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               {linkedJob ? (
-                <Link to={`/jobs/${linkedJob.id}`} className="font-sans font-semibold text-sm text-[#e8eaf0] hover:text-[#33ff77] transition-colors" title="открыть вакансию на jobs.dev">
+                <Link to={`/jobs/${linkedJob.id}`} className="font-sans font-semibold text-sm text-[#e8eaf0] hover:text-[#33ff77] transition-colors" title="открыть вакансию на devver">
                   {app.title}
                 </Link>
               ) : (

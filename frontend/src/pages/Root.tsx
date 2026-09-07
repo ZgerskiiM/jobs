@@ -38,7 +38,7 @@ export default function Root() {
           <NavLink to="/" className="flex items-center gap-2">
             <span className="font-mono text-[#33ff77] text-lg font-medium neon-glow">{">"}</span>
             <span className="font-mono text-white font-medium tracking-tight">
-              jobs<span className="text-[#33ff77]">.dev</span>
+              de<span className="text-[#33ff77]">vv</span>er
             </span>
           </NavLink>
 
@@ -205,7 +205,7 @@ export default function Root() {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="font-mono text-[#33ff77] font-medium">{">"}</span>
-              <span className="font-mono text-white font-medium">jobs<span className="text-[#33ff77]">.dev</span></span>
+              <span className="font-mono text-white font-medium">de<span className="text-[#33ff77]">vv</span>er</span>
             </div>
             <p className="font-sans text-xs text-[#3a404f] max-w-xs">
               Вакансии напрямую от технологических компаний.<br />
@@ -251,7 +251,7 @@ export default function Root() {
           </div>
         </div>
         <div className="w-full max-w-7xl mx-auto px-6 py-4 border-t border-[rgba(51,255,119,0.05)] flex items-center justify-between">
-          <span className="font-mono text-xs text-[#3a404f]">© 2024 jobs.dev</span>
+          <span className="font-mono text-xs text-[#3a404f]">© 2024 devver</span>
           <span className="font-mono text-xs text-[#3a404f]">made for tech people</span>
         </div>
       </footer>
