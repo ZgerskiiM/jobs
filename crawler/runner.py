@@ -47,7 +47,7 @@ def run_once() -> None:
     # the shared volume consumed by nginx and Django.
     subprocess.run(["python", "job_tracker.py", "--db", str(DB_PATH), "export", "--output", str(ROOT / "data/jobs.csv")], check=True)
     subprocess.run(["python", "job_tracker.py", "--db", str(DB_PATH), "site-data", "--output", str(ROOT / "data/vacancies.js")], check=True)
-    subprocess.run(["node", "frontend/scripts/prepare-vacancy-data.mjs"], cwd=ROOT / "frontend", check=True)
+    subprocess.run(["node", "scripts/prepare-vacancy-data.mjs"], cwd=ROOT / "frontend", check=True)
     report = ROOT / "frontend/public/vacancy-refresh.json"
     subprocess.run(["python", "job_tracker.py", "--db", str(DB_PATH), "refresh-report", "--output", str(report)], check=True)
 
