@@ -3276,7 +3276,7 @@ def main(argv: list[str] | None = None) -> int:
         initialize_telegram_cursor(args.db, args.force)
         return 0
     if args.command in {"telegram-notify", "telegram-digest", "telegram-test", "telegram-notify-users"}:
-        token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        token = (os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_AUTH_BOT_TOKEN", "")).strip()
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         dry_run = bool(getattr(args, "dry_run", False))
         if not dry_run and not token:

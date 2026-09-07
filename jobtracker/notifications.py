@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -63,6 +64,9 @@ def matches_filter(job: sqlite3.Row, settings: dict[str, Any]) -> bool:
     if selected and not any(value.casefold() in selected for value in technologies): return False
     selected_filter = settings.get("filter") or {}
     haystack = " ".join(text_value(job[key]) for key in ("company", "title", "location", "team", "workplace_type", "description")).casefold()
+    title_choices = [text_value(item).casefold() for item in selected_filter.get("titleKeywords", []) if item]
+    if title_choices and not any(choice in text_value(job["title"]).casefold() for choice in title_choices):
+        return False
     for key, value in (
         ("keywords", haystack),
         ("companies", text_value(job["company"]).casefold()),
@@ -73,7 +77,46 @@ def matches_filter(job: sqlite3.Row, settings: dict[str, Any]) -> bool:
     ):
         choices = [text_value(item).casefold() for item in selected_filter.get(key, []) if item]
         if choices and not any(choice in value for choice in choices): return False
+    minimum = settings.get("matchScore")
+    if minimum:
+        try:
+            if settings.get("relevanceScore") is None or float(settings["relevanceScore"]) < float(minimum):
+                return False
+        except (TypeError, ValueError):
+            return False
     return True
+
+
+def _score_events_for_subscriber(events: list[sqlite3.Row], subscriber: dict[str, Any]) -> dict[str, float]:
+    """Use the same JS scorer as the site for a subscriber's active resume."""
+    account = subscriber.get("scoringAccount")
+    if not account or not events:
+        return {}
+    script = Path(__file__).resolve().parents[1] / "frontend" / "scripts" / "scoring-api.mjs"
+    if not script.is_file():
+        return {}
+    items = [{
+        "id": f"{event['source_key']}:{event['external_id']}",
+        "title": event["title"] or "",
+        "description": event["description"] or "",
+        "posted_at": event["posted_at"] if "posted_at" in event.keys() else "",
+    } for event in events]
+    try:
+        completed = subprocess.run(
+            ["node", str(script)], input=json.dumps({"account": account, "items": items, "compact": True}, ensure_ascii=False),
+            text=True, encoding="utf-8", capture_output=True, timeout=90,
+            cwd=script.parents[2], check=True,
+        )
+        payload = json.loads(completed.stdout)
+        scores = {}
+        for result in payload.get("scores", []):
+            vacancy_id = str(result.get("vacancyId", ""))
+            if vacancy_id.startswith("catalog:"):
+                scores[vacancy_id[len("catalog:"):]] = float(result.get("score", 0))
+        return scores
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        print(f"Telegram: не удалось рассчитать релевантность для подписчика: {exc}", file=sys.stderr)
+        return {}
 
 
 def send_new(db_path: Path, token: str, chat_id: str, settings: dict[str, Any], dry_run: bool, sender: Callable[..., None], printer: Callable[[str], None]) -> int:
@@ -114,16 +157,26 @@ def send_new_to_subscribers(
     cursor = int(state["value"])
     events = db.execute("""
         SELECT e.id, e.source_key, e.external_id, e.event_type, j.company, j.title, j.location,
-               j.team, j.workplace_type, j.description, j.url
+               j.team, j.workplace_type, j.description, j.url, j.posted_at
         FROM events e LEFT JOIN jobs j ON j.source_key=e.source_key AND j.external_id=e.external_id
         WHERE e.id > ? AND e.event_type = 'new' ORDER BY e.id
     """, (cursor,)).fetchall()
     sent = matched = failed = 0
     site_origin = site_url.rstrip("/")
+    score_cache: dict[str, dict[str, float]] = {}
     for event in events:
         for subscriber in subscribers:
             chat_id = str(subscriber.get("chatId") or "")
-            if not chat_id or not matches_filter(event, {"filter": subscriber.get("filter") or {}}):
+            selected_filter = subscriber.get("filter") or {}
+            minimum = selected_filter.get("minMatchScore") or 0
+            relevance_score = None
+            if minimum:
+                cache_key = json.dumps(subscriber.get("scoringAccount") or {}, ensure_ascii=False, sort_keys=True)
+                if cache_key not in score_cache:
+                    score_cache[cache_key] = _score_events_for_subscriber(events, subscriber)
+                event_key = f"{event['source_key']}:{event['external_id']}"
+                relevance_score = score_cache[cache_key].get(event_key)
+            if not chat_id or not matches_filter(event, {"filter": selected_filter, "matchScore": minimum, "relevanceScore": relevance_score}):
                 continue
             matched += 1
             delivery = db.execute("SELECT status FROM telegram_deliveries WHERE event_id=? AND chat_id=?", (event["id"], chat_id)).fetchone()
@@ -131,6 +184,8 @@ def send_new_to_subscribers(
                 continue
             vacancy_url = f"{site_origin}/jobs/{site_job_id(event['source_key'], event['external_id'])}"
             message = f"🆕 <b>Новая вакансия</b>\n\n<b>{html.escape(event['company'] or 'Компания')}</b>\n{html.escape(event['title'] or 'Без названия')}\n\n<a href=\"{html.escape(vacancy_url, quote=True)}\">Открыть на jobs.dev</a>"
+            if relevance_score is not None:
+                message = message.replace("\n\n<a href", f"\n🎯 Релевантность резюме: <b>{relevance_score:.0f}%</b>\n\n<a href")
             try:
                 if dry_run:
                     printer(f"[{chat_id}] {message}")

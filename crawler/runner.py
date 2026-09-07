@@ -58,7 +58,25 @@ def run_once() -> None:
         temporary = SHARED / f".{target_name}.tmp"
         shutil.copyfile(source, temporary)
         os.replace(temporary, SHARED / target_name)
+    notify_telegram()
     print(f"[crawler] published catalog in {time.monotonic() - started:.1f}s", flush=True)
+
+
+def notify_telegram() -> None:
+    """Send only events from this pass when Telegram integration is configured."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_AUTH_BOT_TOKEN")
+    sync_token = os.getenv("TELEGRAM_SYNC_TOKEN")
+    subscribers_url = os.getenv("TELEGRAM_SUBSCRIBERS_URL", "http://api:8000/api/integrations/telegram/subscribers/")
+    site_url = os.getenv("TELEGRAM_SITE_URL", "https://devver.ru")
+    if not token or not sync_token:
+        print("[crawler] Telegram notifications skipped: credentials are not configured", flush=True)
+        return
+    result = subprocess.run(
+        ["python", "job_tracker.py", "--db", str(DB_PATH), "telegram-notify-users",
+         "--subscribers-url", subscribers_url, "--sync-token", sync_token, "--site-url", site_url],
+        check=False,
+    )
+    print(f"[crawler] Telegram notifications exited with code {result.returncode}", flush=True)
 
 
 def seconds_until_next_run() -> float:

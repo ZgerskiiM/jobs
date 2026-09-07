@@ -171,6 +171,8 @@ class AccountApiTests(TestCase):
             "telegramEnabled": True,
             "newJobs": True,
             "telegramKeywords": ["backend"],
+            "telegramTitleKeywords": ["java"],
+            "telegramMinMatchScore": 70,
         })
         profile.onboarding = {"roles": ["backend"], "levels": [], "formats": []}
         profile.save(update_fields=["settings", "onboarding", "updated_at"])
@@ -179,6 +181,9 @@ class AccountApiTests(TestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["subscribers"][0]["chatId"], "777")
         self.assertEqual(response.data["subscribers"][0]["filter"]["keywords"], ["backend"])
+        self.assertEqual(response.data["subscribers"][0]["filter"]["titleKeywords"], ["java"])
+        self.assertEqual(response.data["subscribers"][0]["filter"]["minMatchScore"], 70)
+        self.assertIn("scoringAccount", response.data["subscribers"][0])
 
     def test_email_registration_and_profile_patch_persist(self):
         client = APIClient()

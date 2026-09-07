@@ -115,17 +115,33 @@ class TelegramSubscribersView(APIView):
             if not notification.get("telegramEnabled") or not notification.get("newJobs"):
                 continue
             onboarding = profile.onboarding if isinstance(profile.onboarding, dict) else {}
+            active_record = get_active_resume_record(user, profile)
+            resume = active_record.data if active_record and isinstance(active_record.data, dict) else {}
+            resume, _ = normalize_resume_scoring_profile(resume)
+            scoring_resume = {
+                "position": resume.get("position", ""),
+                "skills": resume.get("skills", []),
+                "experienceYears": resume.get("experienceYears"),
+                "targetRole": resume.get("targetRole", "UNKNOWN"),
+            }
+            try:
+                min_match_score = max(0, min(100, float(notification.get("telegramMinMatchScore", 0) or 0)))
+            except (TypeError, ValueError):
+                min_match_score = 0
             subscribers.append({
                 "chatId": user.telegram_id,
                 "filter": {
                     "keywords": notification.get("telegramKeywords") or [],
+                    "titleKeywords": notification.get("telegramTitleKeywords") or [],
                     "companies": notification.get("telegramCompanies") or [],
                     "locations": notification.get("telegramLocations") or [],
                     "technologies": notification.get("telegramTechnologies") or [],
                     "roles": onboarding.get("roles") or [],
                     "levels": onboarding.get("levels") or [],
                     "formats": [value for value in (onboarding.get("formats") or []) if value != "any"],
+                    "minMatchScore": min_match_score,
                 },
+                "scoringAccount": {"resume": scoring_resume, "onboarding": onboarding},
             })
         return Response({"subscribers": subscribers, "count": len(subscribers), "generatedAt": timezone.now().isoformat()})
 

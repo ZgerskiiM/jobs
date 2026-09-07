@@ -23,9 +23,11 @@ DEFAULT_SETTINGS = {
         "companyActivity": False,
         "telegramEnabled": False,
         "telegramKeywords": [],
+        "telegramTitleKeywords": [],
         "telegramCompanies": [],
         "telegramLocations": [],
         "telegramTechnologies": [],
+        "telegramMinMatchScore": 0,
     },
     "account": {
         "profileVisible": True,

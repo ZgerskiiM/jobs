@@ -42,7 +42,7 @@ const FORMATS = [
   { id: "any", label: "Не важно", sub: "смотрю всё" },
 ];
 
-type Tab = "preferences" | "resume" | "saved" | "settings";
+type Tab = "preferences" | "resume" | "saved" | "telegram" | "settings";
 
 function TagToggle({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -269,11 +269,25 @@ export default function Profile() {
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [telegramFilters, setTelegramFilters] = useState({
+    titleKeywords: (settings.notifications.telegramTitleKeywords ?? []).join(", "),
     keywords: (settings.notifications.telegramKeywords ?? []).join(", "),
     companies: (settings.notifications.telegramCompanies ?? []).join(", "),
     locations: (settings.notifications.telegramLocations ?? []).join(", "),
     technologies: (settings.notifications.telegramTechnologies ?? []).join(", "),
+    minMatchScore: String(settings.notifications.telegramMinMatchScore ?? 0),
   });
+
+  useEffect(() => {
+    setLocalSettings(settings);
+    setTelegramFilters({
+      titleKeywords: (settings.notifications.telegramTitleKeywords ?? []).join(", "),
+      keywords: (settings.notifications.telegramKeywords ?? []).join(", "),
+      companies: (settings.notifications.telegramCompanies ?? []).join(", "),
+      locations: (settings.notifications.telegramLocations ?? []).join(", "),
+      technologies: (settings.notifications.telegramTechnologies ?? []).join(", "),
+      minMatchScore: String(settings.notifications.telegramMinMatchScore ?? 0),
+    });
+  }, [settings]);
 
   // Account form state
   const [editingName, setEditingName] = useState(false);
@@ -328,10 +342,12 @@ export default function Profile() {
       ...localSettings,
       notifications: {
         ...localSettings.notifications,
+        telegramTitleKeywords: split(telegramFilters.titleKeywords),
         telegramKeywords: split(telegramFilters.keywords),
         telegramCompanies: split(telegramFilters.companies),
         telegramLocations: split(telegramFilters.locations),
         telegramTechnologies: split(telegramFilters.technologies),
+        telegramMinMatchScore: Math.max(0, Math.min(100, Number(telegramFilters.minMatchScore) || 0)),
       },
     });
     setSettingsDirty(false);
@@ -364,6 +380,7 @@ export default function Profile() {
     { id: "preferences", label: "Предпочтения" },
     { id: "resume", label: "Резюме" },
     { id: "saved", label: "Сохранённые" },
+    { id: "telegram", label: "Telegram" },
     { id: "settings", label: "Настройки" },
   ];
 
@@ -983,6 +1000,65 @@ export default function Profile() {
         </div>
       )}
 
+      {/* ── TELEGRAM ── */}
+      {tab === "telegram" && (
+        <div className="space-y-8 max-w-2xl">
+          <div>
+            <div className="flex items-start justify-between gap-5 mb-2">
+              <div>
+                <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest mb-2">// telegram-канал</div>
+                <h2 className="font-mono text-xl text-white">Новые вакансии в Telegram</h2>
+              </div>
+              <Toggle label="Новые вакансии в Telegram" on={Boolean(localSettings.notifications.telegramEnabled)} onChange={(v) => patchNotif("telegramEnabled", v)} />
+            </div>
+            <p className="font-sans text-xs text-[#5a6070]">
+              {user.telegram ? `Сообщения будут приходить в Telegram ${user.telegram}.` : "Сначала войди через Telegram, чтобы бот мог отправлять сообщения."}
+            </p>
+            <p className="font-mono text-[10px] text-[#3a404f] mt-2">Роли, грейд и формат из вкладки «Предпочтения» тоже учитываются.</p>
+          </div>
+
+          <div className="border border-[rgba(0,212,255,0.2)] bg-[rgba(0,212,255,0.035)] rounded-sm p-5 space-y-5">
+            <div>
+              <div className="font-mono text-[10px] text-[#00d4ff] uppercase tracking-wider mb-1">// фильтры</div>
+              <div className="font-sans text-sm text-[#e8eaf0]">Что присылать</div>
+              <div className="font-mono text-[10px] text-[#5a6070] mt-1">Все поля необязательны. Несколько значений разделяй запятыми.</div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {([
+                ["titleKeywords", "Слова в названии", "Java, backend, аналитик"],
+                ["companies", "Компании", "Яндекс, Ozon"],
+                ["locations", "Города", "Москва, удалённо"],
+                ["technologies", "Технологии", "Java, Kafka, PostgreSQL"],
+                ["keywords", "Слова в описании", "микросервисы, highload"],
+              ] as const).map(([key, label, placeholder]) => (
+                <label key={key} className="block">
+                  <span className="font-mono text-[10px] text-[#5a6070] uppercase tracking-wider">{label}</span>
+                  <input
+                    value={telegramFilters[key]}
+                    onChange={(event) => patchTelegramFilter(key, event.target.value)}
+                    placeholder={placeholder}
+                    className="mt-1 w-full bg-[#07080e] border border-[rgba(58,64,79,0.55)] rounded-sm px-3 py-2 font-mono text-xs text-[#e8eaf0] placeholder:text-[#3a404f] focus:border-[#00d4ff] focus:outline-none"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="border-t border-[rgba(0,212,255,0.12)] pt-4">
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <label htmlFor="telegram-min-score" className="font-sans text-sm text-[#e8eaf0]">Минимальная релевантность резюме</label>
+                <span className="font-mono text-sm text-[#33ff77]">{Number(telegramFilters.minMatchScore) > 0 ? `${telegramFilters.minMatchScore}%` : "без порога"}</span>
+              </div>
+              <input id="telegram-min-score" type="range" min="0" max="100" step="5" value={telegramFilters.minMatchScore} onChange={(event) => patchTelegramFilter("minMatchScore", event.target.value)} className="w-full accent-[#33ff77]" />
+              <div className="flex justify-between font-mono text-[10px] text-[#3a404f] mt-1"><span>любое совпадение</span><span>только сильные совпадения</span></div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 pt-2 border-t border-[rgba(51,255,119,0.08)]">
+            <button onClick={handleSaveSettings} disabled={!settingsDirty} className="px-6 py-2.5 font-mono text-sm rounded-sm transition-all disabled:opacity-30" style={{ background: settingsDirty ? "#33ff77" : "rgba(51,255,119,0.1)", color: settingsDirty ? "#07080e" : "#33ff77", border: "1px solid rgba(51,255,119,0.4)" }}>сохранить настройки Telegram</button>
+            {settingsSaved && <SavedBadge />}
+          </div>
+        </div>
+      )}
+
       {/* ── SETTINGS ── */}
       {tab === "settings" && (
         <div className="space-y-10 max-w-lg">
@@ -1013,37 +1089,6 @@ export default function Profile() {
               ))}
             </div>
 
-            <div className="mt-5 border border-[rgba(0,212,255,0.2)] bg-[rgba(0,212,255,0.035)] rounded-sm p-5">
-              <div className="flex items-center justify-between gap-4 mb-2">
-                <div>
-                  <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// telegram-канал</div>
-                  <div className="font-sans text-sm text-[#e8eaf0] mt-2">Новые вакансии после каждого обновления</div>
-                </div>
-                <Toggle label="Новые вакансии в Telegram" on={Boolean(localSettings.notifications.telegramEnabled)} onChange={(v) => patchNotif("telegramEnabled", v)} />
-              </div>
-              <p className="font-sans text-xs text-[#5a6070] mb-4">
-                {user.telegram ? `Сообщения будут приходить в Telegram ${user.telegram}.` : "Сначала войди через Telegram, чтобы бот мог отправлять сообщения."}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {([
-                  ["keywords", "Ключевые слова", "java, backend, kafka"],
-                  ["technologies", "Технологии", "Java, Python, Docker"],
-                  ["companies", "Компании", "Яндекс, Ozon"],
-                  ["locations", "Города", "Москва, удалённо"],
-                ] as const).map(([key, label, placeholder]) => (
-                  <label key={key} className="block">
-                    <span className="font-mono text-[10px] text-[#5a6070] uppercase tracking-wider">{label}</span>
-                    <input
-                      value={telegramFilters[key]}
-                      onChange={(event) => patchTelegramFilter(key, event.target.value)}
-                      placeholder={placeholder}
-                      className="mt-1 w-full bg-[#07080e] border border-[rgba(58,64,79,0.55)] rounded-sm px-3 py-2 font-mono text-xs text-[#e8eaf0] placeholder:text-[#3a404f] focus:border-[#00d4ff] focus:outline-none"
-                    />
-                  </label>
-                ))}
-              </div>
-              <div className="font-mono text-[10px] text-[#3a404f] mt-3">через запятую · пустое поле не ограничивает выдачу · применяются только новые вакансии</div>
-            </div>
           </div>
 
           {/* Privacy */}

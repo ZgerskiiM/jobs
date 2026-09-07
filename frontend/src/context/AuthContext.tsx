@@ -10,9 +10,11 @@ export interface NotificationSettings {
   companyActivity: boolean;
   telegramEnabled?: boolean;
   telegramKeywords?: string[];
+  telegramTitleKeywords?: string[];
   telegramCompanies?: string[];
   telegramLocations?: string[];
   telegramTechnologies?: string[];
+  telegramMinMatchScore?: number;
 }
 export interface AccountSettings { profileVisible: boolean; showSalaryExpectation: boolean; }
 export interface UserSettings { notifications: NotificationSettings; account: AccountSettings; }
@@ -40,7 +42,7 @@ interface AuthState {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false, telegramEnabled: false, telegramKeywords: [], telegramCompanies: [], telegramLocations: [], telegramTechnologies: [] },
+  notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false, telegramEnabled: false, telegramKeywords: [], telegramTitleKeywords: [], telegramCompanies: [], telegramLocations: [], telegramTechnologies: [], telegramMinMatchScore: 0 },
   account: { profileVisible: true, showSalaryExpectation: false },
 };
 const AuthContext = createContext<AuthState | null>(null);
