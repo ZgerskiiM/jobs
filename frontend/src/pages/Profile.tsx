@@ -392,7 +392,7 @@ export default function Profile() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
+    <div className="w-full max-w-7xl mx-auto px-6 py-12">
       {/* Header — no avatar */}
       <div className="flex items-start justify-between gap-6 mb-10">
         <div>

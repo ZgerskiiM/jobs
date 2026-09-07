@@ -34,7 +34,7 @@ export default function Root() {
   return (
     <div className="min-h-full bg-[#07080e] text-[#e8eaf0] font-sans grid-bg">
       <nav className="sticky top-0 z-40 border-b border-[rgba(51,255,119,0.1)] bg-[rgba(7,8,14,0.92)] backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
+        <div className="w-full max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
           <NavLink to="/" className="flex items-center gap-2">
             <span className="font-mono text-[#33ff77] text-lg font-medium neon-glow">{">"}</span>
             <span className="font-mono text-white font-medium tracking-tight">
@@ -201,7 +201,7 @@ export default function Root() {
       <Outlet />
 
       <footer className="border-t border-[rgba(51,255,119,0.08)] mt-4">
-        <div className="max-w-7xl mx-auto px-6 py-10 flex flex-col md:flex-row items-start justify-between gap-8">
+        <div className="w-full max-w-7xl mx-auto px-6 py-10 flex flex-col md:flex-row items-start justify-between gap-8">
           <div>
             <div className="flex items-center gap-2 mb-3">
               <span className="font-mono text-[#33ff77] font-medium">{">"}</span>
@@ -250,7 +250,7 @@ export default function Root() {
             ))}
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-6 py-4 border-t border-[rgba(51,255,119,0.05)] flex items-center justify-between">
+        <div className="w-full max-w-7xl mx-auto px-6 py-4 border-t border-[rgba(51,255,119,0.05)] flex items-center justify-between">
           <span className="font-mono text-xs text-[#3a404f]">© 2024 jobs.dev</span>
           <span className="font-mono text-xs text-[#3a404f]">made for tech people</span>
         </div>
