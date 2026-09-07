@@ -123,8 +123,8 @@ jobs:
       DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DEPLOY_USER }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      DEPLOY_URL: ${{ vars.DEPLOY_URL }}
-      DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'http' }}
+      DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://devver.ru' }}
+      DEPLOY_MODE: ${{ vars.DEPLOY_MODE || 'https' }}
       IMAGE_NAMESPACE: ${{ needs.publish.outputs.image_namespace }}
       IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
       CRAWLER_IMAGE: ${{ needs.publish.outputs.crawler_image }}
