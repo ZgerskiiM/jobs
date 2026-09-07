@@ -205,14 +205,25 @@ def send_new_to_subscribers(
 
 
 def send_digest(db_path: Path, token: str, chat_id: str, settings: dict[str, Any], limit: int, offset: int, dry_run: bool, sender: Callable[..., None], printer: Callable[[str], None]) -> int:
-    db = connect_db(db_path); rows = db.execute("SELECT company, title, location, team, workplace_type, description, url FROM jobs WHERE active=1 AND stale=0 ORDER BY first_seen_at DESC, company, title").fetchall(); db.close()
-    selected = [row for row in rows if matches_filter(row, settings)][max(0, offset):max(0, offset) + max(1, limit)]
+    db = connect_db(db_path); rows = db.execute("SELECT source_key, external_id, company, title, location, team, workplace_type, description, posted_at FROM jobs WHERE active=1 AND stale=0 ORDER BY first_seen_at DESC, company, title").fetchall(); db.close()
+    selected_filter = settings.get("filter") or {}
+    base_settings = {"filter": {key: value for key, value in selected_filter.items() if key != "minMatchScore"}}
+    candidates = [row for row in rows if matches_filter(row, base_settings)]
+    minimum = selected_filter.get("minMatchScore") or 0
+    score_map = _score_events_for_subscriber(candidates, settings) if minimum and settings.get("scoringAccount") else {}
+    if minimum:
+        candidates = [row for row in candidates if score_map.get(f"{row['source_key']}:{row['external_id']}") is not None and score_map[f"{row['source_key']}:{row['external_id']}"] >= float(minimum)]
+    selected = candidates[max(0, offset):max(0, offset) + max(1, limit)]
     if not selected: print("Telegram-подборка: подходящих активных вакансий не найдено."); return 0
     messages, current = [], f"☕ <b>Подборка вакансий</b>\n\nНайдено позиций: {len(selected)}"
+    site_origin = str(settings.get("siteUrl") or "https://devver.ru").rstrip("/")
     for index, job in enumerate(selected, 1):
-        title = html.escape(job["title"]); title = f'<a href="{html.escape(job["url"], quote=True)}">{title}</a>' if job["url"] else title
+        vacancy_url = f"{site_origin}/jobs/{site_job_id(job['source_key'], job['external_id'])}"
+        title = f'<a href="{html.escape(vacancy_url, quote=True)}">{html.escape(job["title"])}</a>'
         meta = " · ".join(value for value in (text_value(job["location"]), text_value(job["workplace_type"])) if value)
-        block = f"\n\n{index}. <b>{html.escape(job['company'])}</b>\n{title}" + (f"\n{html.escape(meta)}" if meta else "")
+        score = score_map.get(f"{job['source_key']}:{job['external_id']}")
+        score_line = f"\n🎯 Релевантность резюме: <b>{score:.0f}%</b>" if score is not None else ""
+        block = f"\n\n{index}. <b>{html.escape(job['company'])}</b>\n{title}" + (f"\n{html.escape(meta)}" if meta else "") + score_line
         if len(current) + len(block) > 3800: messages.append(current); current = block.lstrip()
         else: current += block
     messages.append(current)
