@@ -304,6 +304,27 @@ class ExtensionDownloadView(APIView):
         )
 
 
+class ExtensionVersionView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        versions = {}
+        for browser, manifest in (("firefox", "extension/manifest.json"), ("chrome", "extension-chrome/manifest.json")):
+            for root in (settings.BASE_DIR.parent, settings.BASE_DIR):
+                path = root / manifest
+                if not path.is_file():
+                    continue
+                try:
+                    payload = jsonlib.loads(path.read_text(encoding="utf-8"))
+                    versions[browser] = str(payload.get("version", ""))
+                except (OSError, jsonlib.JSONDecodeError):
+                    pass
+                break
+        current = next((value for value in versions.values() if value), "")
+        return Response({"version": current, "browsers": versions})
+
+
 class ResumeFileView(APIView):
     """Return the authenticated user's uploaded resume to the browser extension."""
 

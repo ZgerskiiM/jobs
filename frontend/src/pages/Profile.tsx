@@ -117,8 +117,14 @@ export default function Profile() {
   const [hhImporting, setHhImporting] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
   const [extensionDownloading, setExtensionDownloading] = useState<"firefox" | "chrome" | null>(null);
+  const [extensionPickerOpen, setExtensionPickerOpen] = useState(false);
+  const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [extensionError, setExtensionError] = useState<string | null>(null);
   const resumeFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void accountApi.extensionVersion().then((payload) => setExtensionVersion(payload.version || null)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setResumeData(resume);
@@ -143,6 +149,7 @@ export default function Profile() {
   const openResumePicker = () => resumeFileRef.current?.click();
 
   const handleExtensionDownload = async (browser: "firefox" | "chrome") => {
+    setExtensionPickerOpen(false);
     setExtensionError(null);
     setExtensionDownloading(browser);
     try {
@@ -385,7 +392,7 @@ export default function Profile() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
+    <div className="max-w-7xl mx-auto px-6 py-12">
       {/* Header — no avatar */}
       <div className="flex items-start justify-between gap-6 mb-10">
         <div>
@@ -549,23 +556,38 @@ export default function Profile() {
       {tab === "resume" && (
         <div>
           <input ref={resumeFileRef} id="resume-upload" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeInputChange} />
+          <div className="mb-6">
+            <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-2">// моё резюме</div>
+            <h2 className="font-mono text-2xl text-white mb-2">Добавь резюме для поиска</h2>
+            <p className="font-sans text-sm text-[#5a6070] max-w-2xl">Загрузи PDF или DOCX, либо импортируй готовое резюме с HH.ru. Мы извлечём контакты и навыки для откликов и релевантности.</p>
+          </div>
           <div className="mb-6 border border-[rgba(0,212,255,0.14)] rounded-sm overflow-hidden">
             <div className="px-5 py-3 bg-[rgba(0,212,255,0.04)] border-b border-[rgba(0,212,255,0.1)]">
               <div className="font-mono text-xs text-[#00d4ff] uppercase tracking-widest">// расширение для быстрого отклика</div>
               <div className="font-sans text-[11px] text-[#5a6070] mt-0.5">Показывает подсказку на страницах вакансий и заполняет форму выбранным резюме</div>
             </div>
             <div className="p-5 bg-[#0e1018] flex items-center justify-between gap-4 flex-wrap">
-              <div className="font-mono text-[11px] text-[#5a6070]">доступно для авторизованного аккаунта · Zen / Firefox / Chrome</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button type="button" onClick={() => void handleExtensionDownload("firefox")} disabled={extensionDownloading !== null} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
-                  {extensionDownloading === "firefox" ? "готовим архив..." : "скачать для Firefox →"}
-                </button>
-                <button type="button" onClick={() => void handleExtensionDownload("chrome")} disabled={extensionDownloading !== null} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
-                  {extensionDownloading === "chrome" ? "готовим архив..." : "скачать для Chrome →"}
-                </button>
+              <div>
+                <div className="font-sans text-sm text-[#e8eaf0]">Расширение готово к установке</div>
+                <div className="font-mono text-[10px] text-[#5a6070] mt-1">{extensionVersion ? `актуальная версия ${extensionVersion}` : "проверяем актуальную версию..."}</div>
               </div>
+              <button type="button" onClick={() => setExtensionPickerOpen(true)} disabled={extensionDownloading !== null} className="px-5 py-2.5 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] disabled:opacity-40 transition-all">
+                {extensionDownloading ? "готовим архив..." : "скачать расширение →"}
+              </button>
             </div>
             {extensionError && <div role="alert" className="px-5 pb-4 bg-[#0e1018] font-sans text-xs text-[#ff3e78]">{extensionError}</div>}
+            {extensionPickerOpen && (
+              <div className="px-5 pb-5 bg-[#0e1018]" role="dialog" aria-label="Выбор браузера для расширения">
+                <div className="border-t border-[rgba(0,212,255,0.1)] pt-4">
+                  <div className="font-mono text-[10px] text-[#5a6070] uppercase tracking-wider mb-3">выбери браузер</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={() => void handleExtensionDownload("chrome")} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] transition-all">Chrome</button>
+                    <button type="button" onClick={() => void handleExtensionDownload("firefox")} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.35)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.18)] transition-all">Firefox / Zen</button>
+                    <button type="button" onClick={() => setExtensionPickerOpen(false)} className="px-3 py-2 min-h-11 font-mono text-xs text-[#5a6070] hover:text-[#e8eaf0] transition-colors">отмена</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           {resumeNotice && (
             <div role="status" className="mb-5 border border-[rgba(51,255,119,0.25)] bg-[rgba(51,255,119,0.06)] rounded-sm px-4 py-3 flex items-center justify-between gap-4">
@@ -618,8 +640,8 @@ export default function Profile() {
                 ))}
               </div>
               <div className="px-4 py-3 bg-[#0a0b12] flex flex-wrap items-center gap-3">
-                <button type="button" onClick={openResumePicker} className="font-mono text-xs text-[#33ff77] hover:text-white min-h-11 px-2">+ загрузить ещё</button>
-                <button type="button" onClick={() => void handleHhImport()} disabled={hhImporting} className="font-mono text-xs text-[#00d4ff] hover:text-white disabled:opacity-40 min-h-11 px-2">{hhImporting ? "переходим на HH.ru..." : "импортировать с HH.ru"}</button>
+                <button type="button" onClick={openResumePicker} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm bg-[rgba(51,255,119,0.1)] border border-[rgba(51,255,119,0.3)] text-[#33ff77] hover:bg-[rgba(51,255,119,0.16)] transition-all">добавить файл</button>
+                <button type="button" onClick={() => void handleHhImport()} disabled={hhImporting} className="px-4 py-2 min-h-11 font-mono text-xs rounded-sm border border-[rgba(0,212,255,0.25)] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.08)] disabled:opacity-40 transition-all">{hhImporting ? "открываем HH.ru..." : "импортировать с HH.ru"}</button>
               </div>
             </div>
           )}

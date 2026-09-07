@@ -11,6 +11,8 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend /app
 COPY jobs-dev-zen-extension.zip jobs-dev-zen-extension-chrome.zip /app/
+COPY extension/manifest.json /app/extension/manifest.json
+COPY extension-chrome/manifest.json /app/extension-chrome/manifest.json
 RUN mkdir -p /app/catalog /app/frontend/scripts /app/config
 COPY frontend/public/vacancies.json /app/catalog/vacancies.json
 COPY frontend/public/vacancy-refresh.json /app/catalog/vacancy-refresh.json

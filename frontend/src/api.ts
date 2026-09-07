@@ -166,6 +166,7 @@ export const accountApi = {
     }
     return response.blob();
   },
+  extensionVersion: () => request<{ version: string; browsers: Record<string, string> }>("/api/extension/version/"),
   deleteResume: (id?: string) => request<{ resume: ResumeData | null; resumes: ResumeData[] }>(`/api/profile/resume/${id ? `?id=${encodeURIComponent(id)}` : ""}`, { method: "DELETE" }),
   startHhImport: () => request<{ url: string }>("/api/profile/hh/start/", { method: "POST", body: "{}" }),
   createApplication: (application: Application) =>
