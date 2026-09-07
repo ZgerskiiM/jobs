@@ -4,6 +4,7 @@ import json
 import tempfile
 import time
 from io import BytesIO
+from urllib.parse import parse_qs, urlparse
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -16,6 +17,24 @@ from .services import get_profile, infer_target_role, normalize_resume_scoring_p
 
 
 class AccountApiTests(TestCase):
+    @override_settings(
+        TELEGRAM_OIDC_CLIENT_ID="123456789",
+        TELEGRAM_OIDC_CLIENT_SECRET="oidc-secret",
+        TELEGRAM_OIDC_REDIRECT_URI="https://devver.ru/api/auth/telegram/callback/",
+    )
+    def test_telegram_oidc_start_uses_pkce_and_state(self):
+        response = APIClient().get("/api/auth/telegram/start/?next=/profile")
+
+        self.assertEqual(response.status_code, 302)
+        location = urlparse(response["Location"])
+        params = parse_qs(location.query)
+        self.assertEqual(location.netloc, "oauth.telegram.org")
+        self.assertEqual(params["response_type"], ["code"])
+        self.assertEqual(params["code_challenge_method"], ["S256"])
+        self.assertEqual(params["scope"], ["openid profile telegram:bot_access"])
+        self.assertTrue(params["state"][0])
+        self.assertTrue(params["nonce"][0])
+
     def test_target_role_inference_does_not_default_unrelated_resume_to_java(self):
         self.assertEqual(infer_target_role({"position": "Frontend Engineer", "skills": [{"name": "React"}]}), "UNKNOWN")
         self.assertEqual(infer_target_role({"position": "Java Backend Developer", "skills": []}), "JAVA_BACKEND")

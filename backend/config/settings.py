@@ -121,6 +121,16 @@ TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_AUTH_BOT_USERNAME", "")
 TELEGRAM_LOGIN_MAX_AGE = int(os.getenv("TELEGRAM_LOGIN_MAX_AGE", "86400"))
 TELEGRAM_SYNC_TOKEN = os.getenv("TELEGRAM_SYNC_TOKEN", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:8443").rstrip("/")
+TELEGRAM_OIDC_CLIENT_ID = os.getenv("TELEGRAM_OIDC_CLIENT_ID", "").strip()
+TELEGRAM_OIDC_CLIENT_SECRET = os.getenv("TELEGRAM_OIDC_CLIENT_SECRET", "").strip()
+TELEGRAM_OIDC_REDIRECT_URI = os.getenv(
+    "TELEGRAM_OIDC_REDIRECT_URI",
+    f"{FRONTEND_URL}/api/auth/telegram/callback/",
+).strip()
+TELEGRAM_OIDC_AUTH_URL = "https://oauth.telegram.org/auth"
+TELEGRAM_OIDC_TOKEN_URL = "https://oauth.telegram.org/token"
+TELEGRAM_OIDC_JWKS_URL = "https://oauth.telegram.org/.well-known/jwks.json"
+TELEGRAM_OIDC_ISSUER = "https://oauth.telegram.org"
 HH_API_TOKEN = os.getenv("HH_API_TOKEN", "")
 HH_USER_AGENT = os.getenv("HH_USER_AGENT", "jobs.dev/1.0 (support@jobs.dev)")
 

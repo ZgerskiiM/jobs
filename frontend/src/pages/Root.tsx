@@ -14,6 +14,7 @@ const NAV_LINKS = [
 export default function Root() {
   const { user, isPro, showAuthModal, showImportStep, showOnboarding, openAuthModal, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user && new URLSearchParams(window.location.search).get("extension_login") === "1") {
@@ -21,6 +22,14 @@ export default function Root() {
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
     }
   }, [user, openAuthModal]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("auth_error");
+    if (!error) return;
+    setAuthError(error);
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+  }, []);
 
   return (
     <div className="min-h-full bg-[#07080e] text-[#e8eaf0] font-sans grid-bg">
@@ -112,6 +121,17 @@ export default function Root() {
           </div>
         </div>
       </nav>
+
+      {authError && (
+        <div role="alert" className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="flex items-center justify-between gap-4 border border-[rgba(255,62,120,0.25)] bg-[rgba(255,62,120,0.06)] rounded-sm px-4 py-3">
+            <span className="font-mono text-xs text-[#ff3e78]">
+              {authError === "telegram_unavailable" ? "Telegram Login ещё не настроен на сервере." : "Не удалось войти через Telegram. Попробуй ещё раз."}
+            </span>
+            <button type="button" onClick={() => setAuthError(null)} className="font-mono text-xs text-[#5a6070] hover:text-white" aria-label="закрыть сообщение">закрыть</button>
+          </div>
+        </div>
+      )}
 
       {/* mobile menu */}
       {menuOpen && (

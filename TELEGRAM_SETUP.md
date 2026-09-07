@@ -6,15 +6,19 @@
 
 ## Почему нужен домен
 
-Telegram Login Widget нельзя полноценно использовать на IP-адресе стенда. После
-подключения домена нужен публичный HTTPS-адрес, например:
+Современный Telegram Login работает через OAuth 2.0 / OpenID Connect и требует
+публичный HTTPS-адрес. Для стенда jobs.dev это:
 
 ```text
-https://jobs.example.ru
+https://devver.ru
 ```
 
-Сначала настройте домен и сертификат, затем в `@BotFather` выполните `/setdomain`
-и укажите домен без завершающего `/`.
+В `@BotFather` откройте **Bot Settings → Web Login (Login)** и добавьте origin
+`https://devver.ru` и callback
+`https://devver.ru/api/auth/telegram/callback/`. Сохраните выданные Client ID и
+Client Secret — они понадобятся только backend. В запросе входа также
+запрашивается `telegram:bot_access`, чтобы после согласия пользователя бот мог
+отправлять персональные уведомления о новых вакансиях.
 
 ## 1. Настройка backend
 
@@ -27,12 +31,17 @@ TELEGRAM_SYNC_TOKEN=сгенерируйте-длинную-случайную-�
 
 Не добавляйте этот токен в Git, frontend или сообщения Telegram.
 
-Также проверьте, что backend использует токен и username бота для Telegram Login:
+Для входа через OIDC добавьте на сервер:
 
 ```env
-TELEGRAM_AUTH_BOT_TOKEN=токен-от-BotFather
-TELEGRAM_AUTH_BOT_USERNAME=имя_бота_без_символа_@
+TELEGRAM_OIDC_CLIENT_ID=Client_ID_из_BotFather
+TELEGRAM_OIDC_CLIENT_SECRET=Client_Secret_из_BotFather
+TELEGRAM_OIDC_REDIRECT_URI=https://devver.ru/api/auth/telegram/callback/
 ```
+
+Старые `TELEGRAM_AUTH_BOT_TOKEN` и `TELEGRAM_AUTH_BOT_USERNAME` можно оставить
+для совместимости с расширением, но сайт больше не использует legacy iframe-
+виджет.
 
 После изменения `.env` перезапустите API-контейнер:
 

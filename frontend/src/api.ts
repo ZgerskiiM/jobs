@@ -133,7 +133,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const accountApi = {
   csrf: ensureCsrf,
-  authConfig: () => request<{ enabled: boolean; username: string }>("/api/auth/config/"),
+  authConfig: () => request<{ enabled: boolean; oidcEnabled: boolean; username: string; loginUrl: string }>("/api/auth/config/"),
+  telegramLoginUrl: (next = "/profile") => {
+    const origin = API_ORIGIN || window.location.origin;
+    return `${origin}/api/auth/telegram/start/?next=${encodeURIComponent(next)}`;
+  },
   me: () => request<AccountPayload>("/api/auth/me/"),
   email: (email: string, password: string, mode: "login" | "register") =>
     request<AccountPayload>("/api/auth/email/", { method: "POST", body: JSON.stringify({ email, password, mode }) }),

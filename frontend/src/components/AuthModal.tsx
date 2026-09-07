@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { accountApi } from "../api";
 
-type Step = "choose" | "email" | "telegram-sent";
+type Step = "choose" | "email";
 
 export default function AuthModal() {
   const { closeAuthModal, loginWithEmail } = useAuth();
@@ -12,8 +12,7 @@ export default function AuthModal() {
   const [isLogin, setIsLogin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [telegramUsername, setTelegramUsername] = useState("");
-  const telegramWidgetRef = useRef<HTMLDivElement>(null);
+  const [telegramReady, setTelegramReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => e.key === "Escape" && closeAuthModal();
@@ -26,25 +25,10 @@ export default function AuthModal() {
   }, [closeAuthModal]);
 
   useEffect(() => {
-    if (step !== "telegram-sent") return;
     accountApi.authConfig()
-      .then((config) => setTelegramUsername(config.enabled ? config.username : ""))
-      .catch(() => setTelegramUsername(""));
-  }, [step]);
-
-  useEffect(() => {
-    if (step !== "telegram-sent" || !telegramUsername || !telegramWidgetRef.current) return;
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", telegramUsername);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-request-access", "write");
-    const apiOrigin = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
-    script.setAttribute("data-auth-url", `${apiOrigin}/api/auth/telegram/`);
-    telegramWidgetRef.current.replaceChildren(script);
-    return () => telegramWidgetRef.current?.replaceChildren();
-  }, [step, telegramUsername]);
+      .then((config) => setTelegramReady(config.oidcEnabled ?? config.enabled))
+      .catch(() => setTelegramReady(null));
+  }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +58,7 @@ export default function AuthModal() {
             <div>
               <div className="font-mono text-xs text-[#3a404f] uppercase tracking-widest mb-1">// jobs.dev</div>
               <h2 className="font-mono text-lg text-white font-medium">
-                {step === "choose" ? "Вход / регистрация" : step === "email" ? (isLogin ? "Вход" : "Регистрация") : "Проверь Telegram"}
+                {step === "choose" ? "Вход / регистрация" : (isLogin ? "Вход" : "Регистрация")}
               </h2>
             </div>
             <button
@@ -90,7 +74,14 @@ export default function AuthModal() {
             {step === "choose" && (
               <div className="space-y-3">
                 <button
-                  onClick={() => { setStep("telegram-sent"); setError(""); }}
+                  onClick={() => {
+                    if (telegramReady === false) {
+                      setError("Telegram Login ещё не настроен на сервере");
+                      return;
+                    }
+                    window.location.assign(accountApi.telegramLoginUrl());
+                  }}
+                  aria-disabled={telegramReady === false}
                   className="w-full flex items-center gap-4 px-4 py-4 border border-[rgba(0,212,255,0.25)] bg-[rgba(0,212,255,0.05)] hover:bg-[rgba(0,212,255,0.09)] rounded-sm transition-all group"
                 >
                   <div className="w-9 h-9 flex items-center justify-center rounded bg-[rgba(0,212,255,0.12)] border border-[rgba(0,212,255,0.3)] shrink-0">
@@ -103,13 +94,19 @@ export default function AuthModal() {
                       Войти через Telegram
                     </div>
                     <div className="font-mono text-[10px] text-[#5a6070] mt-0.5">
-                      уведомления о вакансиях прямо в мессенджер
+                      {telegramReady === false ? "требуется настройка на сервере" : "безопасный вход без пароля"}
                     </div>
                   </div>
                   <svg className="w-4 h-4 text-[#3a404f] ml-auto group-hover:text-[#00d4ff] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
+
+                {error && (
+                  <div role="alert" className="font-mono text-xs text-[#ff3e78] bg-[rgba(255,62,120,0.08)] border border-[rgba(255,62,120,0.2)] px-3 py-2 rounded-sm">
+                    {error}
+                  </div>
+                )}
 
                 <button
                   onClick={() => setStep("email")}
@@ -205,29 +202,6 @@ export default function AuthModal() {
               </form>
             )}
 
-            {/* TELEGRAM WAITING */}
-            {step === "telegram-sent" && (
-              <div className="text-center py-4">
-                <div className="w-14 h-14 mx-auto mb-5 flex items-center justify-center rounded-full bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)]">
-                  <svg className="w-7 h-7 text-[#00d4ff] animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.46.7-.93.44l-2.57-1.89-1.24 1.19c-.14.14-.25.25-.52.25l.19-2.64 4.83-4.37c.21-.19-.05-.29-.32-.1L7.5 14.45 5.0 13.68c-.55-.17-.56-.55.12-.81l9.89-3.81c.46-.17.86.11.63.74z" />
-                  </svg>
-                </div>
-                <div className="font-mono text-sm text-white mb-2">Войди через Telegram</div>
-                {telegramUsername ? (
-                  <>
-                    <div className="font-sans text-xs text-[#5a6070] leading-relaxed mb-5">Telegram подтвердит личность и вернёт тебя в кабинет</div>
-                    <div ref={telegramWidgetRef} className="flex justify-center min-h-11" />
-                  </>
-                ) : (
-                  <div className="font-sans text-xs text-[#5a6070] leading-relaxed">
-                    Telegram пока не настроен на сервере. Укажи <span className="text-[#00d4ff]">TELEGRAM_AUTH_BOT_TOKEN</span> и username бота.
-                  </div>
-                )}
-                {error && <div className="mt-4 font-mono text-xs text-[#ff3e78]">{error}</div>}
-                <button type="button" onClick={() => { setStep("choose"); setError(""); }} className="mt-6 font-mono text-xs text-[#3a404f] hover:text-[#5a6070] transition-colors">← назад</button>
-              </div>
-            )}
           </div>
         </div>
       </div>

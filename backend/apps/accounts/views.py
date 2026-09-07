@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from html import unescape
+import base64
 import json as jsonlib
 import hashlib
 import mimetypes
@@ -12,6 +13,7 @@ import subprocess
 import uuid
 import urllib.parse
 import urllib.request
+import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate, logout
@@ -31,7 +33,10 @@ from rest_framework.views import APIView
 from .models import Application, AuditLog, Profile, Resume, User, VacancySnapshot
 from .resume_parser import analyze_resume
 from .serializers import EmailAuthSerializer, ProfilePatchSerializer, SavedJobSerializer
-from .services import account_payload, get_active_resume_record, get_profile, get_resume_records, infer_target_role, login_from_telegram, normalize_resume_scoring_profile, resume_payload, telegram_payload_is_valid
+from .services import account_payload, get_active_resume_record, get_profile, get_resume_records, infer_target_role, login_from_telegram, login_from_telegram_oidc, normalize_resume_scoring_profile, resume_payload, telegram_oidc_enabled, telegram_oidc_exchange_code, telegram_oidc_validate_id_token, telegram_payload_is_valid
+
+
+logger = logging.getLogger(__name__)
 
 
 def error(message: str, code: int = status.HTTP_400_BAD_REQUEST) -> Response:
@@ -42,7 +47,13 @@ class AuthConfigView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({"enabled": bool(settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_BOT_USERNAME), "username": settings.TELEGRAM_BOT_USERNAME})
+        oidc_enabled = telegram_oidc_enabled()
+        return Response({
+            "enabled": oidc_enabled,
+            "oidcEnabled": oidc_enabled,
+            "username": settings.TELEGRAM_BOT_USERNAME,
+            "loginUrl": "/api/auth/telegram/start/",
+        })
 
 
 class HhVacanciesView(APIView):
@@ -446,6 +457,82 @@ class EmailAuthView(APIView):
 
         login(request, user)
         return Response(account_payload(user, is_new=is_new))
+
+
+class TelegramOIDCStartView(APIView):
+    """Start Telegram's Authorization Code + PKCE login flow."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        if not telegram_oidc_enabled():
+            return HttpResponseRedirect(f"{settings.FRONTEND_URL}/?auth_error=telegram_unavailable")
+
+        next_path = str(request.query_params.get("next", "/profile"))
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = "/profile"
+        state = secrets.token_urlsafe(32)
+        nonce = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(64)
+        code_challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(code_verifier.encode("ascii")).digest()
+        ).rstrip(b"=").decode("ascii")
+        request.session["telegram_oidc"] = {
+            "state": state,
+            "nonce": nonce,
+            "code_verifier": code_verifier,
+            "next": next_path,
+        }
+        request.session.save()
+        params = urllib.parse.urlencode({
+            "client_id": settings.TELEGRAM_OIDC_CLIENT_ID,
+            "redirect_uri": settings.TELEGRAM_OIDC_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid profile telegram:bot_access",
+            "state": state,
+            "nonce": nonce,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+        })
+        return HttpResponseRedirect(f"{settings.TELEGRAM_OIDC_AUTH_URL}?{params}")
+
+
+class TelegramOIDCCallbackView(APIView):
+    """Finish Telegram OIDC login, validate the ID token and establish a session."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def _failure(self, reason: str = "telegram"):
+        return HttpResponseRedirect(f"{settings.FRONTEND_URL}/?auth_error={urllib.parse.quote(reason)}")
+
+    def get(self, request):
+        flow = request.session.pop("telegram_oidc", None)
+        if not isinstance(flow, dict):
+            return self._failure()
+        supplied_state = str(request.query_params.get("state", ""))
+        expected_state = str(flow.get("state", ""))
+        if not expected_state or not secrets.compare_digest(supplied_state, expected_state):
+            return self._failure()
+        if request.query_params.get("error"):
+            return self._failure("telegram_denied")
+        code = str(request.query_params.get("code", ""))
+        code_verifier = str(flow.get("code_verifier", ""))
+        nonce = str(flow.get("nonce", ""))
+        if not code or not code_verifier or not nonce:
+            return self._failure()
+        try:
+            tokens = telegram_oidc_exchange_code(code, code_verifier)
+            claims = telegram_oidc_validate_id_token(str(tokens["id_token"]), nonce=nonce)
+            user = login_from_telegram_oidc(claims, request)
+        except Exception:
+            logger.exception("Telegram OIDC callback failed")
+            return self._failure()
+        next_path = str(flow.get("next", "/profile"))
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = "/profile"
+        return HttpResponseRedirect(f"{settings.FRONTEND_URL}{next_path}")
 
 
 class TelegramAuthView(APIView):

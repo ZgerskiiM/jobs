@@ -1,5 +1,7 @@
 import hashlib
 import hmac
+import httpx
+import jwt
 from pathlib import Path
 import re
 import time
@@ -177,6 +179,72 @@ def telegram_payload_is_valid(data: Mapping[str, str]) -> bool:
     secret_key = hashlib.sha256(token.encode("utf-8")).digest()
     expected_hash = hmac.new(secret_key, check_string.encode("utf-8"), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected_hash, data["hash"])
+
+
+def telegram_oidc_enabled() -> bool:
+    return bool(settings.TELEGRAM_OIDC_CLIENT_ID and settings.TELEGRAM_OIDC_CLIENT_SECRET)
+
+
+def telegram_oidc_exchange_code(code: str, code_verifier: str) -> dict[str, object]:
+    """Exchange Telegram's authorization code for tokens server-side."""
+    if not telegram_oidc_enabled():
+        raise ValueError("Telegram OIDC не настроен")
+    response = httpx.post(
+        settings.TELEGRAM_OIDC_TOKEN_URL,
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": settings.TELEGRAM_OIDC_REDIRECT_URI,
+            "client_id": settings.TELEGRAM_OIDC_CLIENT_ID,
+            "code_verifier": code_verifier,
+        },
+        auth=(settings.TELEGRAM_OIDC_CLIENT_ID, settings.TELEGRAM_OIDC_CLIENT_SECRET),
+        timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or not payload.get("id_token"):
+        raise ValueError("Telegram не вернул id_token")
+    return payload
+
+
+def telegram_oidc_validate_id_token(id_token: str, *, nonce: str) -> dict[str, object]:
+    """Validate Telegram's signed ID token and its OIDC claims."""
+    if not telegram_oidc_enabled():
+        raise ValueError("Telegram OIDC не настроен")
+    header = jwt.get_unverified_header(id_token)
+    algorithm = header.get("alg")
+    if algorithm not in {"RS256", "ES256", "EdDSA", "ES256K"}:
+        raise ValueError("Неподдерживаемый алгоритм подписи Telegram")
+    signing_key = jwt.PyJWKClient(settings.TELEGRAM_OIDC_JWKS_URL).get_signing_key_from_jwt(id_token)
+    claims = jwt.decode(
+        id_token,
+        signing_key.key,
+        algorithms=[algorithm],
+        audience=settings.TELEGRAM_OIDC_CLIENT_ID,
+        issuer=settings.TELEGRAM_OIDC_ISSUER,
+        options={"require": ["sub", "iss", "aud", "iat", "exp", "nonce"]},
+    )
+    if claims.get("nonce") != nonce:
+        raise ValueError("Некорректный nonce Telegram")
+    return claims
+
+
+def login_from_telegram_oidc(claims: Mapping[str, object], request) -> User:
+    """Map OIDC claims to the existing Telegram profile and create a session."""
+    name = str(claims.get("name") or "").strip()
+    if not name:
+        name = " ".join(str(part).strip() for part in (claims.get("given_name"), claims.get("family_name")) if part).strip()
+    username = str(claims.get("preferred_username") or "").strip()
+    return login_from_telegram(
+        {
+            "id": str(claims.get("id") or claims.get("sub") or ""),
+            "first_name": name,
+            "username": username,
+            "photo_url": str(claims.get("picture") or ""),
+        },
+        request,
+    )
 
 
 @transaction.atomic

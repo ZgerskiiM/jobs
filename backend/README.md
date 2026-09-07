@@ -20,10 +20,19 @@ Copy-Item backend/.env.example backend/.env
 docker compose up --build
 ```
 
-For Telegram Login Widget, create/configure a bot with BotFather and set
-`TELEGRAM_AUTH_BOT_TOKEN` and `TELEGRAM_AUTH_BOT_USERNAME`. The Telegram bot
-domain must match `FRONTEND_URL` in production. Set `SESSION_COOKIE_SECURE=1`
-only when the production site is served over HTTPS.
+For modern Telegram Login, open your bot in BotFather and configure **Login /
+Web Login**. Register the production origin and callback URL, then put the
+issued client credentials in `TELEGRAM_OIDC_CLIENT_ID` and
+`TELEGRAM_OIDC_CLIENT_SECRET`. The callback is
+`https://<your-domain>/api/auth/telegram/callback/` (or the value of
+`TELEGRAM_OIDC_REDIRECT_URI`). The application uses Authorization Code + PKCE,
+validates the ID token against Telegram's JWKS, and then creates the regular
+jobs.dev session. Set `SESSION_COOKIE_SECURE=1` only when the production site
+is served over HTTPS.
+
+The older `TELEGRAM_AUTH_BOT_TOKEN` endpoint remains available for compatibility
+with existing clients, but the website no longer renders the legacy iframe
+widget.
 
 The browser extension resolves submitted applications against the generated
 vacancy catalog. The API reads ../frontend/public/vacancies.json locally;
