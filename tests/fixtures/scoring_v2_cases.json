@@ -6,26 +6,68 @@
       "targetSeniority": "SENIOR",
       "experienceYears": 5,
       "requirements": [
-        {"concept": "JAVA", "importance": "MUST_HAVE"},
-        {"concept": "SPRING_BOOT", "importance": "STRONG_PREFERENCE"},
-        {"concept": "KAFKA", "importance": "STRONG_PREFERENCE"}
+        {
+          "concept": "JAVA",
+          "importance": "MUST_HAVE"
+        },
+        {
+          "concept": "SPRING_BOOT",
+          "importance": "STRONG_PREFERENCE"
+        },
+        {
+          "concept": "KAFKA",
+          "importance": "STRONG_PREFERENCE"
+        }
       ]
     },
     "features": {
       "vacancyId": "fixture:complete",
       "taxonomyVersion": "1.0.0",
-      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
-      "seniority": {"level": "SENIOR", "confidence": 1},
+      "role": {
+        "primary": "BACKEND",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "SENIOR",
+        "confidence": 1
+      },
       "minExperienceYears": 3,
       "concepts": {
-        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
-        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
-        "KAFKA": {"concept": "KAFKA", "match": 1, "contextMultiplier": 0.5, "confidence": 1, "mentions": 1}
+        "JAVA": {
+          "concept": "JAVA",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        },
+        "SPRING_BOOT": {
+          "concept": "SPRING_BOOT",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        },
+        "KAFKA": {
+          "concept": "KAFKA",
+          "match": 1,
+          "contextMultiplier": 0.5,
+          "confidence": 1,
+          "mentions": 1
+        }
       },
       "negativeSignals": [],
       "vacancyDate": "2026-09-01"
     },
-    "expected": {"score": 96, "confidence": 100, "eligibility": "ELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 100, "experienceCoefficient": 1, "seniorityCoefficient": 1}
+    "expected": {
+      "score": 96,
+      "confidence": 100,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 100,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": 1,
+      "seniorityCoefficient": 1
+    }
   },
   {
     "name": "unknown_experience_and_seniority_are_not_perfect",
@@ -33,22 +75,54 @@
       "targetRole": "BACKEND",
       "targetSeniority": "UNKNOWN",
       "experienceYears": null,
-      "requirements": [{"concept": "JAVA", "importance": "MUST_HAVE"}]
+      "requirements": [
+        {
+          "concept": "JAVA",
+          "importance": "MUST_HAVE"
+        }
+      ]
     },
     "features": {
       "vacancyId": "fixture:unknowns",
       "taxonomyVersion": "1.0.0",
-      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
-      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "role": {
+        "primary": "BACKEND",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "UNKNOWN",
+        "confidence": 0.35
+      },
       "minExperienceYears": null,
       "concepts": {
-        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1},
-        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+        "JAVA": {
+          "concept": "JAVA",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        },
+        "SPRING_BOOT": {
+          "concept": "SPRING_BOOT",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
       },
       "negativeSignals": [],
       "vacancyDate": ""
     },
-    "expected": {"score": 65, "confidence": 80, "eligibility": "ELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 50, "experienceCoefficient": null, "seniorityCoefficient": null}
+    "expected": {
+      "score": 65,
+      "confidence": 80,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 100,
+      "vacancyRequirementCoverage": 50,
+      "experienceCoefficient": null,
+      "seniorityCoefficient": null
+    }
   },
   {
     "name": "wrong_primary_role_is_ineligible",
@@ -56,21 +130,54 @@
       "targetRole": "BACKEND",
       "targetSeniority": "UNKNOWN",
       "experienceYears": null,
-      "requirements": [{"concept": "JAVA", "importance": "MUST_HAVE"}]
+      "requirements": [
+        {
+          "concept": "JAVA",
+          "importance": "MUST_HAVE"
+        }
+      ]
     },
     "features": {
       "vacancyId": "fixture:wrong-role",
       "taxonomyVersion": "1.0.0",
-      "role": {"primary": "UNKNOWN", "match": 0, "confidence": 0.4},
-      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "role": {
+        "primary": "UNKNOWN",
+        "match": 0,
+        "confidence": 0.4
+      },
+      "seniority": {
+        "level": "UNKNOWN",
+        "confidence": 0.35
+      },
       "minExperienceYears": null,
       "concepts": {
-        "JAVA": {"concept": "JAVA", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+        "JAVA": {
+          "concept": "JAVA",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
       },
-      "negativeSignals": [{"id": "ANDROID_PRIMARY", "penalty": 40, "primaryRoleConflict": true, "matchedText": "android developer"}],
+      "negativeSignals": [
+        {
+          "id": "ANDROID_PRIMARY",
+          "penalty": 40,
+          "primaryRoleConflict": true,
+          "matchedText": "android developer"
+        }
+      ],
       "vacancyDate": ""
     },
-    "expected": {"score": 20, "confidence": 80, "eligibility": "INELIGIBLE", "hardMatchScore": 100, "vacancyRequirementCoverage": 100, "experienceCoefficient": null, "seniorityCoefficient": null}
+    "expected": {
+      "score": 20,
+      "confidence": 80,
+      "eligibility": "INELIGIBLE",
+      "hardMatchScore": 100,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": null,
+      "seniorityCoefficient": null
+    }
   },
   {
     "name": "missing_hard_requirements_are_not_reported_as_one_hundred",
@@ -78,20 +185,321 @@
       "targetRole": "BACKEND",
       "targetSeniority": "UNKNOWN",
       "experienceYears": null,
-      "requirements": [{"concept": "SPRING_BOOT", "importance": "STRONG_PREFERENCE"}]
+      "requirements": [
+        {
+          "concept": "SPRING_BOOT",
+          "importance": "STRONG_PREFERENCE"
+        }
+      ]
     },
     "features": {
       "vacancyId": "fixture:no-hard-requirements",
       "taxonomyVersion": "1.0.0",
-      "role": {"primary": "BACKEND", "match": 1, "confidence": 1},
-      "seniority": {"level": "UNKNOWN", "confidence": 0.35},
+      "role": {
+        "primary": "BACKEND",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "UNKNOWN",
+        "confidence": 0.35
+      },
       "minExperienceYears": null,
       "concepts": {
-        "SPRING_BOOT": {"concept": "SPRING_BOOT", "match": 1, "contextMultiplier": 1, "confidence": 1, "mentions": 1}
+        "SPRING_BOOT": {
+          "concept": "SPRING_BOOT",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
       },
       "negativeSignals": [],
       "vacancyDate": ""
     },
-    "expected": {"score": 25, "confidence": 80, "eligibility": "INELIGIBLE", "hardMatchScore": null, "vacancyRequirementCoverage": 100, "experienceCoefficient": null, "seniorityCoefficient": null}
+    "expected": {
+      "score": 25,
+      "confidence": 80,
+      "eligibility": "INELIGIBLE",
+      "hardMatchScore": null,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": null,
+      "seniorityCoefficient": null
+    }
+  },
+  {
+    "name": "zero_context_is_not_a_match",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "UNKNOWN",
+      "experienceYears": null,
+      "requirements": [
+        {
+          "concept": "JAVA",
+          "importance": "MUST_HAVE"
+        }
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:unknowns",
+      "taxonomyVersion": "1.0.0",
+      "role": {
+        "primary": "BACKEND",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "UNKNOWN",
+        "confidence": 0.35
+      },
+      "minExperienceYears": null,
+      "concepts": {
+        "JAVA": {
+          "concept": "JAVA",
+          "match": 1,
+          "contextMultiplier": 0,
+          "confidence": 1,
+          "mentions": 1
+        },
+        "SPRING_BOOT": {
+          "concept": "SPRING_BOOT",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
+      },
+      "negativeSignals": [],
+      "vacancyDate": ""
+    },
+    "expected": {
+      "score": 0,
+      "confidence": 80,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 0,
+      "vacancyRequirementCoverage": 0,
+      "experienceCoefficient": null,
+      "seniorityCoefficient": null
+    }
+  },
+  {
+    "name": "zero_confidence_is_not_a_match",
+    "profile": {
+      "targetRole": "BACKEND",
+      "targetSeniority": "UNKNOWN",
+      "experienceYears": null,
+      "requirements": [
+        {
+          "concept": "JAVA",
+          "importance": "MUST_HAVE"
+        }
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:unknowns",
+      "taxonomyVersion": "1.0.0",
+      "role": {
+        "primary": "BACKEND",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "UNKNOWN",
+        "confidence": 0.35
+      },
+      "minExperienceYears": null,
+      "concepts": {
+        "JAVA": {
+          "concept": "JAVA",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 0,
+          "mentions": 1
+        },
+        "SPRING_BOOT": {
+          "concept": "SPRING_BOOT",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
+      },
+      "negativeSignals": [],
+      "vacancyDate": ""
+    },
+    "expected": {
+      "score": 15,
+      "confidence": 55,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 0,
+      "vacancyRequirementCoverage": 50,
+      "experienceCoefficient": null,
+      "seniorityCoefficient": null
+    }
+  },
+  {
+    "name": "devops_missing_linux_gate",
+    "profile": {
+      "targetRole": "DEVOPS",
+      "targetSeniority": "SENIOR",
+      "experienceYears": 5,
+      "requirements": [
+        {
+          "concept": "DOCKER",
+          "importance": "MUST_HAVE"
+        }
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:complete",
+      "taxonomyVersion": "1.0.0",
+      "role": {
+        "primary": "DEVOPS",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "SENIOR",
+        "confidence": 1
+      },
+      "minExperienceYears": 3,
+      "concepts": {
+        "DOCKER": {
+          "concept": "DOCKER",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
+      },
+      "negativeSignals": [],
+      "vacancyDate": "2026-09-01"
+    },
+    "expected": {
+      "score": 45,
+      "confidence": 100,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 100,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": 1,
+      "seniorityCoefficient": 1,
+      "gates": [
+        "LINUX_MISSING"
+      ]
+    },
+    "taxonomy": "devops_vacancy_relevance_ru_v1.json"
+  },
+  {
+    "name": "devops_missing_kubernetes_gate",
+    "profile": {
+      "targetRole": "DEVOPS",
+      "targetSeniority": "SENIOR",
+      "experienceYears": 5,
+      "requirements": [
+        {
+          "concept": "LINUX",
+          "importance": "MUST_HAVE"
+        },
+        {
+          "concept": "KUBERNETES",
+          "importance": "MUST_HAVE"
+        }
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:complete",
+      "taxonomyVersion": "1.0.0",
+      "role": {
+        "primary": "DEVOPS",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "SENIOR",
+        "confidence": 1
+      },
+      "minExperienceYears": 3,
+      "concepts": {
+        "LINUX": {
+          "concept": "LINUX",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
+      },
+      "negativeSignals": [],
+      "vacancyDate": "2026-09-01"
+    },
+    "expected": {
+      "score": 60,
+      "confidence": 100,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 50,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": 1,
+      "seniorityCoefficient": 1,
+      "gates": [
+        "KUBERNETES_CRITICAL_MISSING"
+      ]
+    },
+    "taxonomy": "devops_vacancy_relevance_ru_v1.json"
+  },
+  {
+    "name": "one_c_missing_query_gate",
+    "profile": {
+      "targetRole": "ONE_C_DEVELOPER",
+      "targetSeniority": "SENIOR",
+      "experienceYears": 5,
+      "requirements": [
+        {
+          "concept": "ONE_C_PLATFORM",
+          "importance": "MUST_HAVE"
+        },
+        {
+          "concept": "ONE_C_QUERY_LANGUAGE",
+          "importance": "MUST_HAVE"
+        }
+      ]
+    },
+    "features": {
+      "vacancyId": "fixture:complete",
+      "taxonomyVersion": "1.0.0",
+      "role": {
+        "primary": "ONE_C_DEVELOPER",
+        "match": 1,
+        "confidence": 1
+      },
+      "seniority": {
+        "level": "SENIOR",
+        "confidence": 1
+      },
+      "minExperienceYears": 3,
+      "concepts": {
+        "ONE_C_PLATFORM": {
+          "concept": "ONE_C_PLATFORM",
+          "match": 1,
+          "contextMultiplier": 1,
+          "confidence": 1,
+          "mentions": 1
+        }
+      },
+      "negativeSignals": [],
+      "vacancyDate": "2026-09-01"
+    },
+    "expected": {
+      "score": 65,
+      "confidence": 100,
+      "eligibility": "ELIGIBLE",
+      "hardMatchScore": 50,
+      "vacancyRequirementCoverage": 100,
+      "experienceCoefficient": 1,
+      "seniorityCoefficient": 1,
+      "gates": [
+        "QUERY_LANGUAGE_CRITICAL_MISSING"
+      ]
+    },
+    "taxonomy": "1c_developer_vacancy_relevance_ru_v1.json"
   }
 ]
+
