@@ -1,13 +1,13 @@
 {
   "meta": {
     "name": "1c-developer-vacancy-relevance-ru",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "market": "RU",
     "languages": [
       "ru",
       "en"
     ],
-    "profile": "1C_DEVELOPER",
+    "profile": "ONE_C_DEVELOPER",
     "description": "Deterministic taxonomy for 1C Developer vacancies on the Russian job market."
   },
   "scoring": {
@@ -1824,3 +1824,4 @@
     }
   }
 }
+
