@@ -21,7 +21,7 @@ from .models import Job, utc_now
 
 
 DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parents[1] / "config" / "java_backend_vacancy_relevance_ru_v1.json"
-SCORING_ENGINE_VERSION = "2.0.0"
+SCORING_ENGINE_VERSION = "2.0.1"
 _BOUNDARY = r"A-Za-zА-Яа-яЁё0-9_+#"
 
 
@@ -95,6 +95,7 @@ class TaxonomyConfig:
     roles: Mapping[str, tuple[str, ...]]
     concepts: Mapping[str, ConceptConfig]
     output_bands: tuple[OutputBand, ...]
+    profile: str = "JAVA_BACKEND"
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "TaxonomyConfig":
@@ -137,6 +138,7 @@ class TaxonomyConfig:
             for item in raw.get("roles", [])
         }
         config = cls(
+            profile=str(meta.get("profile", "JAVA_BACKEND")).upper(),
             version=str(meta.get("version", "")).strip(),
             category_weights={str(k): float(v) for k, v in (scoring.get("categoryWeights") or {}).items()},
             importance_weights={str(k): float(v) for k, v in (scoring.get("importanceWeights") or {}).items()},
@@ -649,6 +651,23 @@ class VacancyFeatureExtractor:
         return modifier.multiplier, 1.0
 
     def _detect_role(self, title: str, description: str, concepts: Mapping[str, ExtractedConcept]) -> RoleMatch:
+        for role, aliases in self.config.roles.items():
+            if any(_phrase_pattern(alias).search(title) for alias in aliases):
+                return RoleMatch(role, 0.7 if role == "FULLSTACK" else 1.0, 1.0)
+        if self.config.profile == "DEVOPS":
+            if re.search(r"devops|sre|platform|инфраструктур|облачн(?:ый|ая) инженер", title):
+                return RoleMatch("DEVOPS", 0.9, 0.9)
+            signals = sum(concept in concepts for concept in ("LINUX", "KUBERNETES", "DOCKER", "TERRAFORM", "ANSIBLE", "HELM", "PROMETHEUS", "GRAFANA"))
+            if signals >= 2 and re.search(r"инфраструктур|эксплуатац|депло|мониторинг|контейнер|облачн|reliability", description):
+                return RoleMatch("DEVOPS", 0.75, 0.75)
+            return RoleMatch("UNKNOWN", 0.0, 0.4)
+        if self.config.profile == "ONE_C_DEVELOPER":
+            if re.search(r"(?:1с|1c)\s*(?:программист|разработчик|developer)|программист\s*(?:1с|1c)", title):
+                return RoleMatch("ONE_C_DEVELOPER", 0.9, 0.9)
+            signals = sum(concept in concepts for concept in ("ONE_C_PLATFORM", "ONE_C_LANGUAGE", "ONE_C_QUERY_LANGUAGE", "CONFIGURATOR", "BSP", "DCS_SKD"))
+            if signals >= 2 and re.search(r"(?:1с|1c)|конфигурац|бухгалтер|уч[её]т", description):
+                return RoleMatch("ONE_C_DEVELOPER", 0.75, 0.75)
+            return RoleMatch("UNKNOWN", 0.0, 0.4)
         backend_aliases = self.config.roles.get("BACKEND", ())
         fullstack_aliases = self.config.roles.get("FULLSTACK", ())
         if any(_phrase_pattern(alias).search(title) for alias in backend_aliases):
@@ -766,7 +785,7 @@ class VacancyScorer:
         final_score = max(0.0, min(100.0, gated_score))
         confidence = self._confidence(profile, vacancy, vacancy_requirement_coverage, experience, seniority)
         eligibility, eligibility_reasons = self._eligibility(profile, vacancy, gates)
-        band = next((band for band in self.config.output_bands if band.minimum <= final_score <= band.maximum), self.config.output_bands[-1])
+        band = next((band for band in sorted(self.config.output_bands, key=lambda band: band.minimum, reverse=True) if band.minimum <= final_score), self.config.output_bands[-1])
         return ScoringResult(
             vacancy_id=vacancy.vacancy_id, scoring_version=SCORING_ENGINE_VERSION, score=final_score, level=band.code,
             confidence=confidence, eligibility=eligibility, eligibility_reasons=eligibility_reasons,
@@ -883,6 +902,9 @@ class VacancyScorer:
             for concept in ("SPRING_BOOT", "SPRING", "QUARKUS", "MICRONAUT")
         )
         wrong_role = any(signal.primary_role_conflict for signal in vacancy.negative_signals)
+        must_have = {item.concept.upper() for item in profile.requirements if item.importance.upper() == "MUST_HAVE"}
+        def match(concept: str) -> float:
+            return concepts.get(concept, ExtractedConcept(concept, 0, 0, 0, 0)).match
         applied: list[GateResult] = []
         for gate in self.config.gates:
             applies = {
@@ -890,6 +912,12 @@ class VacancyScorer:
                 "BACKEND_ROLE_MISSING": vacancy.role.match < 0.5,
                 "JAVA_BACKEND_FRAMEWORK_MISSING": java_match >= 0.5 and framework_match < 0.5,
                 "WRONG_PRIMARY_ROLE": wrong_role,
+                "DEVOPS_ROLE_MISSING": vacancy.role.match < 0.5,
+                "LINUX_MISSING": max(match("LINUX"), match("UNIX")) < 0.5,
+                "KUBERNETES_CRITICAL_MISSING": "KUBERNETES" in must_have and max(match("KUBERNETES"), match("OPENSHIFT") * 0.7) < 0.5,
+                "ONE_C_PRIMARY_MISSING": match("ONE_C_PLATFORM") < 0.5 and vacancy.role.match < 0.5,
+                "DEVELOPER_ROLE_MISSING": vacancy.role.match < 0.5,
+                "QUERY_LANGUAGE_CRITICAL_MISSING": "ONE_C_QUERY_LANGUAGE" in must_have and match("ONE_C_QUERY_LANGUAGE") < 0.5,
             }.get(gate.id, False)
             if applies:
                 applied.append(GateResult(gate.id, gate.max_score, gate.reason))
@@ -915,14 +943,14 @@ class VacancyScorer:
         coefficient = self.config.seniority_distance.get(distance, self.config.seniority_distance.get(max(self.config.seniority_distance), 0.0))
         return SeniorityCompatibility(candidate, vacancy, coefficient)
 
-    @staticmethod
-    def _summary(level: str, gates: Sequence[GateResult]) -> str:
+    def _summary(self, level: str, gates: Sequence[GateResult]) -> str:
         if gates:
             return "Низкая релевантность: " + "; ".join(gate.reason for gate in gates)
+        name = {"DEVOPS": "DevOps/SRE", "ONE_C_DEVELOPER": "1С-разработки"}.get(self.config.profile, "Java Backend")
         return {
-            "EXCELLENT_MATCH": "Отличное совпадение по основному Java Backend стеку.",
-            "STRONG_MATCH": "Сильное совпадение по основному Java Backend стеку.",
-            "GOOD_MATCH": "Хорошее совпадение по Java Backend стеку.",
+            "EXCELLENT_MATCH": f"Отличное совпадение по основному {name} стеку.",
+            "STRONG_MATCH": f"Сильное совпадение по основному {name} стеку.",
+            "GOOD_MATCH": f"Хорошее совпадение по {name} стеку.",
             "PARTIAL_MATCH": "Частичное совпадение, проверь важные пробелы.",
             "WEAK_MATCH": "Слабое совпадение по заявленным требованиям.",
         }.get(level, "Вакансия почти не соответствует заявленным требованиям.")
@@ -1049,3 +1077,4 @@ def rank(
 ) -> list[ScoringResult]:
     """Convenience form of the ranking contract."""
     return VacancyRankingService(VacancyScorer(config or TaxonomyConfigLoader.load())).rank(profile, vacancies)
+
