@@ -6,17 +6,21 @@ const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
 const resume = request.account?.resume || {};
-const profileKey = ['DEVOPS', 'ONE_C_DEVELOPER'].includes(resume.targetRole) ? resume.targetRole : 'JAVA_BACKEND';
 const taxonomyNames = {
   JAVA_BACKEND: 'java_backend_vacancy_relevance_ru_v1.json',
   DEVOPS: 'devops_vacancy_relevance_ru_v1.json',
   ONE_C_DEVELOPER: '1c_developer_vacancy_relevance_ru_v1.json',
 };
-const [config, engineSource] = await Promise.all([
-  readFile(path.join(root, 'config', taxonomyNames[profileKey]), 'utf8').then(JSON.parse),
+const [defaultConfig, engineSource] = await Promise.all([
+  readFile(path.join(root, 'config', taxonomyNames.JAVA_BACKEND), 'utf8').then(JSON.parse),
   readFile(path.join(root, 'frontend/scripts/vacancy-scoring.js'), 'utf8'),
 ]);
-const engine = new Function('SCORING_CONFIG', `${engineSource}\nreturn { analyze: scoringAnalyzeVacancy, inflate: scoringInflateFeatures, score: scoringScore, candidateProfile: scoringCandidateProfile }`)(config);
+const createEngine = new Function('SCORING_CONFIG', `${engineSource}\nreturn { analyze: scoringAnalyzeVacancy, inflate: scoringInflateFeatures, score: scoringScore, candidateProfile: scoringCandidateProfile }`);
+const defaultEngine = createEngine(defaultConfig);
+const inferredProfile = defaultEngine.candidateProfile(request.account || {}).targetProfile;
+const profileKey = taxonomyNames[inferredProfile] ? inferredProfile : 'JAVA_BACKEND';
+const config = profileKey === 'JAVA_BACKEND' ? defaultConfig : JSON.parse(await readFile(path.join(root, 'config', taxonomyNames[profileKey]), 'utf8'));
+const engine = profileKey === 'JAVA_BACKEND' ? defaultEngine : createEngine(config);
 const candidate = engine.candidateProfile(request.account || {});
 const scores = [];
 for (const item of (request.items || []).slice(0, 4000)) {
@@ -35,4 +39,5 @@ for (const item of (request.items || []).slice(0, 4000)) {
   scores.push(request.compact ? { vacancyId: score.vacancyId, scoringVersion: score.scoringVersion, score: score.score, confidence: score.confidence, eligibility: score.eligibility, level: score.level, label: score.label } : score);
 }
 scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId));
-process.stdout.write(JSON.stringify({ scoringVersion: scores[0]?.scoringVersion || '2.0.0', taxonomyVersion: String(config.meta?.version || ''), profile: candidate, scores }));
+process.stdout.write(JSON.stringify({ scoringVersion: scores[0]?.scoringVersion || '2.0.1', taxonomyVersion: String(config.meta?.version || ''), profile: candidate, scores }));
+
