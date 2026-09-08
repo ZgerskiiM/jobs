@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {
 def infer_target_role(resume: dict) -> str:
     text = " ".join([
         str(resume.get("position", "")),
-        *(str(skill.get("name", "")) for skill in resume.get("skills", []) if isinstance(skill, dict)),
+        *(str(skill.get("name", "")) for skill in resume.get("skills", []) if isinstance(skill, dict) and skill.get("confirmed") is not False),
     ]).casefold()
     position = str(resume.get("position", "")).casefold()
     devops_signals = ("devops", "sre", "kubernetes", "docker", "ansible", "terraform", "helm", "linux", "ci/cd")
@@ -49,12 +49,12 @@ def infer_target_role(resume: dict) -> str:
         return "DEVOPS"
     if re.search(r"(?:1с|1c)[ -]?(?:программист|разработчик)|(?:программист|разработчик)[ -]?(?:1с|1c)", position):
         return "ONE_C_DEVELOPER"
-    if re.search(r"java.{0,20}(?:developer|engineer|разработчик)|(?:backend|back-end|бэкенд).{0,20}java", position):
+    if re.search(r"\bjava\b", position) and re.search(r"developer|engineer|разработчик|backend|back-end|бэкенд", position):
         return "JAVA_BACKEND"
     scores = {
-        "DEVOPS": sum(signal in text for signal in devops_signals),
-        "ONE_C_DEVELOPER": sum(signal in text for signal in one_c_signals),
-        "JAVA_BACKEND": sum(signal in text for signal in java_signals),
+        "DEVOPS": sum(bool(re.search(rf"(?<![\w+#]){re.escape(signal)}(?![\w+#])", text)) for signal in devops_signals),
+        "ONE_C_DEVELOPER": sum(bool(re.search(rf"(?<![\w+#]){re.escape(signal)}(?![\w+#])", text)) for signal in one_c_signals),
+        "JAVA_BACKEND": sum(bool(re.search(rf"(?<![\w+#]){re.escape(signal)}(?![\w+#])", text)) for signal in java_signals),
     }
     best_role, best_score = max(scores.items(), key=lambda item: item[1])
     if best_score < 2 or list(scores.values()).count(best_score) > 1:
@@ -307,3 +307,4 @@ def account_payload(user: User, *, is_new: bool = False) -> dict:
         "isPro": user.has_pro,
         "isNew": is_new,
     }
+
