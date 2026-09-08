@@ -249,23 +249,12 @@ function scoringVacancyId(vacancy) {
 }
 
 function inferResumeTargetRole(resume) {
-  const position = String(resume?.position || '').toLocaleLowerCase('ru-RU')
-  const skills = Array.isArray(resume?.skills) ? resume.skills.filter((skill) => skill?.confirmed !== false).map((skill) => String(skill?.name || '').toLocaleLowerCase('ru-RU')) : []
-  const text = `${position} ${skills.join(' ')}`
-  if (/\b(?:devops|sre)\b|инженер\s+(?:по\s+)?(?:инфраструктуре|эксплуатации)/iu.test(position)) return 'DEVOPS'
-  if (/(?:1с|1c)[ -]?(?:программист|разработчик)|(?:программист|разработчик)[ -]?(?:1с|1c)/iu.test(position)) return 'ONE_C_DEVELOPER'
-  if (/java.{0,20}(?:developer|engineer|разработчик)|(?:backend|back-end|бэкенд).{0,20}java/iu.test(position)) return 'JAVA_BACKEND'
-  const scores = {
-    DEVOPS: ['devops', 'sre', 'kubernetes', 'docker', 'ansible', 'terraform', 'helm', 'linux', 'ci/cd'].filter((value) => text.includes(value)).length,
-    ONE_C_DEVELOPER: ['1с', '1c', 'конфигуратор', 'скд', 'бсп'].filter((value) => text.includes(value)).length,
-    JAVA_BACKEND: ['java', 'spring', 'hibernate', 'jvm'].filter((value) => text.includes(value)).length,
-  }
-  const ranked = Object.entries(scores).sort((left, right) => right[1] - left[1])
-  return ranked[0][1] >= 2 && ranked[0][1] > ranked[1][1] ? ranked[0][0] : 'UNKNOWN'
+  return SCORING_ENGINES.JAVA_BACKEND.candidateProfile({ resume: { ...resume, targetRole: '' } }).targetProfile
 }
 
 function scoringProfileKey(resume) {
-  return ['DEVOPS', 'ONE_C_DEVELOPER'].includes(resume?.targetRole) ? resume.targetRole : 'JAVA_BACKEND'
+  const profile = resume?.targetRole || inferResumeTargetRole(resume)
+  return ['DEVOPS', 'ONE_C_DEVELOPER'].includes(profile) ? profile : 'JAVA_BACKEND'
 }
 
 function scoringEngineFor(resume) {
@@ -311,7 +300,7 @@ async function scoreVacancies(request, env, user) {
     scores.push(data.compact ? { vacancyId: score.vacancyId, scoringVersion: score.scoringVersion, score: score.score, confidence: score.confidence, eligibility: score.eligibility, level: score.level, label: score.label } : score)
   }
   scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId))
-  return json({ scoringVersion: scores[0]?.scoringVersion || '2.0.0', taxonomyVersion: String(engine.config.meta?.version || ''), profile: candidate, scores })
+  return json({ scoringVersion: scores[0]?.scoringVersion || '2.0.1', taxonomyVersion: String(engine.config.meta?.version || ''), profile: candidate, scores })
 }
 
 async function requireUser(request, env) {
@@ -881,3 +870,4 @@ async function fetchHandler(request, env) {
 }
 
 export default { fetch: fetchHandler }
+
