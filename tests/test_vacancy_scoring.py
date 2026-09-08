@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 import tempfile
 import unittest
 from pathlib import Path
@@ -186,7 +187,8 @@ class VacancyScoringTests(unittest.TestCase):
         fixtures = json.loads((ROOT / "tests" / "fixtures" / "scoring_v2_cases.json").read_text(encoding="utf-8"))
         for fixture in fixtures:
             with self.subTest(fixture["name"]):
-                result = self.scorer.score(fixture["profile"], VacancyFeatures.from_dict(fixture["features"])).to_dict()
+                config = TaxonomyConfigLoader.load(ROOT / "config" / fixture["taxonomy"]) if fixture.get("taxonomy") else self.config
+                result = VacancyScorer(config).score(fixture["profile"], VacancyFeatures.from_dict(fixture["features"])).to_dict()
                 expected = fixture["expected"]
                 self.assertEqual(result["score"], expected["score"])
                 self.assertEqual(result["confidence"], expected["confidence"])
@@ -195,7 +197,25 @@ class VacancyScoringTests(unittest.TestCase):
                 self.assertEqual(result["vacancyRequirementCoverage"], expected["vacancyRequirementCoverage"])
                 self.assertEqual(result["experienceMatch"]["coefficient"], expected["experienceCoefficient"])
                 self.assertEqual(result["seniorityMatch"]["coefficient"], expected["seniorityCoefficient"])
+                if "gates" in expected:
+                    self.assertEqual([gate["id"] for gate in result["gatesApplied"]], expected["gates"])
+
+    def test_fractional_band_has_no_gap(self):
+        scorer = VacancyScorer(replace(self.config, component_weights={"candidateSkillFit": 0.54995}))
+        features = self.extractor.analyze(make_job("Java Backend", "Java, Spring Boot."))
+        self.assertEqual(scorer.score(profile(("JAVA", "MUST_HAVE")), features).level, "WEAK_MATCH")
+
+    def test_specialized_roles_are_extracted(self):
+        for filename, title, expected in [
+            ("devops_vacancy_relevance_ru_v1.json", "DevOps Engineer", "DEVOPS"),
+            ("1c_developer_vacancy_relevance_ru_v1.json", "Разработчик 1С", "ONE_C_DEVELOPER"),
+        ]:
+            with self.subTest(title):
+                config = TaxonomyConfigLoader.load(ROOT / "config" / filename)
+                features = VacancyFeatureExtractor(config).analyze(make_job(title, ""))
+                self.assertEqual(features.role.primary, expected)
 
 
 if __name__ == "__main__":
     unittest.main()
+
