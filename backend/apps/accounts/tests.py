@@ -46,6 +46,10 @@ class AccountApiTests(TestCase):
         self.assertEqual(normalized["targetRole"], "UNKNOWN")
         self.assertEqual(normalized["experienceYears"], 1.5)
 
+    def test_role_inference_respects_word_boundaries_and_rejected_skills(self):
+        self.assertEqual(infer_target_role({"position": "JavaScript Developer", "skills": []}), "UNKNOWN")
+        self.assertEqual(infer_target_role({"position": "Engineer", "skills": [{"name": "Linux", "confirmed": False}, {"name": "Docker", "confirmed": False}]}), "UNKNOWN")
+
     def test_resume_contact_extraction_returns_form_values(self):
         text = "Иванов Иван Иванович\nEmail: ivan@example.com\nТелефон: +7 (999) 123-45-67\nTelegram: @ivan_dev"
 
@@ -144,7 +148,7 @@ class AccountApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["profile"]["targetProfile"], "DEVOPS")
         self.assertEqual(response.data["scores"][0]["vacancyId"], "catalog:7")
-        self.assertEqual(response.data["scores"][0]["scoringVersion"], "2.0.0")
+        self.assertEqual(response.data["scores"][0]["scoringVersion"], "2.0.1")
         self.assertIn(response.data["scores"][0]["eligibility"], {"ELIGIBLE", "INELIGIBLE", "UNCERTAIN"})
         self.assertGreaterEqual(response.data["scores"][0]["confidence"], 0)
         self.assertGreater(response.data["scores"][0]["score"], 0)
@@ -303,3 +307,4 @@ class AccountApiTests(TestCase):
         self.assertEqual(payload["resume"]["position"], "Java Backend Developer")
         self.assertEqual(payload["resume"]["experience"], "4 года")
         self.assertEqual({skill["name"] for skill in payload["resume"]["skills"]}, {"Java", "Spring", "Spring Boot", "PostgreSQL"})
+
