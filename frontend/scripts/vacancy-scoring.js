@@ -1,4 +1,4 @@
-const SCORING_ENGINE_VERSION = '2.0.0'
+const SCORING_ENGINE_VERSION = '2.0.1'
 
 function scoringNormalizeText(value) {
   return String(value || '')
@@ -247,7 +247,7 @@ function scoringEffectiveMatch(semantic, extracted) {
     const progress = (Math.min(Number(extracted.mentions || 0), maximum) - minimum + 1) / (maximum - minimum + 1)
     frequencyMultiplier += Number(boost.maxBoost || 0) * progress
   }
-  return Math.min(1, semantic * Number(extracted.contextMultiplier || 1) * Number(extracted.confidence || 1) * frequencyMultiplier)
+  return Math.min(1, semantic * Number(extracted.contextMultiplier ?? 1) * Number(extracted.confidence ?? 1) * frequencyMultiplier)
 }
 
 function scoringGateResults(profile, features) {
@@ -329,16 +329,15 @@ function scoringVacancyRequirementCoverage(profile, features) {
 function scoringCandidateSupportsVacancyConcept(candidateConcepts, vacancyConcept) {
   if (candidateConcepts.has(vacancyConcept)) return true
   if ([...candidateConcepts].some((candidate) => vacancyConcept.startsWith(`${candidate}_`) && /_\d+$/.test(vacancyConcept))) return true
-  return [...candidateConcepts].some((candidate) => {
-    const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === candidate)
-    return (config?.related || []).some((item) => String(item.concept || '').toUpperCase() === vacancyConcept)
-  })
+  const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === vacancyConcept)
+  return (config?.related || []).some((item) => candidateConcepts.has(String(item.concept || '').toUpperCase()) && Number(item.match ?? SCORING_CONFIG.scoring?.defaultSemanticMatch?.RELATED_MEDIUM ?? 0) > 0)
 }
 
 function scoringVacancyMissing(profile, features) {
   const candidateConcepts = new Set((profile.requirements || []).map((item) => String(item.concept || '').toUpperCase()))
+  for (const concept of profile.excludedConcepts || []) candidateConcepts.delete(String(concept).toUpperCase())
   return Object.entries(features.concepts || {})
-    .filter(([concept, extracted]) => Number(extracted.match || 0) >= 0.5 && !scoringCandidateSupportsVacancyConcept(candidateConcepts, concept))
+    .filter(([concept, extracted]) => Number(extracted.match || 0) >= 0.5 && Number(extracted.contextMultiplier ?? 1) > 0 && !scoringCandidateSupportsVacancyConcept(candidateConcepts, concept))
     .map(([concept, extracted]) => {
       const config = (SCORING_CONFIG.taxonomy || []).find((item) => String(item.concept || '').toUpperCase() === concept)
       return { concept, weight: Number(config?.weight || 0), mentions: Number(extracted.mentions || 0) }
@@ -441,7 +440,7 @@ function scoringScore(profile, features) {
   const confidence = scoringConfidence(profile, features, vacancyRequirementCoverage, experienceMatch, seniorityMatch)
   const eligibility = scoringEligibility(profile, features, gatesApplied)
   const vacancyMissing = scoringVacancyMissing(profile, features)
-  const band = (SCORING_CONFIG.outputBands || []).find((item) => score >= Number(item.min) && score <= Number(item.max)) || SCORING_CONFIG.outputBands?.at(-1) || { code: 'WEAK_MATCH', labelRu: 'Слабое совпадение' }
+  const band = [...(SCORING_CONFIG.outputBands || [])].sort((a, b) => Number(b.min) - Number(a.min)).find((item) => score >= Number(item.min)) || { code: 'WEAK_MATCH', labelRu: 'Слабое совпадение' }
   return {
     vacancyId: features.vacancyId,
     scoringVersion: SCORING_ENGINE_VERSION,
@@ -476,10 +475,15 @@ function scoringCandidateProfile(account) {
   const explicitProfile = String(resume.targetRole || '').toUpperCase()
   let profile = ['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER', 'UNKNOWN'].includes(explicitProfile) ? explicitProfile : ''
   if (!profile) {
+    if (scoringPattern('devops').test(position) || scoringPattern('sre').test(position) || /инженер\s+(?:по\s+)?(?:инфраструктуре|эксплуатации)/iu.test(position)) profile = 'DEVOPS'
+    else if (/(?:1с|1c)[ -]?(?:программист|разработчик)|(?:программист|разработчик)[ -]?(?:1с|1c)/iu.test(position)) profile = 'ONE_C_DEVELOPER'
+    else if (scoringPattern('java').test(position) && /developer|engineer|разработчик|backend|back-end|бэкенд/iu.test(position)) profile = 'JAVA_BACKEND'
+  }
+  if (!profile) {
     const scores = {
-      DEVOPS: ['devops', 'sre', 'kubernetes', 'docker', 'ansible', 'terraform', 'helm', 'linux', 'ci/cd'].filter((value) => signalText.includes(value)).length,
-      ONE_C_DEVELOPER: ['1с', '1c', 'конфигуратор', 'скд', 'бсп'].filter((value) => signalText.includes(value)).length,
-      JAVA_BACKEND: ['java', 'spring', 'hibernate', 'jvm'].filter((value) => signalText.includes(value)).length
+      DEVOPS: ['devops', 'sre', 'kubernetes', 'docker', 'ansible', 'terraform', 'helm', 'linux', 'ci/cd'].filter((value) => scoringPattern(value).test(signalText)).length,
+      ONE_C_DEVELOPER: ['1с', '1c', 'конфигуратор', 'скд', 'бсп'].filter((value) => scoringPattern(value).test(signalText)).length,
+      JAVA_BACKEND: ['java', 'spring', 'hibernate', 'jvm'].filter((value) => scoringPattern(value).test(signalText)).length
     }
     const ranked = Object.entries(scores).sort((left, right) => right[1] - left[1])
     profile = ranked[0][1] >= 2 && ranked[0][1] > ranked[1][1] ? ranked[0][0] : 'UNKNOWN'
@@ -488,7 +492,7 @@ function scoringCandidateProfile(account) {
   for (const skill of skills) {
     if (skill?.confirmed === false) continue
     const name = scoringNormalizeText(skill?.name)
-    const concept = (SCORING_CONFIG.taxonomy || []).find((item) => (item.aliases || []).some((alias) => scoringPattern(scoringNormalizeText(alias)).test(name)))
+    const concept = (SCORING_CONFIG.taxonomy || []).map((item) => ({ item, length: Math.max(0, ...(item.aliases || []).filter((alias) => scoringPattern(scoringNormalizeText(alias)).test(name)).map((alias) => scoringNormalizeText(alias).length)) })).sort((a, b) => b.length - a.length).find((entry) => entry.length > 0)?.item
     if (!concept || requirements.some((item) => item.concept === concept.concept)) continue
     const requirementConcept = String(concept.concept).toUpperCase()
     const mustHave = profile === 'DEVOPS'
@@ -506,5 +510,8 @@ function scoringCandidateProfile(account) {
   const levelAliases = SCORING_CONFIG.seniority?.aliases || {}
   const targetSeniority = Object.entries(levelAliases).find(([, aliases]) => aliases.some((alias) => scoringPattern(scoringNormalizeText(alias)).test(position)))?.[0]
     || (Number(resume.experienceYears) >= 5 ? 'SENIOR' : Number(resume.experienceYears) >= 3 ? 'MIDDLE' : 'UNKNOWN')
-  return { targetRole: role, targetProfile: profile, targetSeniority, experienceYears: Number.isFinite(Number(resume.experienceYears)) ? Number(resume.experienceYears) : null, requirements, excludedConcepts: [] }
+  const rawYears = resume.experienceYears
+  const experienceYears = rawYears !== null && rawYears !== undefined && String(rawYears).trim() !== '' && typeof rawYears !== 'boolean' && Number.isFinite(Number(rawYears)) && Number(rawYears) >= 0 ? Number(rawYears) : null
+  return { targetRole: role, targetProfile: profile, targetSeniority, experienceYears, requirements, excludedConcepts: [] }
 }
+
