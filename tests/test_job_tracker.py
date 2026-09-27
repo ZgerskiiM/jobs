@@ -88,7 +88,12 @@ class PersistenceTests(unittest.TestCase):
         job_tracker.export_site_data(Path(self.temp.name) / "jobs.sqlite3", site_path)
 
         self.assertNotIn("Backend Engineer", csv_path.read_text(encoding="utf-8-sig"))
-        self.assertNotIn("Backend Engineer", site_path.read_text(encoding="utf-8"))
+        exported = site_path.read_text(encoding="utf-8")
+        self.assertIn("window.VACANCIES = [];", exported)
+        archive_text = exported.split("window.ARCHIVED_VACANCIES = ", 1)[1].strip().removesuffix(";")
+        archive = json.loads(archive_text)
+        self.assertEqual(archive[0]["title"], "Backend Engineer")
+        self.assertEqual(archive[0]["stale"], 1)
 
     def test_site_export_precomputes_compact_scoring_features(self):
         job = job_tracker.Job(
@@ -126,7 +131,64 @@ class PersistenceTests(unittest.TestCase):
         migrated_db = job_tracker.connect_db(legacy_path)
         columns = {row["name"] for row in migrated_db.execute("PRAGMA table_info(jobs)")}
         migrated_db.close()
-        self.assertTrue({"stale", "stale_at"}.issubset(columns))
+        self.assertTrue({"stale", "stale_at", "last_link_check_at", "link_missing_runs"}.issubset(columns))
+
+    def test_old_link_is_closed_only_after_two_confirmed_checks(self):
+        job_tracker.persist_source(self.db, [make_job()], "acme-gh", 2, "2026-08-01T00:00:00+00:00")
+        checker = "jobtracker.link_checks.check_vacancy_url"
+        with patch(checker, return_value="closed"):
+            first = job_tracker.recheck_old_vacancies(
+                self.db, "2026-09-26T00:00:00+00:00", None, batch_size=10,
+            )
+            row = self.db.execute("SELECT active, link_missing_runs FROM jobs").fetchone()
+            self.assertEqual(first["closed"], 0)
+            self.assertEqual((row["active"], row["link_missing_runs"]), (1, 1))
+
+            second = job_tracker.recheck_old_vacancies(
+                self.db, "2026-09-27T00:00:00+00:00", None, batch_size=10,
+            )
+        row = self.db.execute("SELECT active, closed_at, link_missing_runs FROM jobs").fetchone()
+        self.assertEqual(second["closed"], 1)
+        self.assertEqual(row["active"], 0)
+        self.assertEqual(row["closed_at"], "2026-09-27T00:00:00+00:00")
+        self.assertEqual(self.events(), ["new", "closed"])
+
+    def test_inconclusive_old_link_check_does_not_close_vacancy(self):
+        job_tracker.persist_source(self.db, [make_job()], "acme-gh", 2, "2026-08-01T00:00:00+00:00")
+        with patch("jobtracker.link_checks.check_vacancy_url", return_value=None):
+            counts = job_tracker.recheck_old_vacancies(
+                self.db, "2026-09-27T00:00:00+00:00", None, batch_size=10,
+            )
+        row = self.db.execute("SELECT active, link_missing_runs FROM jobs").fetchone()
+        self.assertEqual(counts["checked"], 1)
+        self.assertEqual((row["active"], row["link_missing_runs"]), (1, 0))
+
+    def test_live_link_restores_stale_job(self):
+        job_tracker.persist_source(self.db, [make_job()], "acme-gh", 2, "2026-08-01T00:00:00+00:00")
+        self.db.execute("UPDATE jobs SET stale=1, stale_at=?", ("2026-08-10T00:00:00+00:00",))
+        with patch("jobtracker.link_checks.check_vacancy_url", return_value="active"):
+            counts = job_tracker.recheck_old_vacancies(
+                self.db, "2026-09-27T00:00:00+00:00", None, batch_size=10,
+            )
+        row = self.db.execute("SELECT active, stale, stale_at FROM jobs").fetchone()
+        self.assertEqual(counts["restored"], 1)
+        self.assertEqual((row["active"], row["stale"], row["stale_at"]), (1, 0, None))
+        self.assertEqual(self.events(), ["new", "restored"])
+
+    def test_site_export_includes_closed_jobs_for_saved_items(self):
+        job_tracker.persist_source(self.db, [make_job()], "acme-gh", 2, "2026-08-01T00:00:00+00:00")
+        self.db.execute("UPDATE jobs SET active=0, closed_at=?", ("2026-09-27T00:00:00+00:00",))
+        self.db.commit()
+        site_path = Path(self.temp.name) / "vacancies.js"
+
+        job_tracker.export_site_data(Path(self.temp.name) / "jobs.sqlite3", site_path)
+
+        exported = site_path.read_text(encoding="utf-8")
+        self.assertIn('window.ARCHIVED_VACANCIES = [', exported)
+        archive_text = exported.split("window.ARCHIVED_VACANCIES = ", 1)[1].strip().removesuffix(";")
+        archive = json.loads(archive_text)
+        self.assertEqual(len(archive), 1)
+        self.assertEqual(archive[0]["closed_at"], "2026-09-27T00:00:00+00:00")
 
     def test_failed_persistence_rolls_back_source_changes(self):
         config_path = Path(self.temp.name) / "config.json"
@@ -853,3 +915,4 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

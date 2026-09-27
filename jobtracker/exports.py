@@ -63,7 +63,7 @@ def export_csv(db_path: Path, output_path: Path, include_closed: bool) -> None:
 def export_site_data(
     db_path: Path, output_path: Path, taxonomy_path: Path = DEFAULT_TAXONOMY_PATH,
 ) -> None:
-    """Export active vacancies with a precomputed compact scoring index."""
+    """Export active vacancies and compact archived records for saved-job status."""
     db = connect_db(db_path)
     taxonomy = TaxonomyConfigLoader.load(taxonomy_path)
     index_repository = VacancyFeatureRepository(db)
@@ -76,6 +76,13 @@ def export_site_data(
         JOIN vacancy_feature_index feature USING (source_key, external_id)
         WHERE active=1 AND stale=0 ORDER BY first_seen_at DESC, company, title
     """).fetchall()
+    archived_rows = db.execute("""
+        SELECT external_id AS id, company, title, location, workplace_type, url,
+               posted_at, first_seen_at, closed_at, stale, source_key
+        FROM jobs
+        WHERE (active=0 AND closed_at IS NOT NULL) OR (active=1 AND stale=1)
+        ORDER BY COALESCE(closed_at, stale_at) DESC, company, title
+    """).fetchall()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     data = []
     for row in rows:
@@ -84,13 +91,16 @@ def export_site_data(
         item["scoring_features"] = features.to_compact_dict()
         item["technologies"] = detect_technologies(item.get("title", ""), item.get("team", ""), item.get("description", ""))
         data.append(item)
+    archived = [dict(row) for row in archived_rows]
     payload = (
         "window.VACANCIES_META = " + json.dumps({"updated_at": utc_now(), "count": len(data)}, ensure_ascii=False, indent=2)
         + ";\nwindow.VACANCIES = " + json.dumps(data, ensure_ascii=False, indent=2) + ";\n"
+        + "window.ARCHIVED_VACANCIES = " + json.dumps(archived, ensure_ascii=False, indent=2) + ";\n"
     )
     output_path.write_text(payload, encoding="utf-8")
     db.close()
-    print(f"Данные для сайта: {len(rows)} вакансий, переиндексировано {indexed} -> {output_path}")
+    print(f"Данные для сайта: {len(rows)} активных, {len(archived)} архивных вакансий, "
+          f"переиндексировано {indexed} -> {output_path}")
 
 
 def show_stats(db_path: Path) -> None:
@@ -132,3 +142,4 @@ def export_refresh_report(db_path: Path, output_path: Path, limit: int = 12) -> 
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     db.close()
     print(f"Отчёт обновления: {output_path}")
+

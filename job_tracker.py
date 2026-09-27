@@ -30,6 +30,7 @@ from jobtracker.storage import connect_db, persist_source, record_event
 from jobtracker.adapters_standard import greenhouse_jobs as greenhouse_adapter, lever_jobs as lever_adapter
 from jobtracker.adapter_registry import build_registry
 from jobtracker.transport import DomainRequestLimiter, create_client, send_request
+from jobtracker.link_checks import recheck_old_vacancies
 from jobtracker.vacancy_scoring import (
     DEFAULT_TAXONOMY_PATH,
     VacancyFeatureRepository,
@@ -2924,6 +2925,10 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
     per_domain_workers = max(1, min(8, int(config.get("http", {}).get("per_domain_workers", 2))))
     close_after = max(1, int(config.get("close_after_missing_runs", 2)))
     stale_after_days = max(1, int(config.get("stale_after_days", 7)))
+    link_check_batch = max(0, int(config.get("link_check_batch_size", 250)))
+    link_check_interval = max(1, int(config.get("link_check_interval_days", 7)))
+    link_check_min_age = max(0, int(config.get("link_check_min_age_days", 7)))
+    link_check_confirm = max(1, int(config.get("link_check_confirm_missing_runs", 2)))
     filters = config.get("filters", {})
     failures = 0
     enabled = [
@@ -2993,9 +2998,23 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
                         )
                     totals["failed"] += 1
                     print(f"ОШИБКА {source['company']}: {exc}", file=sys.stderr)
+        stale_now = utc_now()
+        with db:
+            stale_count = mark_stale_jobs(db, config.get("sources", []), stale_after_days, stale_now)
+        link_checks = recheck_old_vacancies(
+            db, utc_now(), HTTP_CLIENT, HTTP_REQUEST_LIMITER,
+            batch_size=link_check_batch,
+            interval_days=link_check_interval,
+            min_age_days=link_check_min_age,
+            confirm_missing_runs=link_check_confirm,
+            timeout=timeout,
+            workers=min(source_workers, per_domain_workers * 3),
+            source_keys=only_keys,
+        )
+        totals["closed_jobs"] += link_checks["closed"]
+        totals["restored_jobs"] += link_checks["restored"]
     now = utc_now()
     with db:
-        stale_count = mark_stale_jobs(db, config.get("sources", []), stale_after_days, now)
         db.execute(
             "UPDATE sync_runs SET finished_at=?, status=?, succeeded_sources=?, failed_sources=?, jobs_received=?, jobs_accepted=?, new_jobs=?, updated_jobs=?, reopened_jobs=?, restored_jobs=?, closed_jobs=?, stale_jobs=? WHERE id=?",
             (now, "error" if failures else "ok", totals["succeeded"], totals["failed"], totals["jobs_received"], totals["jobs_accepted"], totals["new_jobs"], totals["updated_jobs"], totals["reopened_jobs"], totals["restored_jobs"], totals["closed_jobs"], stale_count, sync_id),
@@ -3003,6 +3022,9 @@ def _run_sync(config_path: Path, db_path: Path, only_keys: set[str] | None = Non
     db.close()
     if stale_count:
         print(f"Помечено устаревшими: {stale_count} (не подтверждались более {stale_after_days} дн.)")
+    if link_checks["checked"]:
+        print(f"Проверено старых ссылок: {link_checks['checked']}, "
+              f"закрыто: {link_checks['closed']}, восстановлено: {link_checks['restored']}")
     return 1 if failures else 0
 
 
@@ -3319,3 +3341,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

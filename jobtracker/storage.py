@@ -23,7 +23,8 @@ def connect_db(path: Path) -> sqlite3.Connection:
             posted_at TEXT NOT NULL, source_updated_at TEXT NOT NULL, fingerprint TEXT NOT NULL,
             first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
             missing_runs INTEGER NOT NULL DEFAULT 0, closed_at TEXT, stale INTEGER NOT NULL DEFAULT 0,
-            stale_at TEXT, PRIMARY KEY (source_key, external_id)
+            stale_at TEXT, last_link_check_at TEXT, link_missing_runs INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (source_key, external_id)
         );
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL,
@@ -70,6 +71,10 @@ def connect_db(path: Path) -> sqlite3.Connection:
         db.execute("ALTER TABLE jobs ADD COLUMN stale INTEGER NOT NULL DEFAULT 0")
     if "stale_at" not in columns:
         db.execute("ALTER TABLE jobs ADD COLUMN stale_at TEXT")
+    if "last_link_check_at" not in columns:
+        db.execute("ALTER TABLE jobs ADD COLUMN last_link_check_at TEXT")
+    if "link_missing_runs" not in columns:
+        db.execute("ALTER TABLE jobs ADD COLUMN link_missing_runs INTEGER NOT NULL DEFAULT 0")
     run_columns = {row["name"] for row in db.execute("PRAGMA table_info(runs)")}
     for name, definition in {
         "company": "TEXT NOT NULL DEFAULT ''",
@@ -129,7 +134,8 @@ def persist_source(
             UPDATE jobs SET company=:company, title=:title, location=:location, team=:team,
                 workplace_type=:workplace_type, description=:description, url=:url,
                 posted_at=:posted_at, source_updated_at=:source_updated_at, fingerprint=:fingerprint,
-                last_seen_at=:now, active=1, stale=0, stale_at=NULL, missing_runs=0, closed_at=NULL
+                last_seen_at=:now, active=1, stale=0, stale_at=NULL, missing_runs=0, closed_at=NULL,
+                last_link_check_at=NULL, link_missing_runs=0
             WHERE source_key=:source_key AND external_id=:external_id
         """, values | {"fingerprint": job.fingerprint, "now": now})
         if event:
@@ -155,3 +161,4 @@ def persist_source(
             record_event(db, Job(source_key, external_id, row["company"], row["title"], "", "", "", "", "", "", ""), "closed", now)
             counts["closed"] += 1
     return counts
+

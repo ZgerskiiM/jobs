@@ -26,6 +26,8 @@ export interface Job {
   category: string;
   level: string;
   url?: string;
+  closedAt?: string;
+  availabilityStatus?: "closed" | "stale";
   matchedSkills?: string[];
   description: string;
   parsedSkills: string[];
@@ -699,3 +701,4 @@ export const COMPANIES: Company[] = [
     ],
   },
 ];
+

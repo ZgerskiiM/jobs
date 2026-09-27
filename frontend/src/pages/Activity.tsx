@@ -17,6 +17,13 @@ const STATUS_ORDER: AppStatus[] = ["sent", "viewed", "interview", "offer", "reje
 
 type Tab = "applications" | "saved" | "stats";
 
+function formatClosedDate(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(date);
+}
+
 function LogoBadge({ logo, logoUrl, color }: { logo: string; logoUrl?: string; color: string }) {
   return <LogoBadgeImage logo={logo} logoUrl={logoUrl} color={color} className="w-9 h-9 rounded text-xs" loading="lazy" />;
 }
@@ -303,7 +310,7 @@ function AppCard({
 }
 
 export default function Activity() {
-  const { jobs } = useVacancyData();
+  const { jobs, archivedJobs } = useVacancyData();
   const { user, isLoading, applications: apps, updateApplication, savedJobIds, toggleSavedJob, savedJobNotes, updateSavedJobNote } = useAuth();
   const [tab, setTab] = useState<Tab>("applications");
   const [statusFilter, setStatusFilter] = useState<AppStatus | "all">("all");
@@ -311,7 +318,7 @@ export default function Activity() {
   const [savedNoteText, setSavedNoteText] = useState<Record<number, string>>(() => Object.fromEntries(Object.entries(savedJobNotes).map(([id, note]) => [Number(id), note])));
 
   const savedJobs = savedJobIds
-    .map((sid) => jobs.find((j) => j.id === sid))
+    .map((sid) => jobs.find((j) => j.id === sid) || archivedJobs.find((j) => j.id === sid))
     .filter((j): j is (typeof jobs)[number] => Boolean(j));
 
   if (isLoading) return null;
@@ -455,6 +462,7 @@ export default function Activity() {
         <div className="space-y-2">
           {savedJobs.map((job) => {
             const note = savedNoteText[job.id] ?? "";
+            const closedOn = formatClosedDate(job.closedAt);
             return (
             <div key={job.id} className="border border-[rgba(51,255,119,0.1)] bg-[#0e1018] rounded-sm">
               <div className="flex items-start gap-4 px-5 py-4">
@@ -462,7 +470,11 @@ export default function Activity() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <Link to={`/jobs/${job.id}`} className="font-sans font-semibold text-sm text-[#e8eaf0] hover:text-white transition-colors">{job.title}</Link>
+                      {job.availabilityStatus ? (
+                        <span className="font-sans font-semibold text-sm text-[#e8eaf0]">{job.title}</span>
+                      ) : (
+                        <Link to={`/jobs/${job.id}`} className="font-sans font-semibold text-sm text-[#e8eaf0] hover:text-white transition-colors">{job.title}</Link>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="font-mono text-xs text-[#5a6070]">{job.company}</span>
                         <span className="text-[#3a404f]">·</span>
@@ -477,6 +489,16 @@ export default function Activity() {
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {job.tags.map((t) => <span key={t} className="tag neon-badge">{t}</span>)}
                   </div>
+                  {job.availabilityStatus === "closed" && (
+                    <p role="status" className="mt-2 font-mono text-xs text-[var(--color-pink)]">
+                      вакансия закрыта{closedOn ? ` · ${closedOn}` : ""}
+                    </p>
+                  )}
+                  {job.availabilityStatus === "stale" && (
+                    <p role="status" className="mt-2 font-mono text-xs text-[var(--color-muted)]">
+                      нет в свежем каталоге · проверяем ссылку
+                    </p>
+                  )}
                   {savedNoteId === job.id ? (
                     <div className="mt-3">
                       <textarea
@@ -499,7 +521,7 @@ export default function Activity() {
                 </div>
               </div>
               <div className="flex items-center gap-3 px-5 py-3 border-t border-[rgba(51,255,119,0.06)]">
-                <Link to={`/jobs/${job.id}`} className="flex items-center gap-1.5 px-4 py-1.5 bg-[rgba(51,255,119,0.12)] border border-[rgba(51,255,119,0.3)] text-[#33ff77] font-mono text-xs rounded-sm hover:bg-[rgba(51,255,119,0.2)] transition-all">откликнуться →</Link>
+                {!job.availabilityStatus && <Link to={`/jobs/${job.id}`} className="flex items-center gap-1.5 px-4 py-1.5 bg-[rgba(51,255,119,0.12)] border border-[rgba(51,255,119,0.3)] text-[#33ff77] font-mono text-xs rounded-sm hover:bg-[rgba(51,255,119,0.2)] transition-all">откликнуться →</Link>}
                 <button onClick={() => setSavedNoteId(job.id)} className="font-mono text-xs text-[#5a6070] hover:text-[#e8eaf0] transition-colors">{note ? "изменить заметку" : "+ заметка"}</button>
                 <button onClick={() => toggleSavedJob(job.id)} className="ml-auto font-mono text-[10px] text-[#3a404f] hover:text-[#ff3e78] transition-colors">убрать</button>
               </div>
@@ -584,3 +606,4 @@ export default function Activity() {
     </div>
   );
 }
+

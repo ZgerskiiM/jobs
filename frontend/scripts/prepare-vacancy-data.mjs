@@ -64,7 +64,9 @@ const additionalCareerUrls = new Map([
   ['ITFB Group', 'https://itfbgroup.ru/career'],
 ]);
 const meta = source.match(/window\.VACANCIES_META\s*=\s*(\{.*?\});/s)?.[1];
-const vacancies = source.match(/window\.VACANCIES\s*=\s*(\[.*\])\s*;\s*$/s)?.[1];
+const activeSource = source.split('window.ARCHIVED_VACANCIES')[0];
+const vacancies = activeSource.match(/window\.VACANCIES\s*=\s*(\[.*\])\s*;\s*$/s)?.[1];
+const archivedVacancies = source.match(/window\.ARCHIVED_VACANCIES\s*=\s*(\[.*\])\s*;\s*$/s)?.[1] || '[]';
 
 if (!meta || !vacancies) throw new Error('Не удалось прочитать data/vacancies.js');
 
@@ -128,5 +130,7 @@ await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, JSON.stringify({
   meta: { ...JSON.parse(meta), count: vacancyRecords.length, taxonomy_versions: Object.fromEntries(Object.entries(taxonomies).map(([profile, taxonomy]) => [profile, taxonomy.meta.version])), scoring_features_built: preparedScoringFeatures },
   vacancies: vacancyRecords,
+  archived_vacancies: JSON.parse(archivedVacancies),
   companies: registry,
 }), 'utf8');
+

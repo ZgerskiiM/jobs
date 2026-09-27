@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { COMPANY_PROFILES, type Company, type CompactVacancyFeatures, type Job } from "../data";
+import { relativeDate } from "../utils/relative-date.js";
 
 type SourceVacancy = {
   id: string | number;
@@ -11,6 +12,8 @@ type SourceVacancy = {
   url: string;
   posted_at?: string;
   first_seen_at?: string;
+  closed_at?: string;
+  stale?: boolean | number;
   source_key?: string;
   technologies?: string[];
   scoring_features?: Partial<Record<"JAVA_BACKEND" | "DEVOPS" | "ONE_C_DEVELOPER", CompactVacancyFeatures>>;
@@ -24,6 +27,7 @@ type RegistryCompany = {
 
 type VacancyData = {
   jobs: Job[];
+  archivedJobs: Job[];
   companies: Company[];
   loading: boolean;
   error: string | null;
@@ -66,15 +70,6 @@ function categoryFor(job: SourceVacancy) {
   if (/frontend|front-end|react|vue|angular|веб-разработ/.test(title)) return "Frontend";
   if (/backend|back-end|разработ|developer|программист|software\s+engineer/.test(title)) return "Backend";
   return "Другое";
-}
-
-function relativeDate(value?: string) {
-  if (!value) return "недавно";
-  const date = new Date(value);
-  const hours = Math.max(0, Math.floor((Date.now() - date.getTime()) / 3_600_000));
-  if (hours < 1) return "только что";
-  if (hours < 24) return `${hours}ч назад`;
-  return `${Math.floor(hours / 24)}д назад`;
 }
 
 function initials(name: string) {
@@ -222,7 +217,9 @@ function toJobs(vacancies: SourceVacancy[]): Job[] {
       salary: "По договорённости",
       tags,
       type: vacancy.workplace_type || "Полная занятость",
-      posted: relativeDate(vacancy.posted_at || vacancy.first_seen_at),
+      posted: relativeDate(vacancy.posted_at, vacancy.first_seen_at),
+      closedAt: vacancy.closed_at,
+      availabilityStatus: vacancy.closed_at ? "closed" : vacancy.stale ? "stale" : undefined,
       featured: index < 8,
       category,
       level: "Специалист",
@@ -302,7 +299,7 @@ function toCompanies(jobs: Job[], source: SourceVacancy[], registry: RegistryCom
 }
 
 export function VacancyDataProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<VacancyData>({ jobs: [], companies: [], loading: true, error: null, hhError: null, updatedAt: null });
+  const [state, setState] = useState<VacancyData>({ jobs: [], archivedJobs: [], companies: [], loading: true, error: null, hhError: null, updatedAt: null });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -313,13 +310,14 @@ export function VacancyDataProvider({ children }: { children: React.ReactNode })
         return response.ok ? payload : { vacancies: [], error: payload.message || `HH.ru вернул ошибку ${response.status}` };
       }).catch(() => ({ vacancies: [], error: "Не удалось связаться с HH.ru" })),
     ])
-      .then(([catalog, hh]: [{ vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }, { vacancies?: SourceVacancy[]; error?: string; meta?: { updated_at?: string } }]) => {
+      .then(([catalog, hh]: [{ vacancies?: SourceVacancy[]; archived_vacancies?: SourceVacancy[]; companies?: RegistryCompany[]; meta?: { updated_at?: string } }, { vacancies?: SourceVacancy[]; error?: string; meta?: { updated_at?: string } }]) => {
         const vacancies = [...(catalog.vacancies || []), ...(hh.vacancies || [])];
         const jobs = toJobs(vacancies);
-        setState({ jobs, companies: toCompanies(jobs, vacancies, catalog.companies || []), loading: false, error: null, hhError: hh.error || null, updatedAt: hh.meta?.updated_at || catalog.meta?.updated_at || null });
+        const archivedJobs = toJobs(catalog.archived_vacancies || []);
+        setState({ jobs, archivedJobs, companies: toCompanies(jobs, vacancies, catalog.companies || []), loading: false, error: null, hhError: hh.error || null, updatedAt: hh.meta?.updated_at || catalog.meta?.updated_at || null });
       })
       .catch((error: Error) => {
-        if (error.name !== "AbortError") setState({ jobs: [], companies: [], loading: false, error: error.message, hhError: null, updatedAt: null });
+        if (error.name !== "AbortError") setState({ jobs: [], archivedJobs: [], companies: [], loading: false, error: error.message, hhError: null, updatedAt: null });
       });
     return () => controller.abort();
   }, []);
@@ -333,3 +331,4 @@ export function useVacancyData() {
   if (!context) throw new Error("useVacancyData must be used inside VacancyDataProvider");
   return context;
 }
+
