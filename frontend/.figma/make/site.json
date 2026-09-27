@@ -1,11 +1,12 @@
 {
-  "description": "Connect with employers directly through a visually appealing job portal featuring tech job listings, market trends, and advanced search filters.",
-  "title": "devver",
+  "description": "Актуальные вакансии в IT от прямых работодателей. Ищите работу в разработке, DevOps, аналитике и других технических направлениях.",
+  "title": "devver — IT-вакансии от работодателей",
+  "language": "ru",
   "icons": {
     "icon": "/jobs-dev-logo.svg"
   },
   "robots": {
-    "index": false
+    "index": true
   },
   "accessibility": {
     "addBypassLinks": false,
