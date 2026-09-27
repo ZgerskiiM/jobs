@@ -218,4 +218,3 @@ class VacancyScoringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

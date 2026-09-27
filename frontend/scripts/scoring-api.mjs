@@ -40,4 +40,3 @@ for (const item of (request.items || []).slice(0, 4000)) {
 }
 scores.sort((left, right) => right.score - left.score || Number(right.hardMatchScore || 0) - Number(left.hardMatchScore || 0) || left.vacancyId.localeCompare(right.vacancyId));
 process.stdout.write(JSON.stringify({ scoringVersion: scores[0]?.scoringVersion || '2.0.1', taxonomyVersion: String(config.meta?.version || ''), profile: candidate, scores }));
-

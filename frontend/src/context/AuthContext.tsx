@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { type Application } from "../data";
 import { accountApi, type AccountPayload } from "../api";
 
@@ -34,7 +34,7 @@ interface AuthState {
   resumeSkills: ResumeSkill[]; setCoverLetter: (text: string) => Promise<void>; setResumeSkills: (skills: ResumeSkill[]) => Promise<void>;
   uploadResume: (file: File) => Promise<ResumeData>; selectResume: (id: string) => Promise<void>; updateResumeDetails: (details: Partial<Pick<ResumeData, "fullName" | "contactEmail" | "contactPhone" | "contactTelegram" | "targetRole">>) => Promise<void>; deleteResume: (id?: string) => Promise<void>; startHhImport: () => Promise<string>; clearResume: () => Promise<void>; toggleSavedJob: (id: number) => Promise<void>;
   updateSavedJobNote: (id: number, note: string) => Promise<void>;
-  isJobSaved: (id: number) => boolean; addApplication: (app: Application) => Promise<void>; updateApplication: (id: number, patch: Partial<Application>) => Promise<void>;
+  isJobSaved: (id: number) => boolean; addApplication: (app: Application) => Promise<void>; updateApplication: (id: number, patch: Partial<Application>) => Promise<void>; refreshAccount: () => Promise<void>;
   activatePro: () => void; loginWithEmail: (email: string, password: string, mode: "login" | "register") => Promise<void>; logout: () => Promise<void>;
   changePassword: (current: string, next: string) => Promise<void>; deleteAccount: () => Promise<void>;
   openAuthModal: () => void; closeAuthModal: () => void; finishImport: (prefill?: Partial<OnboardingData>) => void;
@@ -65,17 +65,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [initialOnboarding, setInitialOnboarding] = useState<Partial<OnboardingData>>({});
 
-  const applyAccount = (account: AccountPayload, openSetup = false) => {
+  const applyAccount = useCallback((account: AccountPayload, openSetup = false) => {
     setUser(account.user); setOnboarding(account.onboarding); setSettings(account.settings ?? DEFAULT_SETTINGS);
     const resumeList = account.resumes ?? (account.resume ? [account.resume] : []);
     setResumes(resumeList); setResume(account.resume ?? resumeList.find((item) => item.isActive) ?? resumeList[0] ?? null); setResumeSkillsState((account.resume ?? resumeList[0])?.skills ?? []); setCoverLetterState(account.coverLetter ?? "");
     setSavedJobIds(account.savedJobIds ?? []); setSavedJobNotes(account.savedJobNotes ?? {}); setApplications(account.applications ?? []); setIsPro(account.isPro ?? false);
     if (openSetup) setShowImportStep(true);
-  };
+  }, []);
+
+  const refreshAccount = useCallback(async () => {
+    const account = await accountApi.me();
+    applyAccount(account);
+  }, [applyAccount]);
 
   useEffect(() => {
     accountApi.csrf().then(() => accountApi.me()).then((account) => applyAccount(account)).catch(() => undefined).finally(() => setIsLoading(false));
-  }, []);
+  }, [applyAccount]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshAccount().catch(() => undefined);
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshAccount]);
 
   const loginWithEmail = async (email: string, password: string, mode: "login" | "register") => {
     const account = await accountApi.email(email, password, mode); applyAccount(account, Boolean(account.isNew)); setShowAuthModal(false);
@@ -128,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return <AuthContext.Provider value={{
     user, onboarding, settings, resume, resumes, coverLetter, savedJobIds, savedJobNotes, applications, isPro, isLoading, showAuthModal, showImportStep, showOnboarding, initialOnboarding, resumeSkills,
-    setCoverLetter, setResumeSkills, uploadResume, selectResume, updateResumeDetails, deleteResume, startHhImport, clearResume, toggleSavedJob, updateSavedJobNote, isJobSaved: (id) => savedJobIds.includes(id), addApplication, updateApplication,
+    setCoverLetter, setResumeSkills, uploadResume, selectResume, updateResumeDetails, deleteResume, startHhImport, clearResume, toggleSavedJob, updateSavedJobNote, isJobSaved: (id) => savedJobIds.includes(id), addApplication, updateApplication, refreshAccount,
     activatePro: () => setIsPro(true), loginWithEmail, logout, changePassword, deleteAccount, openAuthModal: () => setShowAuthModal(true), closeAuthModal: () => setShowAuthModal(false),
     finishImport: (prefill) => { setShowImportStep(false); setInitialOnboarding(prefill ?? {}); setShowOnboarding(true); }, completeOnboarding, skipOnboarding: () => setShowOnboarding(false), updateSettings, updateName,
   }}>{children}</AuthContext.Provider>;

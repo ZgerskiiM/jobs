@@ -110,6 +110,20 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("DRF_ANON_RATE", "60/min"),
+        "user": os.getenv("DRF_USER_RATE", "120/min"),
+        "auth": os.getenv("DRF_AUTH_RATE", "10/min"),
+        "hh": os.getenv("DRF_HH_RATE", "30/min"),
+        "upload": os.getenv("DRF_UPLOAD_RATE", "6/hour"),
+        "scoring": os.getenv("DRF_SCORING_RATE", "30/min"),
+        "extension": os.getenv("DRF_EXTENSION_RATE", "120/min"),
+    },
 }
 
 LOCAL_AUTH_BYPASS = env_bool("LOCAL_AUTH_BYPASS", False)
@@ -158,6 +172,17 @@ SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", False)
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", False)
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+
+if not DEBUG:
+    if LOCAL_AUTH_BYPASS:
+        raise ImproperlyConfigured("LOCAL_AUTH_BYPASS must be disabled in production")
+    if not SESSION_COOKIE_SECURE or not CSRF_COOKIE_SECURE:
+        raise ImproperlyConfigured("Secure session and CSRF cookies are required in production")
+    if not SECURE_SSL_REDIRECT:
+        raise ImproperlyConfigured("DJANGO_SECURE_SSL_REDIRECT must be enabled in production")
 
 DEFAULT_FILE_STORAGE = os.getenv("DEFAULT_FILE_STORAGE", "django.core.files.storage.FileSystemStorage")
 if DEFAULT_FILE_STORAGE != "django.core.files.storage.FileSystemStorage":

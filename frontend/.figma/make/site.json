@@ -5,9 +5,6 @@
   "icons": {
     "icon": "/jobs-dev-logo.svg"
   },
-  "openGraph": {
-    "image": "https://devver.ru/devver-social-preview.png"
-  },
   "robots": {
     "index": true
   },

@@ -12,17 +12,14 @@ if (Test-Path $EnvFile) {
 # local process and use the bundled SQLite/HTTP defaults.
 $env:DATABASE_URL = ""
 $env:USE_REDIS_SESSIONS = "0"
+$PublicUrl = $env:JOBS_DEV_PUBLIC_URL
+if (-not [string]::IsNullOrWhiteSpace($PublicUrl)) {
+    throw "start-backend.ps1 is a local development launcher and cannot use JOBS_DEV_PUBLIC_URL. Use docker-compose.prod.yml for a public deployment."
+}
 $env:DJANGO_DEBUG = "1"
 $env:LOCAL_AUTH_BYPASS = "1"
-$PublicUrl = $env:JOBS_DEV_PUBLIC_URL
-if ([string]::IsNullOrWhiteSpace($PublicUrl)) {
-    $env:SESSION_COOKIE_SECURE = "0"
-    $env:FRONTEND_URL = "http://127.0.0.1:8443"
-}
-else {
-    $env:SESSION_COOKIE_SECURE = "1"
-    $env:FRONTEND_URL = $PublicUrl.TrimEnd('/')
-}
+$env:SESSION_COOKIE_SECURE = "0"
+$env:FRONTEND_URL = "http://127.0.0.1:8443"
 
 Push-Location (Join-Path $ProjectDir "backend")
 try {

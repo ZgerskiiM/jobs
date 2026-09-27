@@ -161,4 +161,3 @@ def persist_source(
             record_event(db, Job(source_key, external_id, row["company"], row["title"], "", "", "", "", "", "", ""), "closed", now)
             counts["closed"] += 1
     return counts
-

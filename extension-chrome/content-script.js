@@ -9,7 +9,7 @@
   const phonePattern = /телефон|phone|mobile|мобильн/i;
   const telegramPattern = /telegram|телеграм|tg|username/i;
   const aboutPattern = /о\s*себе|сопровод|about|cover|message|комментар/i;
-  const vacancyPathPattern = /\/(?:vacanc(?:y|ies)|job|jobs|position|positions)\/[^/]+/i;
+  const vacancyPathPattern = /\/(?:vacanc(?:y|ies)|job|jobs|position|positions)(?:\/|[?#]|$)/i;
 
   function visibleControls() {
     return [...document.querySelectorAll("input, textarea, [contenteditable='true']")].filter((element) => {
@@ -117,8 +117,20 @@
     host.setAttribute("aria-live", "polite");
     host.style.cssText = "position:fixed;right:18px;top:18px;z-index:2147483647;width:310px;background:#0e1018;border:1px solid rgba(51,255,119,.35);border-radius:4px;color:#e8eaf0;font:12px/1.45 Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)";
     const shadow = host.attachShadow({ mode: "open" });
-      shadow.innerHTML = `<style>:host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;color:${success ? "#33ff77" : "#ff3e78"};font:12px "Courier New",monospace}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{margin-top:10px;padding:6px 9px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:transparent;color:#7d8494;cursor:pointer;font:11px "Courier New",monospace}button:hover{color:#e8eaf0;border-color:#33ff77}</style><section><strong>${success ? "// devver" : "// ошибка"}</strong><p>${message}</p><button type="button">закрыть</button></section>`;
-    shadow.querySelector("button").addEventListener("click", () => host.remove());
+    const style = document.createElement("style");
+    style.textContent = ":host{all:initial}section{padding:14px 16px}strong{display:block;margin-bottom:5px;font:12px \"Courier New\",monospace}strong.success{color:#33ff77}strong.error{color:#ff3e78}p{margin:0;color:#b0b6c4;font:12px Arial,sans-serif}button{margin-top:10px;padding:6px 9px;border:1px solid rgba(58,64,79,.7);border-radius:3px;background:transparent;color:#7d8494;cursor:pointer;font:11px \"Courier New\",monospace}button:hover{color:#e8eaf0;border-color:#33ff77}";
+    const section = document.createElement("section");
+    const title = document.createElement("strong");
+    title.className = success ? "success" : "error";
+    title.textContent = success ? "// devver" : "// ошибка";
+    const text = document.createElement("p");
+    text.textContent = String(message ?? "");
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "закрыть";
+    section.append(title, text, close);
+    shadow.append(style, section);
+    close.addEventListener("click", () => host.remove());
     document.body.append(host);
     window.setTimeout(() => host.remove(), 9000);
   }
@@ -144,35 +156,51 @@
   }
 
   let lastTrackedSubmission = "";
-  async function trackSubmittedApplication({ testOnly = false } = {}) {
-    if (!likelyVacancyPage()) return { ok: false, error: "Это не страница вакансии" };
+  let trackingInFlight = "";
+  async function trackSubmittedApplication({ testOnly = false, force = false } = {}) {
+    if (!force && !likelyVacancyPage()) return { ok: false, error: "Это не страница вакансии" };
     const metadata = postingMetadata();
     const fingerprint = metadata.pageUrl + "|" + metadata.title;
     if (!testOnly && fingerprint === lastTrackedSubmission) return { ok: true, duplicate: true };
-    if (!testOnly) lastTrackedSubmission = fingerprint;
-    const result = await extensionApi.runtime.sendMessage({ type: "track-application", ...metadata, submittedAt: new Date().toISOString() });
-    if (!result?.ok) {
-      const message = result?.error || "Отклик отправлен, но не удалось сохранить его в devver.";
-      if (!testOnly) showPanel(message, false);
-      return { ok: false, error: message };
+    if (!testOnly && fingerprint === trackingInFlight) return { ok: true, duplicate: true };
+    if (!testOnly) trackingInFlight = fingerprint;
+    try {
+      const result = await extensionApi.runtime.sendMessage({ type: "track-application", ...metadata, submittedAt: new Date().toISOString() });
+      if (!result?.ok) {
+        const message = result?.error || "Отклик отправлен, но не удалось сохранить его в devver.";
+        if (!testOnly) showPanel(message, false);
+        return { ok: false, error: message };
+      }
+      if (result.matched) {
+        if (!testOnly) lastTrackedSubmission = fingerprint;
+        showPanel((testOnly ? "Тестовый отклик отмечен в devver: «" : "Отклик сохранён в devver: «") + (result.application?.title || metadata.title) + "». Открой раздел «Активность», чтобы отслеживать статус.");
+      } else {
+        const message = result.message || "Вакансия не найдена в каталоге devver — добавь её вручную.";
+        showPanel(testOnly ? "Тестовый отклик не сохранён: " + message : "Отклик отправлен. " + message, false);
+      }
+      return { ok: true, matched: Boolean(result.matched), application: result.application };
+    } finally {
+      if (!testOnly && trackingInFlight === fingerprint) trackingInFlight = "";
     }
-    if (result.matched) {
-      showPanel((testOnly ? "Тестовый отклик отмечен в devver: «" : "Отклик сохранён в devver: «") + (result.application?.title || metadata.title) + "». Открой раздел «Активность», чтобы отслеживать статус.");
-    } else {
-      const message = result.message || "Вакансия не найдена в каталоге devver — добавь её вручную.";
-      showPanel(testOnly ? "Тестовый отклик не сохранён: " + message : "Отклик отправлен. " + message, false);
-    }
-    return { ok: true, matched: Boolean(result.matched), application: result.application };
+  }
+
+  function isLikelyApplicationForm(form) {
+    if (likelyVacancyPage()) return true;
+    const text = String(form?.textContent || "").toLowerCase();
+    return Boolean(form?.querySelector("input[type='file'], input[type='email']")) || /резюме|resume|cv|сопровод|cover|отклик|apply|candidate/.test(text);
   }
 
   function watchSubmission() {
-    document.addEventListener("submit", () => { window.setTimeout(() => void trackSubmittedApplication(), 500); }, true);
+    document.addEventListener("submit", (event) => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      if (isLikelyApplicationForm(form)) void trackSubmittedApplication({ force: true });
+    }, true);
     document.addEventListener("click", (event) => {
       const target = event.target instanceof Element ? event.target.closest("button, input[type='submit'], [role='button']") : null;
       if (!target) return;
       if (target.closest("[data-jobs-dev-test-application='true']")) return;
       const label = (target.textContent || "") + " " + (target.getAttribute("aria-label") || "") + " " + (target.getAttribute("value") || "");
-      if (/отправ|submit|apply|отклик|кандидат/i.test(label)) window.setTimeout(() => void trackSubmittedApplication(), 1200);
+      if (/отправ|submit|apply|отклик|кандидат/i.test(label)) void trackSubmittedApplication({ force: true });
     }, true);
   }
 
@@ -273,8 +301,6 @@
     return fillResume(message);
   });
 
-  if (likelyVacancyPage()) {
-    window.setTimeout(showAutofillOffer, 700);
-    watchSubmission();
-  }
+  if (likelyVacancyPage()) window.setTimeout(showAutofillOffer, 700);
+  watchSubmission();
 })();

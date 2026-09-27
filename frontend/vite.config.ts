@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      host: '0.0.0.0',
+      host: process.env.VITE_DEV_HOST || '127.0.0.1',
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
       watch: { ignored: ['**/.figma/**'] },
@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: {
-      host: '0.0.0.0',
+      host: process.env.VITE_PREVIEW_HOST || '127.0.0.1',
       port: parseInt(process.env.PORT || '8443'),
     },
   }

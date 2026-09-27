@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/prepare-vacancy-data.mjs && vite --host 0.0.0.0",
+    "dev": "node scripts/prepare-vacancy-data.mjs && vite",
     "build": "node scripts/prepare-vacancy-data.mjs && vite build && node scripts/prepare-sites.mjs",
     "test": "node --test scripts/vacancy-scoring.test.mjs scripts/relative-date.test.mjs",
     "preview": "vite preview",
@@ -27,4 +27,3 @@
     "vite": "^8.0.5"
   }
 }
-

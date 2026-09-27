@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { type Application, type AppStatus } from "../data";
@@ -311,11 +311,15 @@ function AppCard({
 
 export default function Activity() {
   const { jobs, archivedJobs } = useVacancyData();
-  const { user, isLoading, applications: apps, updateApplication, savedJobIds, toggleSavedJob, savedJobNotes, updateSavedJobNote } = useAuth();
+  const { user, isLoading, applications: apps, updateApplication, refreshAccount, savedJobIds, toggleSavedJob, savedJobNotes, updateSavedJobNote } = useAuth();
   const [tab, setTab] = useState<Tab>("applications");
   const [statusFilter, setStatusFilter] = useState<AppStatus | "all">("all");
   const [savedNoteId, setSavedNoteId] = useState<number | null>(null);
   const [savedNoteText, setSavedNoteText] = useState<Record<number, string>>(() => Object.fromEntries(Object.entries(savedJobNotes).map(([id, note]) => [Number(id), note])));
+
+  useEffect(() => {
+    if (!isLoading) void refreshAccount().catch(() => undefined);
+  }, [isLoading, refreshAccount]);
 
   const savedJobs = savedJobIds
     .map((sid) => jobs.find((j) => j.id === sid) || archivedJobs.find((j) => j.id === sid))
@@ -606,4 +610,3 @@ export default function Activity() {
     </div>
   );
 }
-

@@ -1077,4 +1077,3 @@ def rank(
 ) -> list[ScoringResult]:
     """Convenience form of the ranking contract."""
     return VacancyRankingService(VacancyScorer(config or TaxonomyConfigLoader.load())).rank(profile, vacancies)
-

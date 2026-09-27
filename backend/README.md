@@ -9,6 +9,9 @@ Copy-Item backend/.env.example backend/.env
 ```
 
 `start-backend.ps1` uses SQLite and enables the development-only auth bypass.
+It refuses to start when `JOBS_DEV_PUBLIC_URL` is set, so this launcher cannot
+accidentally publish the bypassed development server. For a public deployment,
+use `backend/.env.production.example` with `docker-compose.prod.yml`.
 Every browser session is automatically signed in as `local@jobs.dev`, so email
 and Telegram are not required for local testing. The bypass refuses to start
 when `DJANGO_DEBUG=0`.

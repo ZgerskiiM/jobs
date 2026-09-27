@@ -142,4 +142,3 @@ def export_refresh_report(db_path: Path, output_path: Path, limit: int = 12) -> 
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     db.close()
     print(f"Отчёт обновления: {output_path}")
-

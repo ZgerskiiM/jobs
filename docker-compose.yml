@@ -104,9 +104,8 @@ services:
       timeout: 5s
       retries: 6
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
-      - jobs_media:/usr/share/nginx/media:ro
       - jobs_catalog:/usr/share/nginx/catalog:ro
 
 volumes:

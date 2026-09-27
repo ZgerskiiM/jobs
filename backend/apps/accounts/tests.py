@@ -307,4 +307,3 @@ class AccountApiTests(TestCase):
         self.assertEqual(payload["resume"]["position"], "Java Backend Developer")
         self.assertEqual(payload["resume"]["experience"], "4 года")
         self.assertEqual({skill["name"] for skill in payload["resume"]["skills"]}, {"Java", "Spring", "Spring Boot", "PostgreSQL"})
-

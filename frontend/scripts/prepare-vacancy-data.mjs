@@ -133,4 +133,3 @@ await writeFile(outputPath, JSON.stringify({
   archived_vacancies: JSON.parse(archivedVacancies),
   companies: registry,
 }), 'utf8');
-

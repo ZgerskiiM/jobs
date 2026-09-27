@@ -36,4 +36,3 @@ export function relativeDate(value, fallbackValue, now = Date.now()) {
   const days = Math.floor(elapsed / 86_400_000);
   return `${days} ${dayWord(days)} назад`;
 }
-

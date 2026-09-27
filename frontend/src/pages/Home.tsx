@@ -6,7 +6,8 @@ import { useVacancyData } from "../context/VacancyDataContext";
 import CompanyJobsPanel from "../components/CompanyJobsPanel";
 import { useAuth } from "../context/AuthContext";
 import QuickApplyModal from "../components/QuickApplyModal";
-import { accountApi, type VacancyScoreSummary } from "../api";
+import PersonalizedFeed from "../components/PersonalizedFeed";
+import { accountApi, type VacancyScore, type VacancyScoreInput, type VacancyScoreSummary } from "../api";
 
 const TRENDS = [
   { label: "AI / ML Engineer", delta: "+34%", count: "2,841", hot: true },
@@ -53,13 +54,16 @@ export default function Home() {
   const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
   const [companySearch, setCompanySearch] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [applyJob, setApplyJob] = useState<Job | null>(null);
-  const { user, resume, onboarding, openAuthModal, isJobSaved, toggleSavedJob } = useAuth();
+  const { user, resume, onboarding, applications, openAuthModal, isJobSaved, toggleSavedJob } = useAuth();
   const [vacancyScores, setVacancyScores] = useState<Record<string, VacancyScoreSummary>>({});
+  const [vacancyScoreDetails, setVacancyScoreDetails] = useState<Record<string, VacancyScore>>({});
   const [matchThreshold, setMatchThreshold] = useState(0);
   const [scoringLoading, setScoringLoading] = useState(false);
+  const [scoreDetailsLoading, setScoreDetailsLoading] = useState(false);
 
   const toggleTech = (tech: string) => {
     setActiveTechs((prev) =>
@@ -85,13 +89,33 @@ export default function Home() {
     const matchScore = matchThreshold === 0 || !user || !resume || scoringLoading || (score !== undefined && score >= matchThreshold);
     return matchCat && matchCompany && matchSearch && matchRemote && matchTechs && matchScore;
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / VACANCIES_PER_PAGE));
+  const orderedFiltered = matchThreshold > 0
+    ? [...filtered].sort((left, right) => (vacancyScores[`catalog:${right.id}`]?.score ?? -1) - (vacancyScores[`catalog:${left.id}`]?.score ?? -1))
+    : filtered;
+  const totalPages = Math.max(1, Math.ceil(orderedFiltered.length / VACANCIES_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
-  const pageJobs = filtered.slice((currentPage - 1) * VACANCIES_PER_PAGE, currentPage * VACANCIES_PER_PAGE);
+  const pageJobs = orderedFiltered.slice((currentPage - 1) * VACANCIES_PER_PAGE, currentPage * VACANCIES_PER_PAGE);
   const pageNumbers = Array.from(
     { length: Math.min(5, totalPages) },
     (_, index) => Math.min(Math.max(1, currentPage - 2), Math.max(1, totalPages - 4)) + index,
   );
+
+  const activeFilterLabels = [
+    activeCategory !== "Все" ? activeCategory : null,
+    activeCompany !== "Все компании" ? activeCompany : null,
+    remoteOnly ? "только remote" : null,
+    matchThreshold > 0 ? `совпадение ${matchThreshold}%+` : null,
+    ...activeTechs,
+  ].filter(Boolean) as string[];
+  const activeFilterCount = activeFilterLabels.length;
+  const clearFilters = () => {
+    setActiveCategory("Все");
+    setActiveTechs([]);
+    setActiveCompany("Все компании");
+    setCompanySearch("");
+    setRemoteOnly(false);
+    setMatchThreshold(0);
+  };
 
   useEffect(() => {
     setPage(1);
@@ -101,27 +125,55 @@ export default function Home() {
     let cancelled = false;
     if (!user || !resume || jobs.length === 0) {
       setVacancyScores({});
+      setVacancyScoreDetails({});
       setScoringLoading(false);
+      setScoreDetailsLoading(false);
       setMatchThreshold(0);
       return () => { cancelled = true; };
     }
     setScoringLoading(true);
+    setScoreDetailsLoading(false);
+    setVacancyScoreDetails({});
     const targetRole = resume.targetRole && resume.targetRole !== "UNKNOWN" ? resume.targetRole : null;
-    accountApi.scoreVacancyIndex(jobs.map((job) => targetRole && job.scoringFeatures?.[targetRole]
+    const scoreInput = (job: Job): VacancyScoreInput => targetRole && job.scoringFeatures?.[targetRole]
       ? { id: job.id, features: job.scoringFeatures[targetRole] }
-      : { id: job.id, title: job.title, description: job.description, posted_at: job.posted }))
-      .then(({ scores }) => {
-        if (!cancelled) setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
+      : { id: job.id, title: job.title, description: job.description, posted_at: job.posted };
+    accountApi.scoreVacancyIndex(jobs.map(scoreInput))
+      .then(async ({ scores }) => {
+        if (cancelled) return;
+        setVacancyScores(Object.fromEntries(scores.map((score) => [score.vacancyId, score])));
+        const detailedJobs = scores
+          .filter((score) => score.eligibility !== "INELIGIBLE")
+          .slice(0, 8)
+          .map((score) => jobs.find((job) => `catalog:${job.id}` === score.vacancyId))
+          .filter((job): job is Job => Boolean(job));
+        if (detailedJobs.length === 0) return;
+        setScoreDetailsLoading(true);
+        try {
+          const result = await accountApi.scoreVacancies(detailedJobs.map(scoreInput));
+          if (!cancelled) setVacancyScoreDetails(Object.fromEntries(result.scores.map((score) => [score.vacancyId, score])));
+        } catch {
+          if (!cancelled) setVacancyScoreDetails({});
+        } finally {
+          if (!cancelled) setScoreDetailsLoading(false);
+        }
       })
       .catch(() => {
         if (!cancelled) {
           setVacancyScores({});
+          setVacancyScoreDetails({});
           setMatchThreshold(0);
         }
       })
-      .finally(() => { if (!cancelled) setScoringLoading(false); });
+      .finally(() => { if (!cancelled) { setScoringLoading(false); setScoreDetailsLoading(false); } });
     return () => { cancelled = true; };
   }, [user?.id, resume?.id, resume?.targetRole, jobs]);
+
+  const appliedJobIds = new Set(applications.map((application) => application.id));
+  const showAllMatches = () => {
+    setMatchThreshold((value) => value > 0 ? value : 55);
+    document.getElementById("job-listings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const roleLabels: Record<string, string> = {
     backend: "Backend", frontend: "Frontend", aiml: "AI/ML",
@@ -322,95 +374,94 @@ export default function Home() {
             <button className="px-6 py-3 bg-[rgba(51,255,119,0.12)] hover:bg-[rgba(51,255,119,0.2)] border border-[rgba(51,255,119,0.3)] text-[#33ff77] font-mono text-sm rounded-sm transition-all">
               найти →
             </button>
+            <button
+              type="button"
+              aria-expanded={advancedFiltersOpen}
+              aria-controls="advanced-filters"
+              onClick={() => setAdvancedFiltersOpen((open) => !open)}
+              className={`min-h-11 md:min-w-36 px-4 py-3 flex items-center justify-center gap-2 border rounded-sm font-mono text-xs transition-all ${advancedFiltersOpen || activeFilterCount > 0 ? "border-[rgba(51,255,119,0.4)] bg-[rgba(51,255,119,0.1)] text-[#33ff77]" : "border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"}`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M7 12h10M10 18h4" />
+              </svg>
+              фильтры
+              {activeFilterCount > 0 && <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center bg-[rgba(51,255,119,0.2)] border border-[rgba(51,255,119,0.35)] text-[#33ff77] rounded-sm">{activeFilterCount}</span>}
+              <span className={`text-[#5a6070] transition-transform ${advancedFiltersOpen ? "rotate-180" : ""}`}>⌄</span>
+            </button>
           </div>
 
-          {/* category row */}
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            {CATEGORIES.map((c) => (
-              <button
-                key={c}
-                onClick={() => setActiveCategory(c)}
-                className={`font-mono text-xs px-3 py-1.5 rounded-sm transition-all ${
-                  activeCategory === c
-                    ? "bg-[rgba(51,255,119,0.15)] border border-[rgba(51,255,119,0.4)] text-[#33ff77]"
-                    : "border border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"
-                }`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-
-          {/* resume match row */}
-          <div className="mt-3 pt-3 border-t border-[rgba(58,64,79,0.3)]">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest shrink-0">соответствие:</span>
-              {MATCH_THRESHOLDS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={matchThreshold === option.value}
-                  disabled={option.value > 0 && (!user || !resume)}
-                  onClick={() => setMatchThreshold(option.value)}
-                  className={`font-mono text-[10px] min-h-9 px-3 rounded-sm border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    matchThreshold === option.value
-                      ? "bg-[rgba(51,255,119,0.15)] border-[rgba(51,255,119,0.4)] text-[#33ff77]"
-                      : "border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-              {scoringLoading && <span className="font-mono text-[10px] text-[#5a6070]">считаем соответствие…</span>}
-              {!user && (
-                <button type="button" onClick={openAuthModal} className="font-mono text-[10px] text-[#33ff77] hover:underline ml-1">
-                  войти для фильтра →
-                </button>
-              )}
-              {user && !resume && (
-                <Link to="/profile" className="font-mono text-[10px] text-[#33ff77] hover:underline ml-1">
-                  загрузить резюме →
-                </Link>
-              )}
+          {activeFilterCount > 0 && (
+            <div className="mt-3 pt-3 border-t border-[rgba(58,64,79,0.3)] flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest">активно:</span>
+              {activeFilterLabels.map((label, index) => <span key={`${label}-${index}`} className="tag neon-badge">{label}</span>)}
+              <button type="button" onClick={clearFilters} className="font-mono text-[10px] text-[#5a6070] hover:text-[#33ff77] transition-colors ml-1">сбросить всё</button>
             </div>
-          </div>
+          )}
 
-          {/* tech stack row */}
-          <div className="mt-3 pt-3 border-t border-[rgba(58,64,79,0.3)]">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest shrink-0">стек:</span>
-              {allTechs.map((t) => {
-                const active = activeTechs.includes(t);
-                return (
-                  <button
-                    key={t}
-                    onClick={() => toggleTech(t)}
-                    className="font-mono text-[10px] px-2.5 py-1 rounded-sm transition-all"
-                    style={{
-                      background: active ? "rgba(0,212,255,0.12)" : "transparent",
-                      border: active ? "1px solid rgba(0,212,255,0.4)" : "1px solid rgba(58,64,79,0.4)",
-                      color: active ? "#00d4ff" : "#5a6070",
-                    }}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-              {activeTechs.length > 0 && (
-                <button
-                  onClick={() => setActiveTechs([])}
-                  className="font-mono text-[10px] text-[#3a404f] hover:text-[#5a6070] transition-colors ml-1"
-                >
-                  сбросить ×
-                </button>
-              )}
+          {advancedFiltersOpen && (
+            <div id="advanced-filters" className="mt-3 pt-4 border-t border-[rgba(58,64,79,0.3)] space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest">категория</span>
+                  <span className="font-mono text-[10px] text-[#3a404f]">{activeCategory === "Все" ? "любая" : activeCategory}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {CATEGORIES.map((c) => (
+                    <button key={c} type="button" onClick={() => setActiveCategory(c)} aria-pressed={activeCategory === c} className={`font-mono text-xs min-h-9 px-3 rounded-sm transition-all ${activeCategory === c ? "bg-[rgba(51,255,119,0.15)] border border-[rgba(51,255,119,0.4)] text-[#33ff77]" : "border border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"}`}>{c}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest">соответствие резюме</span>
+                    {scoringLoading && <span className="font-mono text-[10px] text-[#5a6070]">считаем…</span>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {MATCH_THRESHOLDS.map((option) => (
+                      <button key={option.value} type="button" aria-pressed={matchThreshold === option.value} disabled={option.value > 0 && (!user || !resume)} onClick={() => setMatchThreshold(option.value)} className={`font-mono text-[10px] min-h-9 px-3 rounded-sm border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${matchThreshold === option.value ? "bg-[rgba(51,255,119,0.15)] border-[rgba(51,255,119,0.4)] text-[#33ff77]" : "border-[rgba(58,64,79,0.5)] text-[#5a6070] hover:text-[#e8eaf0] hover:border-[rgba(58,64,79,0.9)]"}`}>{option.label}</button>
+                    ))}
+                    {!user && <button type="button" onClick={openAuthModal} className="font-mono text-[10px] text-[#33ff77] hover:underline">войти для фильтра →</button>}
+                    {user && !resume && <Link to="/profile" className="font-mono text-[10px] text-[#33ff77] hover:underline">загрузить резюме →</Link>}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-[10px] text-[#3a404f] uppercase tracking-widest">стек технологий</span>
+                    {activeTechs.length > 0 && <button type="button" onClick={() => setActiveTechs([])} className="font-mono text-[10px] text-[#5a6070] hover:text-[#33ff77]">очистить</button>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap max-h-40 overflow-y-auto pr-1">
+                    {allTechs.map((t) => {
+                      const active = activeTechs.includes(t);
+                      return <button key={t} type="button" aria-pressed={active} onClick={() => toggleTech(t)} className="font-mono text-[10px] min-h-9 px-2.5 rounded-sm transition-all" style={{ background: active ? "rgba(0,212,255,0.12)" : "transparent", border: active ? "1px solid rgba(0,212,255,0.4)" : "1px solid rgba(58,64,79,0.4)", color: active ? "#00d4ff" : "#5a6070" }}>{t}</button>;
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 
+      {user && resume && (
+        <PersonalizedFeed
+          jobs={jobs}
+          scores={vacancyScores}
+          details={vacancyScoreDetails}
+          profileLabel={resume.position || "загруженному резюме"}
+          loading={scoringLoading}
+          detailsLoading={scoreDetailsLoading}
+          appliedJobIds={appliedJobIds}
+          isJobSaved={isJobSaved}
+          onToggleSaved={(id) => { void toggleSavedJob(id); }}
+          onShowAll={showAllMatches}
+        />
+      )}
+
       {/* JOB LISTINGS */}
-      <section className="max-w-7xl mx-auto px-6 mb-20">
+      <section id="job-listings" className="max-w-7xl mx-auto px-6 mb-20">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs text-[#3a404f] uppercase tracking-widest">// вакансии</span>

@@ -106,4 +106,3 @@ test('reports vacancy requirements missing from the candidate resume', () => {
   });
   assert.deepEqual(result.vacancyMissing, ['KAFKA', 'CLICKHOUSE']);
 });
-

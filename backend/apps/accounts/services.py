@@ -307,4 +307,3 @@ def account_payload(user: User, *, is_new: bool = False) -> dict:
         "isPro": user.has_pro,
         "isNew": is_new,
     }
-

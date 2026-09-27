@@ -13,6 +13,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS hh_oauth_states (state TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)`,
   `CREATE TABLE IF NOT EXISTS vacancy_feature_index (vacancy_id TEXT PRIMARY KEY, taxonomy_version TEXT NOT NULL, indexed_at TEXT NOT NULL, content_hash TEXT NOT NULL, features_json TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_vacancy_feature_taxonomy ON vacancy_feature_index(taxonomy_version, indexed_at)`,
+  `CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL)`,
 ]
 const DEFAULT_SETTINGS = {
   notifications: { newJobs: true, salaryDigest: true, trendDigest: false, companyActivity: false },
@@ -36,13 +37,25 @@ function redirect(location) {
   return new Response(null, { status: 302, headers: { Location: location } })
 }
 
-function extensionCors(request, response) {
+function extensionCors(request, response, env) {
   const origin = request.headers.get('Origin') || ''
-  if (!/^(?:moz|chrome|safari)-extension:\/\//i.test(origin)) return response
+  const allowedOrigins = String(env.EXTENSION_ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean)
+  if (!allowedOrigins.includes(origin)) return response
   const headers = new Headers(response.headers)
   headers.set('Access-Control-Allow-Origin', origin)
   headers.set('Access-Control-Allow-Credentials', 'true')
   headers.append('Vary', 'Origin')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers)
+  headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('X-Frame-Options', 'DENY')
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+  headers.set('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self'; connect-src 'self' https://api.hh.ru https://oauth.telegram.org")
+  if (headers.get('Content-Type')?.startsWith('application/json')) headers.set('Cache-Control', 'no-store')
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
@@ -57,6 +70,22 @@ function safeJson(value, fallback) {
 }
 
 function now() { return new Date().toISOString() }
+
+async function rateLimit(request, env, name, limit, windowMs, identity = '') {
+  const timestamp = Date.now()
+  const bucket = Math.floor(timestamp / windowMs)
+  const client = identity || request.headers.get('CF-Connecting-IP') || 'unknown'
+  const key = `${name}:${String(client).slice(0, 128)}`
+  await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1)
+    ON CONFLICT(bucket_key) DO UPDATE SET
+      window_start = excluded.window_start,
+      count = CASE WHEN window_start = excluded.window_start THEN count + 1 ELSE 1 END`)
+    .bind(key, bucket).run()
+  const row = await env.DB.prepare('SELECT count FROM rate_limits WHERE bucket_key = ?').bind(key).first()
+  const count = Number(row?.count || 0)
+  if (bucket % 10 === 0) await env.DB.prepare('DELETE FROM rate_limits WHERE bucket_key LIKE ? AND window_start < ?').bind(`${name}:%`, bucket - 2).run()
+  return { allowed: count <= limit, retryAfter: Math.max(1, Math.ceil(((bucket + 1) * windowMs - timestamp) / 1000)) }
+}
 
 function csrfCookie() {
   return `csrftoken=${encodeURIComponent(crypto.randomUUID())}; Path=/; SameSite=Lax; Secure`
@@ -279,7 +308,9 @@ async function scoringIndexedFeatures(env, vacancy, engine) {
 
 async function scoreVacancies(request, env, user) {
   const data = await body(request)
-  const items = Array.isArray(data.items) ? data.items.slice(0, 4000) : []
+  const incomingItems = Array.isArray(data.items) ? data.items : []
+  if (incomingItems.length > 4000) return json({ message: 'Слишком много вакансий для расчёта' }, 413)
+  const items = incomingItems
   if (!items.length) return json({ message: 'Не переданы вакансии для оценки' }, 400)
   const profile = await ensureProfile(env, user.id)
   const account = { resume: (await refreshResumeAnalysis(env, profile)).active, onboarding: safeJson(profile.onboarding_json, null) }
@@ -319,7 +350,7 @@ async function authEmail(request, env) {
   const email = String(data.email || '').trim().toLowerCase()
   const password = String(data.password || '')
   const mode = data.mode === 'login' ? 'login' : 'register'
-  if (!email.includes('@') || password.length < 8) return json({ message: 'Проверь email и пароль' }, 400)
+  if (!email.includes('@') || password.length < 8 || password.length > 256) return json({ message: 'Проверь email и пароль' }, 400)
   let user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first()
   let isNew = false
   if (mode === 'register') {
@@ -366,6 +397,8 @@ async function profilePatch(request, env, user) {
   const onboarding = data.onboarding === undefined ? profile.onboarding_json : JSON.stringify(data.onboarding)
   const settings = data.settings === undefined ? profile.settings_json : JSON.stringify(data.settings)
   const coverLetter = data.coverLetter === undefined ? profile.cover_letter : String(data.coverLetter)
+  if (name.length > 160) return json({ message: 'Имя слишком длинное' }, 413)
+  if (coverLetter.length > 10000) return json({ message: 'Сопроводительное письмо слишком длинное' }, 413)
   await env.DB.batch([
     env.DB.prepare('UPDATE users SET name = ?, updated_at = ? WHERE id = ?').bind(name || user.name, now(), user.id),
     env.DB.prepare('UPDATE profiles SET onboarding_json = ?, settings_json = ?, cover_letter = ?, updated_at = ? WHERE user_id = ?').bind(onboarding, settings, coverLetter, now(), user.id),
@@ -659,9 +692,11 @@ async function resume(request, env, user) {
       if (!['JAVA_BACKEND', 'DEVOPS', 'ONE_C_DEVELOPER', 'UNKNOWN'].includes(updated.targetRole)) updated.targetRole = 'UNKNOWN'
       return updated
     })
+    if (updatedRecords.some((record) => Array.isArray(record.skills) && record.skills.length > 200)) return json({ message: 'Слишком много навыков' }, 413)
     const saved = await saveResumeState(env, user.id, updatedRecords, nextActive.id)
     return json({ resume: saved.active, resumes: saved.resumes })
   }
+  if (currentState.resumes.length >= 10) return json({ message: 'Можно хранить не более 10 резюме' }, 413)
   const form = await body(request)
   const file = form.get('resume')
   if (!file || typeof file.arrayBuffer !== 'function') return json({ message: 'Файл резюме не получен' }, 400)
@@ -754,16 +789,23 @@ async function hhCallback(request, env, user) {
 async function applications(request, env, user, jobId) {
   if (request.method === 'POST') {
     const data = await body(request)
-    if (!data.id) return json({ message: 'В отклике не указан id вакансии' }, 400)
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !data.id) return json({ message: 'В отклике не указан id вакансии' }, 400)
     const id = Number(data.id)
-    await env.DB.prepare(`INSERT INTO applications (user_id, job_id, payload_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, job_id) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`).bind(user.id, id, JSON.stringify(data), now()).run()
+    if (!Number.isSafeInteger(id) || id < 1) return json({ message: 'Некорректный id вакансии' }, 400)
+    const payload = JSON.stringify(data)
+    if (payload.length > 200000) return json({ message: 'Данные отклика слишком большие' }, 413)
+    await env.DB.prepare(`INSERT INTO applications (user_id, job_id, payload_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, job_id) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`).bind(user.id, id, payload, now()).run()
     return json(data, 201)
   }
+  if (!Number.isSafeInteger(jobId) || jobId < 1) return json({ message: 'Некорректный id вакансии' }, 400)
   const data = await body(request)
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return json({ message: 'Некорректные данные отклика' }, 400)
   const current = await env.DB.prepare('SELECT payload_json FROM applications WHERE user_id = ? AND job_id = ?').bind(user.id, jobId).first()
   if (!current) return json({ message: 'Отклик не найден' }, 404)
   const updated = { ...safeJson(current.payload_json, {}), ...(data || {}) }
-  await env.DB.prepare('UPDATE applications SET payload_json = ?, updated_at = ? WHERE user_id = ? AND job_id = ?').bind(JSON.stringify(updated), now(), user.id, jobId).run()
+  const payload = JSON.stringify(updated)
+  if (payload.length > 200000) return json({ message: 'Данные отклика слишком большие' }, 413)
+  await env.DB.prepare('UPDATE applications SET payload_json = ?, updated_at = ? WHERE user_id = ? AND job_id = ?').bind(payload, now(), user.id, jobId).run()
   return json(updated)
 }
 
@@ -811,31 +853,53 @@ async function hhVacancies(request, env) {
   const payload = await response.json()
   const result = { source: 'hh', vacancies: (payload.items || []).map(mapHhVacancy), meta: { found: payload.found || 0, page: payload.page || 0, pages: payload.pages || 0, updated_at: now() } }
   await env.DB.prepare('INSERT INTO hh_cache (cache_key, payload_json, expires_at) VALUES (?, ?, ?) ON CONFLICT(cache_key) DO UPDATE SET payload_json = excluded.payload_json, expires_at = excluded.expires_at').bind(cacheKey, JSON.stringify(result), new Date(Date.now() + 5 * 60 * 1000).toISOString()).run()
+  await env.DB.prepare('DELETE FROM hh_cache WHERE expires_at <= ?').bind(now()).run()
   return json(result)
 }
 
 async function routeApi(request, env) {
   const url = new URL(request.url)
   const path = url.pathname
-  if (path === '/api/vacancies/hh/' && request.method === 'GET') return hhVacancies(request, env)
+  if (path === '/api/vacancies/hh/' && request.method === 'GET') {
+    const limit = await rateLimit(request, env, 'hh', 30, 60 * 1000)
+    if (!limit.allowed) return json({ message: 'Слишком много запросов к HH.ru. Повторите позже.' }, 429, { 'Retry-After': String(limit.retryAfter) })
+    return hhVacancies(request, env)
+  }
   if (path === '/api/auth/config/' && request.method === 'GET') return json({ enabled: Boolean(env.TELEGRAM_AUTH_BOT_TOKEN && env.TELEGRAM_AUTH_BOT_USERNAME), username: env.TELEGRAM_AUTH_BOT_USERNAME || '' })
   if (path === '/api/auth/csrf/' && request.method === 'GET') return withCookie(json({ ok: true }), csrfCookie())
-  if (path === '/api/auth/telegram/' && ['GET', 'POST'].includes(request.method)) return authTelegram(request, env)
-  if (path === '/api/auth/email/' && request.method === 'POST') return authEmail(request, env)
+  if (path === '/api/auth/telegram/' && ['GET', 'POST'].includes(request.method)) {
+    const limit = await rateLimit(request, env, 'auth-telegram', 10, 60 * 1000)
+    if (!limit.allowed) return json({ message: 'Слишком много попыток входа. Повторите позже.' }, 429, { 'Retry-After': String(limit.retryAfter) })
+    return authTelegram(request, env)
+  }
+  if (path === '/api/auth/email/' && request.method === 'POST') {
+    const limit = await rateLimit(request, env, 'auth', 10, 60 * 1000)
+    if (!limit.allowed) return json({ message: 'Слишком много попыток входа. Повторите позже.' }, 429, { 'Retry-After': String(limit.retryAfter) })
+    if (!checkCsrf(request)) return json({ message: 'CSRF-проверка не пройдена' }, 403)
+    return authEmail(request, env)
+  }
   const auth = await requireUser(request, env)
   if (auth.response) return auth.response
   const { user } = auth
   if (!checkCsrf(request)) return json({ message: 'CSRF-проверка не пройдена' }, 403)
   if (path === '/api/auth/me/' && request.method === 'GET') return json(await accountPayload(env, user))
-  if (path === '/api/auth/logout/' && request.method === 'POST') return withCookie(json({ ok: true }), clearSessionCookie())
+  if (path === '/api/auth/logout/' && request.method === 'POST') {
+    const token = cookie(request, 'jobs_session')
+    if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run()
+    return withCookie(json({ ok: true }), clearSessionCookie())
+  }
   if (path === '/api/profile/hh/start/' && request.method === 'POST') return hhStart(request, env, user)
   if (path === '/api/profile/hh/callback/' && request.method === 'GET') return hhCallback(request, env, user)
   if (path === '/api/profile/resume/file/' && request.method === 'GET') return resumeFile(request, env, user)
   if (path === '/api/extension/download/' && request.method === 'GET') return extensionDownload(request, env)
   if (path === '/api/auth/password/' && request.method === 'POST') {
     const data = await body(request)
-    if (String(data.new || '').length < 8 || !(await verifyPassword(String(data.current || ''), user.password_hash))) return json({ message: 'Неверный текущий пароль или новый пароль слишком короткий' }, 400)
-    await env.DB.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').bind(await hashPassword(String(data.new)), now(), user.id).run()
+    const currentPassword = String(data.current || '')
+    const newPassword = String(data.new || '')
+    if (newPassword.length < 8 || newPassword.length > 256 || currentPassword.length > 256 || !(await verifyPassword(currentPassword, user.password_hash))) return json({ message: 'Неверный текущий пароль или новый пароль слишком короткий' }, 400)
+    await env.DB.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').bind(await hashPassword(newPassword), now(), user.id).run()
+    const token = cookie(request, 'jobs_session')
+    if (token) await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').bind(user.id, token).run()
     return json({ ok: true })
   }
   if (path === '/api/auth/account/' && request.method === 'DELETE') {
@@ -846,8 +910,18 @@ async function routeApi(request, env) {
   }
   if (path === '/api/profile/' && request.method === 'PATCH') return profilePatch(request, env, user)
   if (path === '/api/profile/saved/' && request.method === 'POST') return savedJobs(request, env, user)
-  if (path === '/api/profile/resume/' && ['POST', 'PATCH', 'DELETE'].includes(request.method)) return resume(request, env, user)
-  if (path === '/api/scoring/rank/' && request.method === 'POST') return scoreVacancies(request, env, user)
+  if (path === '/api/profile/resume/' && ['POST', 'PATCH', 'DELETE'].includes(request.method)) {
+    if (request.method === 'POST') {
+      const limit = await rateLimit(request, env, 'resume-upload', 6, 60 * 60 * 1000, `user:${user.id}`)
+      if (!limit.allowed) return json({ message: 'Слишком много загрузок резюме. Повторите позже.' }, 429, { 'Retry-After': String(limit.retryAfter) })
+    }
+    return resume(request, env, user)
+  }
+  if (path === '/api/scoring/rank/' && request.method === 'POST') {
+    const limit = await rateLimit(request, env, 'scoring', 30, 60 * 1000, `user:${user.id}`)
+    if (!limit.allowed) return json({ message: 'Слишком много расчётов. Повторите позже.' }, 429, { 'Retry-After': String(limit.retryAfter) })
+    return scoreVacancies(request, env, user)
+  }
   if (path === '/api/applications/' && request.method === 'POST') return applications(request, env, user)
   const applicationMatch = path.match(/^\/api\/applications\/(\d+)\/$/)
   if (applicationMatch && request.method === 'PATCH') return applications(request, env, user, Number(applicationMatch[1]))
@@ -855,19 +929,31 @@ async function routeApi(request, env) {
 }
 
 async function fetchHandler(request, env) {
+  const contentLength = Number(request.headers.get('Content-Length') || 0)
+  if (Number.isFinite(contentLength) && contentLength > 16 * 1024 * 1024) return withSecurityHeaders(json({ message: 'Запрос слишком большой' }, 413))
   await initSchema(env)
   const url = new URL(request.url)
   if (url.pathname.startsWith('/api/')) {
-    try { return extensionCors(request, await routeApi(request, env)) } catch (error) { console.error(error); return extensionCors(request, json({ message: 'Внутренняя ошибка сервера' }, 500)) }
+    try { return withSecurityHeaders(extensionCors(request, await routeApi(request, env), env)) } catch (error) { console.error(error); return withSecurityHeaders(extensionCors(request, json({ message: 'Внутренняя ошибка сервера' }, 500), env)) }
   }
   if (url.pathname === '/jobs-dev-zen-extension.zip') return new Response('Not found', { status: 404 })
-  let response = await env.ASSETS.fetch(request)
+  const detailPage = url.pathname.match(/^\/(jobs|companies)\/([^/]+)\/?$/)
+  const directoryPage = url.pathname.match(/^\/(companies|trends)\/?$/)
+  const prerenderedPath = detailPage
+    ? `/${detailPage[1]}/${detailPage[2]}/index.html`
+    : directoryPage ? `/${directoryPage[1]}/index.html` : ''
+  const assetRequest = prerenderedPath && ['GET', 'HEAD'].includes(request.method)
+    ? new Request(new URL(prerenderedPath, request.url), request)
+    : request
+  let response = await env.ASSETS.fetch(assetRequest)
   if (response.status === 404 && request.method === 'GET' && request.headers.get('accept')?.includes('text/html')) response = await env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request))
-  const headers = new Headers(response.headers)
-  headers.set('X-Content-Type-Options', 'nosniff')
-  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+  response = withSecurityHeaders(response)
+  if (/^\/(?:profile|activity|admin)\/?$/.test(url.pathname)) {
+    const headers = new Headers(response.headers)
+    headers.set('X-Robots-Tag', 'noindex, nofollow')
+    response = new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+  }
+  return response
 }
 
 export default { fetch: fetchHandler }
-

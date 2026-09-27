@@ -220,4 +220,3 @@ def _event_job(row: sqlite3.Row) -> Job:
         row["source_key"], row["external_id"], row["company"], row["title"],
         "", "", "", "", row["url"], "", "",
     )
-

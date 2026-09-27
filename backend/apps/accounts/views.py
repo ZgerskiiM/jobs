@@ -58,6 +58,7 @@ class AuthConfigView(APIView):
 
 class HhVacanciesView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = "hh"
 
     def get(self, request):
         try:
@@ -74,8 +75,9 @@ class HhVacanciesView(APIView):
             upstream = urllib.request.Request(f"https://api.hh.ru/vacancies?{urllib.parse.urlencode(query)}", headers=headers)
             with urllib.request.urlopen(upstream, timeout=15) as response:
                 payload = jsonlib.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            return error(f"Не удалось получить вакансии HH.ru: {exc}", 502)
+        except Exception:
+            logger.exception("HH vacancies request failed")
+            return error("Не удалось получить вакансии HH.ru", 502)
 
         def clean(value):
             return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", str(value or "")))).strip()
@@ -408,6 +410,7 @@ class ExtensionApplicationView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_scope = "extension"
 
     def post(self, request):
         origin = request.headers.get("Origin", "")
@@ -470,6 +473,7 @@ class MeView(APIView):
 class EmailAuthView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = [SessionAuthentication]
+    throttle_scope = "auth"
 
     def post(self, request):
         serializer = EmailAuthSerializer(data=request.data)
@@ -575,6 +579,7 @@ class TelegramOIDCCallbackView(APIView):
 class TelegramAuthView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_scope = "auth"
 
     def _claims(self, request) -> dict[str, str]:
         source = request.query_params if request.method == "GET" else request.data
@@ -611,8 +616,8 @@ class PasswordView(APIView):
     def post(self, request):
         current = str(request.data.get("current", ""))
         new = str(request.data.get("new", ""))
-        if len(new) < 8:
-            return error("Новый пароль — минимум 8 символов")
+        if len(new) < 8 or len(new) > 256 or len(current) > 256:
+            return error("Новый пароль должен содержать от 8 до 256 символов")
         try:
             from .models import User
 
@@ -686,6 +691,8 @@ class SavedJobsView(APIView):
 
 
 class ResumeView(APIView):
+    throttle_scope = "upload"
+
     def patch(self, request):
         profile = get_profile(request.user)
         records = get_resume_records(request.user, profile)
@@ -702,6 +709,8 @@ class ResumeView(APIView):
         if "skills" in request.data:
             if not isinstance(request.data["skills"], list):
                 return error("Некорректный список навыков")
+            if len(request.data["skills"]) > 200:
+                return error("Слишком много навыков", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
             changes["skills"] = request.data["skills"]
         if "targetRole" in request.data:
             target_role = str(request.data["targetRole"])
@@ -725,6 +734,10 @@ class ResumeView(APIView):
             return error("Файл резюме не получен")
         if upload.size > 8 * 1024 * 1024:
             return error("Файл больше 8 МБ", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        profile = get_profile(request.user)
+        existing = get_resume_records(request.user, profile)
+        if len(existing) >= 10:
+            return error("Можно хранить не более 10 резюме", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         data = upload.read()
         filename = Path(upload.name).name
         try:
@@ -734,8 +747,6 @@ class ResumeView(APIView):
         now = timezone.localtime().strftime("%d %b %Y").lstrip("0")
         resume = {"id": f"upload-{uuid.uuid4().hex}", "source": "upload", "hasFile": True, "fileName": filename, "uploadedAt": now, **analysis}
         resume["targetRole"] = infer_target_role(resume)
-        profile = get_profile(request.user)
-        existing = get_resume_records(request.user, profile)
         for item in existing:
             if item.is_active:
                 item.is_active = False
@@ -768,10 +779,14 @@ class ResumeView(APIView):
 class ScoringRankView(APIView):
     """Expose the same taxonomy-driven scorer used by the production Worker."""
 
+    throttle_scope = "scoring"
+
     def post(self, request):
         items = request.data.get("items") if isinstance(request.data, dict) else None
         if not isinstance(items, list):
             return error("Ожидался список вакансий")
+        if len(items) > 4000:
+            return error("Слишком много вакансий для расчёта", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         profile = get_profile(request.user)
         active_record = get_active_resume_record(request.user, profile)
         resume = active_record.data if active_record and isinstance(active_record.data, dict) else {}
@@ -812,7 +827,14 @@ class ApplicationsView(APIView):
         payload = request.data
         if not isinstance(payload, dict) or not payload.get("id"):
             return error("В отклике не указан id вакансии")
-        job_id = int(payload["id"])
+        try:
+            job_id = int(payload["id"])
+        except (TypeError, ValueError, OverflowError):
+            return error("Некорректный id вакансии")
+        if job_id < 1:
+            return error("Некорректный id вакансии")
+        if len(jsonlib.dumps(payload, ensure_ascii=False)) > 200_000:
+            return error("Слишком большие данные отклика", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         application, _ = Application.objects.update_or_create(user=request.user, job_id=job_id, defaults={"payload": payload})
         return Response(application.payload, status=status.HTTP_201_CREATED)
 
@@ -825,6 +847,9 @@ class ApplicationView(APIView):
             return error("Отклик не найден", 404)
         if not isinstance(request.data, dict):
             return error("Некорректные данные")
-        application.payload = {**application.payload, **request.data}
+        updated_payload = {**application.payload, **request.data}
+        if len(jsonlib.dumps(updated_payload, ensure_ascii=False)) > 200_000:
+            return error("Слишком большие данные отклика", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        application.payload = updated_payload
         application.save(update_fields=["payload", "updated_at"])
         return Response(application.payload)

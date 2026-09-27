@@ -331,4 +331,3 @@ export function useVacancyData() {
   if (!context) throw new Error("useVacancyData must be used inside VacancyDataProvider");
   return context;
 }
-

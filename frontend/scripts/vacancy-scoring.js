@@ -514,4 +514,3 @@ function scoringCandidateProfile(account) {
   const experienceYears = rawYears !== null && rawYears !== undefined && String(rawYears).trim() !== '' && typeof rawYears !== 'boolean' && Number.isFinite(Number(rawYears)) && Number(rawYears) >= 0 ? Number(rawYears) : null
   return { targetRole: role, targetProfile: profile, targetSeniority, experienceYears, requirements, excludedConcepts: [] }
 }
-

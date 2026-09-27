@@ -19,4 +19,3 @@ test('does not expose NaN for invalid dates and clamps future dates', () => {
   assert.equal(relativeDate('not-a-date', '', now), 'дата неизвестна');
   assert.equal(relativeDate('28.09.2026', undefined, now), 'только что');
 });
-
