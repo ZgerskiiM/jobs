@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /profile
+Disallow: /activity
+Disallow: /admin
+
+Sitemap: https://devver.ru/sitemap.xml
