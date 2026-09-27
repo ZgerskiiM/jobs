@@ -107,6 +107,38 @@ python job_tracker.py --db data/jobs.sqlite3 stats
 python -m unittest discover -s tests -v
 ```
 
+## Проверки перед релизом
+
+В проекте закреплён репозиторный WebCheck CLI `0.1.0`: публичный npm-пакет с именем
+`webcheck` — другой инструмент, поэтому здесь не используется `npx webcheck`.
+Локальная конфигурация находится в `.webcheck.yml`, аудит развернутого staging-сайта —
+в `.webcheck.staging.yml`; CLI принимает отдельный `--config` для каждого запуска.
+
+После установки зависимостей выполните:
+
+```powershell
+npm ci --prefix tools/webcheck
+npm audit --prefix tools/webcheck --audit-level=moderate
+npm test --prefix tools/webcheck
+npm audit --audit-level=moderate
+npm ci --prefix frontend
+npm audit --prefix frontend --audit-level=moderate
+python -m pip install -r requirements.txt
+pip-audit -r requirements.txt
+python -m unittest discover -s tests -v
+python backend/manage.py check
+python backend/manage.py test
+npm run webcheck:local
+npm run webcheck:staging -- http://devver.ru
+```
+
+`webcheck:local` обязательно выполняет production build, frontend-тесты и локальные
+проверки из `.webcheck.yml`. Эвристическая SQL-проверка остаётся видимой как
+предупреждение, но не блокирует релиз: в текущем коде она также помечает безопасные
+allowlist-запросы. Wrapper аудита восстанавливает `frontend/public/vacancies.json`
+после сборки, чтобы не затирать локальные данные. URL-аудит после деплоя использует
+отдельный список обязательных проверок и запускается CI автоматически.
+
 Если системный `python` недоступен, используйте путь к Python из `run.ps1`.
 
 ## Фильтры

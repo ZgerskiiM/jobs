@@ -7,7 +7,10 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix frontend test",
+    "webcheck:local": "npm --prefix tools/webcheck run build && node scripts/webcheck-local.mjs",
+    "webcheck:staging": "npm --prefix tools/webcheck run build && node tools/webcheck/dist/cli.js audit --ci --config .webcheck.staging.yml"
   },
   "keywords": [],
   "author": "",

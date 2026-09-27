@@ -4,6 +4,7 @@ stages:
   - build
   - deploy
   - verify
+  - release
 
 variables:
   NODE_VERSION: "22"
@@ -29,7 +30,9 @@ backend_tests:
   before_script:
     - python -m pip install --upgrade pip
     - python -m pip install -r requirements.txt
+    - python -m pip install pip-audit
   script:
+    - pip-audit -r requirements.txt
     - python -m unittest discover -s tests -v
     - cd backend
     - python manage.py check
@@ -39,9 +42,17 @@ frontend_build:
   stage: validate
   image: node:${NODE_VERSION}-alpine
   script:
+    - cd tools/webcheck
+    - npm ci
+    - npm audit --audit-level=moderate
+    - npm test
+    - cd ../..
+    - npm audit --audit-level=moderate
     - cd frontend
     - npm ci
-    - npm run build
+    - npm audit --audit-level=moderate
+    - cd ..
+    - npm run webcheck:local
 
 container_build:
   stage: build
@@ -94,7 +105,11 @@ smoke_staging:
   stage: verify
   image: alpine:3.22
   needs:
-    - deploy_staging
+    - job: deploy_staging
+      optional: true
+  environment:
+    name: staging
+    url: $DEPLOY_URL
   before_script:
     - apk add --no-cache curl
   script:
@@ -102,12 +117,30 @@ smoke_staging:
     - curl --fail --silent --show-error "$DEPLOY_URL/api/auth/config/"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"'
+    - if: '$CI_COMMIT_TAG'
+
+webcheck_staging:
+  stage: verify
+  image: node:${NODE_VERSION}-alpine
+  needs:
+    - smoke_staging
+  environment:
+    name: staging
+    url: $DEPLOY_URL
+  script:
+    - npm ci --prefix tools/webcheck
+    - audit_url="$(printf '%s' "$DEPLOY_URL" | sed 's#^https:#http:#')"
+    - npm run webcheck:staging -- "$audit_url"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"'
+    - if: '$CI_COMMIT_TAG'
 
 deploy_production:
-  stage: deploy
+  stage: release
   image: alpine:3.22
   needs:
     - container_build
+    - webcheck_staging
   environment:
     name: production
     url: $DEPLOY_URL

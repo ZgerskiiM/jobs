@@ -15,6 +15,7 @@ node_modules/
 /.mcp.json
 data/*.lock
 frontend/dist/
+tools/webcheck/dist/
 .env
 .env.*
 !.env.example

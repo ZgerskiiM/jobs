@@ -1,0 +1,11 @@
+preset: default
+
+checks:
+  seo: false
+  security: true
+  accessibility: false
+  deployment: true
+  web: false
+  performance: false
+
+required-checks: deployment.production-build,deployment.tests,deployment.env-ignored,deployment.env-example,deployment.gitignore,deployment.secrets,security.dependency-audit

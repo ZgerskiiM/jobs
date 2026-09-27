@@ -1,0 +1,11 @@
+preset: default
+
+checks:
+  seo: true
+  security: true
+  accessibility: true
+  deployment: false
+  web: true
+  performance: true
+
+required-checks: seo.title,seo.description,seo.canonical,seo.robots,seo.sitemap,seo.opengraph,seo.lang,seo.noindex,seo.site-metadata,seo.canonical-target,seo.opengraph-image-target,security.https,security.http-redirect,security.csp,security.content-type,security.referrer,security.permissions,security.hsts,security.header-quality,security.target-blank,security.mixed-content,security.cookies,web.homepage-response,web.404,web.robots,web.sitemap,web.site-crawl,web.broken-resources,accessibility.image-alt,accessibility.form-labels,accessibility.interactive-names,accessibility.viewport,accessibility.headings,accessibility.ids-aria,accessibility.aria-hidden-focusable,performance.resource-size,performance.homepage-response-time
