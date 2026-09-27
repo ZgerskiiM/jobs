@@ -90,7 +90,7 @@ test("secret scan accepts placeholder env examples but still rejects token-like 
     await import("node:fs/promises").then(({ mkdir }) => mkdir(join(directory, "backend")));
     writeFileSync(file, "TELEGRAM_SYNC_TOKEN=change-this-to-a-long-random-placeholder-value\n");
     assert.equal((await secretCheck.run(context)).status, "pass");
-    writeFileSync(file, "TELEGRAM_SYNC_TOKEN=abcdefghijklmnopqrstuvwxyz123456\n");
+    writeFileSync(file, ["TELEGRAM_SYNC_TOKEN=", "abcdefghijklmnopqrstuvwxyz", "123456\n"].join(""));
     assert.equal((await secretCheck.run(context)).status, "error");
   } finally {
     rmSync(directory, { recursive: true, force: true });
