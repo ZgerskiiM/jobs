@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { cwd } from "node:process";
 import { CONFIG_TEMPLATE, loadConfig } from "./config.js";
 import { createContext, runAudit } from "./core/audit.js";
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "init") {
-    const file = `${cwd()}\\.webcheck.yml`;
+    const file = join(cwd(), ".webcheck.yml");
     if (existsSync(file)) {
       console.log(".webcheck.yml already exists; leaving it unchanged.");
       return;
